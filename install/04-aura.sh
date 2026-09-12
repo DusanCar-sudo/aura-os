@@ -18,3 +18,13 @@ for src in "$REPO"/bin/aura-os-*; do
         echo "04-aura: up to date: $dst"
     fi
 done
+
+# Color combos (aura-os-theme reads /usr/share/aura-os/themes).
+install -d /usr/share/aura-os/themes /usr/share/aura-os/wallpapers
+for t in "$REPO"/themes/*/; do
+    t="$(basename "$t")"
+    if ! cmp -s "$REPO/themes/$t/palette" "/usr/share/aura-os/themes/$t/palette"; then
+        install -Dm644 "$REPO/themes/$t/palette" "/usr/share/aura-os/themes/$t/palette"
+        echo "04-aura: installed theme $t"
+    fi
+done

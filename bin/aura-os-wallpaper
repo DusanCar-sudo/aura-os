@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# aura-os-wallpaper — desktop background: the theme's solid color
+# (default) or an image.
+#
+#   aura-os-wallpaper pick          choose an image (or "solid") with fuzzel
+#   aura-os-wallpaper set <image>   use an image (fill), all outputs
+#   aura-os-wallpaper solid         back to the theme's solid color
+#   aura-os-wallpaper current
+#
+# Images are searched in ~/Pictures/Wallpapers, ~/Pictures and
+# /usr/share/aura-os/wallpapers. The choice lives in
+# ~/.config/sway/config.d/60-wallpaper.conf (after the theme's 50-,
+# so it wins) and applies live. An image costs ~8 MB RAM per 1080p
+# output (swaybg keeps it decoded); solid costs almost nothing.
+set -euo pipefail
+
+conf="${XDG_CONFIG_HOME:-$HOME/.config}/sway/config.d/60-wallpaper.conf"
+
+sway() {
+    export SWAYSOCK="${SWAYSOCK:-$(ls "${XDG_RUNTIME_DIR:-/tmp}"/sway-ipc.*.sock 2>/dev/null | head -n1)}"
+    [[ -n $SWAYSOCK ]] && swaymsg "$@" >/dev/null 2>&1 || true
+}
+
+theme_bg() { sed -n 's/^output \* bg \(#[0-9a-fA-F]\{6\}\) solid_color/\1/p' \
+    "${XDG_CONFIG_HOME:-$HOME/.config}/sway/config.d/50-theme.conf" 2>/dev/null | head -n1; }
+
+cmd_set() {
+    local img; img="$(readlink -f "$1")"
+    [[ -f $img ]] || { echo "aura-os-wallpaper: no such file: $1" >&2; exit 2; }
+    mkdir -p "$(dirname "$conf")"
+    printf '# aura-os-wallpaper\noutput * bg "%s" fill\n' "$img" > "$conf"
+    sway output '*' bg "$img" fill
+    echo "wallpaper: $img"
+}
+
+cmd_solid() {
+    rm -f "$conf"
+    sway output '*' bg "$(theme_bg || echo '#0e0e14')" solid_color
+    echo "wallpaper: solid ($(theme_bg || echo '#0e0e14'))"
+}
+
+cmd_pick() {
+    local list choice
+    list="$(find "$HOME/Pictures/Wallpapers" "$HOME/Pictures" /usr/share/aura-os/wallpapers \
+              -maxdepth 2 -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) \
+              2>/dev/null | sort -u | sed "s|^$HOME|~|")"
+    choice="$(printf 'solid (theme color)\n%s\n' "$list" | sed '/^$/d' \
+              | fuzzel --dmenu --prompt 'wallpaper > ' --width 80 --lines 15)" || exit 0
+    case $choice in
+        "solid (theme color)") cmd_solid ;;
+        "") exit 0 ;;
+        *) cmd_set "${choice/#\~/$HOME}" ;;
+    esac
+}
+
+case "${1:-}" in
+    pick)    cmd_pick ;;
+    set)     cmd_set "${2:?usage: aura-os-wallpaper set <image>}" ;;
+    solid)   cmd_solid ;;
+    current) sed -n 's/^output \* bg "\(.*\)" fill/\1/p' "$conf" 2>/dev/null || true
+             [[ -f $conf ]] || echo "solid" ;;
+    *)       sed -n '3,9p' "$0" >&2; exit 2 ;;
+esac

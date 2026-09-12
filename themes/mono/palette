@@ -1,0 +1,16 @@
+# mono — pure black and white, color only for status
+bg=#000000
+bg_alt=#111111
+border=#333333
+fg=#d0d0d0
+fg_bright=#ffffff
+dim=#666666
+muted=#888888
+accent=#ffffff
+accent_bright=#ffffff
+red=#ff5f5f
+green=#5fd75f
+yellow=#d7d75f
+blue=#5f87d7
+cyan=#5fd7d7
+orange=#d7875f

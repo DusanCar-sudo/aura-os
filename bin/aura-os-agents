@@ -130,7 +130,14 @@ cmd_watch() {
     cmd_scan; poke
     local dirs=() d f
     for d in "$claude_dir" "$codex_dir" "$aura_dir" "$hermes_dir"; do [[ -d $d ]] && dirs+=("$d"); done
-    [[ ${#dirs[@]} -gt 0 ]] || { echo "aura-os-agents: no agent logs to watch" >&2; exit 0; }
+    # An agent installed later creates its log dir after we started:
+    # re-exec to watch it (checked on each 45 s timeout, see below).
+    appeared() { local x; for x in "$claude_dir" "$codex_dir" "$aura_dir" "$hermes_dir"; do
+                     [[ -d $x && " ${dirs[*]} " != *" $x "* ]] && return 0; done; return 1; }
+    if [[ ${#dirs[@]} -eq 0 ]]; then        # nothing yet: wait for the first agent
+        until appeared; do sleep "$working_s"; done
+        exec "$0" watch
+    fi
     # Blocks on inotify. The 45 s timeout only re-ages "working" → "done"
     # after an agent stops writing; with nothing working it just re-arms.
     local rc
@@ -141,6 +148,7 @@ cmd_watch() {
             write_one "$f"; poke
         elif (( rc > 128 )); then        # timeout: age "working" → "done"
             if grep -qs '"state":"working"' "$out_dir"/*.json; then cmd_scan; poke; fi
+            appeared && exec "$0" watch
         else
             echo "aura-os-agents: inotifywait ended" >&2; exit 1
         fi

@@ -16,6 +16,9 @@
 # Shell + jq + sqlite3 + inotifywait (RAM/speed budget, AURA.md).
 set -euo pipefail
 
+# theme: map the herdr hex in Pango markup to the current theme
+recolor() { local f="${XDG_CONFIG_HOME:-$HOME/.config}/aura-os/colors.sed"; if [[ -f $f ]]; then sed -f "$f"; else cat; fi; }
+
 data="${XDG_DATA_HOME:-$HOME/.local/share}"
 log="$data/aura-os/activity.log"          # ts<TAB>kind<TAB>value
 cfg="${XDG_CONFIG_HOME:-$HOME/.config}/aura-os/sidebar.json"
@@ -108,7 +111,7 @@ all_items() {
     { src_log; src_files; src_urls; } | awk -F'\t' -v OFS='\t' '
         NF != 3 || $3 == "" { next }
         $2 == "@" { sub(/[?#].*/, "", $3); sub(/^http:/, "https:", $3); sub(/:\/\/www\./, "://", $3)
-                    if ($3 ~ /(^https?:\/\/(accounts|login|auth|signin)\.|\/(signin|login|logout|oauth|auth|CheckCookie|ServiceLogin)([\/_]|$))/) next }
+                    if ($3 ~ /(^https?:\/\/(accounts|login|auth|signin)\.|\/(signin|login|logout|oauth|oauth2|auth|callback|CheckCookie|ServiceLogin)([\/_]|$))/) next }
         { print }'
 }
 
@@ -149,7 +152,7 @@ cmd_label() {
                          + "<span color=\"#c8cad8\">" + (.[2:] | cut(32) | esc) + "</span>")
                    | if length == 0 then ["<span color=\"#5c5f77\">nothing yet</span>"] else . end
                    | join("\n"))),
-         tooltip: "click: open any recent item — mode in settings (Super+,)"}'
+         tooltip: "click: open any recent item — mode in settings (Super+,)"}' | recolor
 }
 
 open_item() {   # open_item <kind> <value>

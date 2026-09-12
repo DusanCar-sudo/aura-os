@@ -14,6 +14,9 @@
 # polls and no module uses an interval.
 set -euo pipefail
 
+# theme: map the herdr hex in Pango markup to the current theme
+recolor() { local f="${XDG_CONFIG_HOME:-$HOME/.config}/aura-os/colors.sed"; if [[ -f $f ]]; then sed -f "$f"; else cat; fi; }
+
 cfg_dir="${XDG_CONFIG_HOME:-$HOME/.config}/aura-os"
 tabs_file="$cfg_dir/tabs.json"
 
@@ -85,7 +88,7 @@ cmd_spaces() {
             (([.. | objects | select(.focused and .pid != null) | .tag // ""] | first) // "") ]
         | @tsv' 2>/dev/null)
     [[ -n $text ]] || text="<span color='#5c5f77'>no workspaces</span>"
-    jq -cn --arg text "<span color='#5c5f77'>spaces</span>"$'\n'"$text" '{text:$text}'
+    jq -cn --arg text "<span color='#5c5f77'>spaces</span>"$'\n'"$text" '{text:$text}' | recolor
 }
 
 cmd_agents() {
@@ -120,7 +123,7 @@ cmd_agents() {
     fi
     local text="<span color='#5c5f77'>agents</span>"$'\n'"${a:-<span color='#5c5f77'>none</span>}"
     [[ -n $p ]] && text+=$'\n\n'"<span color='#5c5f77'>programs</span>"$'\n'"$p"
-    jq -cn --arg text "$text" '{text:$text}'
+    jq -cn --arg text "$text" '{text:$text}' | recolor
 }
 
 term_of() {   # term_of <pid> → comm of the terminal it runs in (foot, aura-termd, ...)

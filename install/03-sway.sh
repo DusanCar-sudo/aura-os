@@ -38,6 +38,11 @@ put "$REPO/config/waybar/config.jsonc" "$cfg/waybar/config.jsonc"
 put "$REPO/config/waybar/style.css" "$cfg/waybar/style.css"
 install -d -o "$user" -g "$user" "$cfg/fuzzel" "$home/.local/share/applications"
 put "$REPO/config/fuzzel/fuzzel.ini" "$cfg/fuzzel/fuzzel.ini"
+# Theme files are generated; make sure a fresh user has the default.
+if [[ ! -f $cfg/waybar/theme.css ]]; then
+    sudo -u "$user" env HOME="$home" AURA_OS_REPO="$REPO" "$REPO/bin/aura-os-theme" apply herdr >/dev/null
+    echo "03-sway: applied default theme herdr"
+fi
 for f in "$REPO"/config/applications/*.desktop; do   # hide dependency clutter from the launcher
     put "$f" "$home/.local/share/applications/$(basename "$f")"
 done

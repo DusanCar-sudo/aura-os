@@ -1,27 +1,16 @@
-# herdr theme — Aura OS
-# Flat, dark, no decoration. Inspired by herdr's terminal multiplexer look.
-# One monospace font, square corners,1px borders, no blur/shadow/animation.
-
-# Base colors
+# herdr — flat violet on near-black (the default)
 bg=#0e0e14
 bg_alt=#14141e
+border=#2a2a3a
 fg=#c8cad8
-fg_dim=#5c5f77
-
-# Accent
+fg_bright=#e6e8f2
+dim=#5c5f77
+muted=#7f849c
 accent=#8b7cf6
-accent_dim=#5b4fcf
-
-# Border
-border_active=#8b7cf6
-border_inactive=#2a2a3a
-
-# Tab palette (8 named colors for Super+Shift+C)
-tab_purple=#8b7cf6
-tab_blue=#6ea8fe
-tab_cyan=#5de4c7
-tab_green=#83e6a0
-tab_yellow=#f9e2af
-tab_orange=#f5a97f
-tab_red=#f38ba8
-tab_gray=#7f849c
+accent_bright=#a594f9
+red=#f38ba8
+green=#83e6a0
+yellow=#f9e2af
+blue=#6ea8fe
+cyan=#5de4c7
+orange=#f5a97f

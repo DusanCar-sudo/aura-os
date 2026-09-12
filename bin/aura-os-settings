@@ -15,7 +15,8 @@ wifi        networks, VPN, ethernet        (nmtui)
 bluetooth   pair and connect devices       (bluetoothctl)
 display     resolution and scale           (sway outputs)
 keyboard    layouts us / sr latin / sr cyrillic
-theme       sway, bar and terminal colors  (edit)
+theme       color combos: herdr, tokyo-night, gruvbox, nord, mono, paper
+wallpaper   solid theme color or an image
 keys        every key binding              (read)
 snapshots   system snapshots, roll back    (snapper)
 updates     update all packages            (snapshot, then pacman -Syu)
@@ -36,7 +37,8 @@ case $pick in
     bluetooth) float bluetoothctl ;;
     display)   hold "swaymsg -t get_outputs | jq -r '.[] | \"\\(.name)  \\(.current_mode.width)x\\(.current_mode.height)  scale \\(.scale)\\n  modes: \" + ([.modes[] | \"\\(.width)x\\(.height)\"] | unique | join(\" \"))'; echo; echo 'change: swaymsg output <name> mode WxH  |  scale N'" ;;
     keyboard)  hold "swaymsg -t get_inputs | jq -r '.[] | select(.type==\"keyboard\") | \"\\(.identifier): \\(.xkb_active_layout_name)\"' | sort -u; echo; echo 'switch: Alt+Shift   (layouts set in config/sway/config)'" ;;
-    theme)     float "${EDITOR:-vim}" "$HOME/.config/waybar/style.css" "$HOME/.config/aura-term/aura-term.ini" "$HOME/.config/sway/config" ;;
+    theme)     exec aura-os-theme pick ;;
+    wallpaper) exec aura-os-wallpaper pick ;;
     keys)      float sh -c "grep -h '^bindsym' ~/.config/sway/config ~/.config/sway/config.d/*.conf | sed 's/^bindsym //; s/\\\$mod/Super/' | less" ;;
     snapshots) hold "sudo snapper -c root list | tail -n 15; echo; echo 'take one: aura-os-snapshot \"msg\"    roll back: aura-os-reset <n>'" ;;
     updates)   hold "aura-os-snapshot 'before system update' && sudo pacman -Syu" ;;

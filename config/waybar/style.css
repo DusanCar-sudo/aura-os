@@ -1,3 +1,6 @@
+/* Colors come from theme.css (aura-os-theme); default herdr is shipped. */
+@import "theme.css";
+
 /* Aura OS — waybar, herdr theme (task 003).
  * Flat, dark, square. No blur/shadow/rounding. One font.
  * Two bars: window#waybar.top (tabs) and window#waybar.left (sidebar). */
@@ -10,13 +13,13 @@
 }
 
 window#waybar {
-    background: #0e0e14;
-    color: #c8cad8;
+    background: @bg;
+    color: @fg;
     border: none;
 }
 
-window#waybar.top  { border-bottom: 1px solid #2a2a3a; }
-window#waybar.left { border-right: 1px solid #2a2a3a; }
+window#waybar.top  { border-bottom: 1px solid @border; }
+window#waybar.left { border-right: 1px solid @border; }
 
 /* ── top bar: workspace tabs ─────────────────────────────────── */
 
@@ -25,17 +28,17 @@ window#waybar.left { border-right: 1px solid #2a2a3a; }
 #custom-tab9 {
     padding: 0 10px;
     margin: 0;
-    color: #5c5f77;
+    color: @dim;
     background: transparent;
 }
 
 window#waybar.top .tab.focused {
-    color: #0e0e14;
-    background: #8b7cf6;
+    color: @bg;
+    background: @accent;
 }
 
-window#waybar.top .tab:hover { color: #c8cad8; }
-window#waybar.top .tab.focused:hover { color: #0e0e14; }
+window#waybar.top .tab:hover { color: @fg; }
+window#waybar.top .tab.focused:hover { color: @bg; }
 
 /* per-tab colors (aura-os-tab color): the tab only, never the screen */
 window#waybar.top .c-purple { color: #8b7cf6; }
@@ -57,46 +60,46 @@ window#waybar.top .tab.focused.c-orange { background: #f5a97f; }
 window#waybar.top .tab.focused.c-red    { background: #f38ba8; }
 window#waybar.top .tab.focused.c-gray   { background: #7f849c; }
 
-#custom-tabplus { padding: 0 10px; color: #5c5f77; }
-#custom-tabplus:hover { color: #c8cad8; }
+#custom-tabplus { padding: 0 10px; color: @dim; }
+#custom-tabplus:hover { color: @fg; }
 
 /* ── top bar: window title + clock ───────────────────────────── */
 
 /* focused window title: hidden until you hover the top-left area */
 window#waybar.top #window { color: transparent; padding: 0 16px; min-width: 360px; }
-window#waybar.top #window:hover { color: #c8cad8; background: #14141e; }
-window#waybar.top #clock  { color: #8b7cf6; padding: 0 12px; }
+window#waybar.top #window:hover { color: @fg; background: @bg_alt; }
+window#waybar.top #clock  { color: @accent; padding: 0 12px; }
 
 /* ── left sidebar ────────────────────────────────────────────── */
 
 window#waybar.left #custom-spaces { padding: 8px 10px; }
 window#waybar.left #custom-agents { padding: 8px 10px; }
-window#waybar.left #custom-agents:hover { background: #14141e; }
+window#waybar.left #custom-agents:hover { background: @bg_alt; }
 
 /* ── top bar: system items (bt, wifi, vol, clip), plain text ─── */
 
 window#waybar.top #bluetooth,
 window#waybar.top #network,
 window#waybar.top #wireplumber,
-window#waybar.top #custom-clip { color: #7f849c; padding: 0 10px; }
+window#waybar.top #custom-clip { color: @muted; padding: 0 10px; }
 window#waybar.top #bluetooth:hover,
 window#waybar.top #network:hover,
 window#waybar.top #wireplumber:hover,
 window#waybar.top #custom-clip:hover,
-window#waybar.top #clock:hover { color: #c8cad8; background: #14141e; }
+window#waybar.top #clock:hover { color: @fg; background: @bg_alt; }
 window#waybar.top #network.disconnected,
 window#waybar.top #wireplumber.muted,
-window#waybar.top #bluetooth.off { color: #f38ba8; }
+window#waybar.top #bluetooth.off { color: @red; }
 
-tooltip { background: #14141e; border: 1px solid #2a2a3a; border-radius: 0; }
-tooltip label { color: #c8cad8; }
+tooltip { background: @bg_alt; border: 1px solid @border; border-radius: 0; }
+tooltip label { color: @fg; }
 
 /* sidebar toggle (top-left) and the sidebar's RAM line */
-window#waybar.top #custom-sidebar { color: #5c5f77; padding: 0 10px; }
-window#waybar.top #custom-sidebar:hover { color: #c8cad8; background: #14141e; }
-window#waybar.left #memory { color: #7f849c; padding: 4px 10px; }
-window#waybar.left #memory.high { color: #f38ba8; }
+window#waybar.top #custom-sidebar { color: @dim; padding: 0 10px; }
+window#waybar.top #custom-sidebar:hover { color: @fg; background: @bg_alt; }
+window#waybar.left #memory { color: @muted; padding: 4px 10px; }
+window#waybar.left #memory.high { color: @red; }
 
 /* sidebar middle: last used anything */
 window#waybar.left #custom-recent { padding: 8px 10px; }
-window#waybar.left #custom-recent:hover { background: #14141e; }
+window#waybar.left #custom-recent:hover { background: @bg_alt; }

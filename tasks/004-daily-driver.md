@@ -1,0 +1,46 @@
+# Task 004 — daily driver: runs everything, many windows, many screens
+
+Depends on 001b. AURA.md "Daily driver": Aura OS must run everything
+Dusan runs today on Ubuntu. The RAM budget is for the bare desktop;
+never drop compatibility to meet it.
+
+## Apps — each must launch and work, tested in the VM
+- Chrome: native Wayland (`--ozone-platform-hint=auto` in a
+  chrome-flags.conf), YouTube 1080p with hardware decode (VA-API:
+  mesa / intel-media-driver), screen share in Meet via
+  xdg-desktop-portal-wlr + pipewire.
+- Dev: git, docker (+ compose, user in docker group), node via nvm,
+  python via uv, rust via rustup, VS Code / Zed, Android SDK tools.
+- Unity Hub + editor, Blender, OBS (pipewire capture), Steam — these
+  may need Xwayland (lazy, per 001b) — test at least one X11 app.
+- Slack, Telegram, Thunderbird; flatpak enabled as the fallback for
+  anything not in pacman/AUR. AUR helper: paru.
+- Keyboard layouts: us + Serbian latin + Serbian cyrillic, toggle
+  with Alt+Shift (Super+Space is reserved for voice, task 002).
+- Clipboard (wl-clipboard + cliphist), screenshots (grim + slurp →
+  Print key), Bluetooth and Wi-Fi via TUIs (bluetuith, impala/nmtui).
+- Install all of it through `aura-os-install`; add `aura-os-app
+  <name>` for things needing more than a package (flags, groups).
+
+## Many windows
+- Any number of windows per workspace: tiled, tabbed (Super+T) or
+  stacked; dialogs and popups float automatically (for_window rules
+  for pop-ups, file pickers, Picture-in-Picture).
+- Super+Tab: fuzzel list of all open windows across workspaces,
+  pick one to jump to it.
+- Scratchpad: Super+` hides/shows a floating terminal.
+- New windows of an app open where the focused pane is, never on a
+  random workspace; nothing steals focus.
+
+## Many screens
+- Laptop + external monitors, hotplug without a restart: kanshi
+  profiles (laptop-only, docked, projector).
+- Each monitor has its own workspaces/tabs in the top bar.
+- Super+Shift+Alt+←→ moves a window to the next monitor;
+  Super+Ctrl+Alt+←→ moves the whole workspace.
+- Test with a second headless output (`swaymsg create_output`).
+
+## Done when
+A checklist in the report: every app above launched in the VM (or
+marked "hardware only — test on laptop" with a reason), and the
+bench idle number still under 350 MB with no apps open.

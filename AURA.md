@@ -26,6 +26,11 @@ Electron, Qt or Python daemons in the core. Prefer foot, fuzzel,
 mako, greetd+tuigreet, zram. Event-driven, not polling. Every
 change reports before/after idle RAM; over budget = bug.
 
+## Daily driver
+It must run everything Dusan runs today: Chrome, YouTube with
+hardware video, Docker, dev toolchains, Unity, OBS, Steam. The
+budget is the bare desktop; never cut compatibility to meet it.
+
 ## Install scripts
 install.sh runs numbered steps in install/. Each step must be
 safe to re-run. Use set -euo pipefail. No curl | bash from

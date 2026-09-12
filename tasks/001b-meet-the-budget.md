@@ -20,7 +20,8 @@ Xwayland 80, waybar 47, polkit-kde 39 (MB).
   Remove config/sddm/ and its install step.
 - polkit-kde → the lightest agent that works, or on demand;
   measure and justify.
-- `xwayland disable` unless something in the core needs it.
+- Xwayland stays on but lazy (`xwayland enable`: starts only when an
+  X11 app opens). Many of Dusan's apps need it — never disable it.
 - zram swap (zram-generator).
 - Uninstall what you replaced (hyprland, kitty, sddm, polkit-kde)
   through a snapshot-first aura-os-* command.

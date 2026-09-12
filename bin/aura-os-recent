@@ -1,0 +1,214 @@
+#!/usr/bin/env bash
+# aura-os-recent — "last used anything" for the sidebar's middle section.
+#
+#   aura-os-recent label          waybar JSON: top N items (recent|frequent)
+#   aura-os-recent pick           fuzzel list of all items → reopen the choice
+#   aura-os-recent mode [recent|frequent]   show or set the mode
+#   aura-os-recent watch          refresh the sidebar when a source changes
+#   aura-os-recent log <kind> <value>        (internal) shell hook / launcher
+#   aura-os-recent launch <cmd…>  launcher prefix: log the app, then run it
+#
+# Kinds and sources (one tag each, text only):
+#   $ command   d folder   → ~/.local/share/aura-os/activity.log (shell hook)
+#   a app       → same log, via fuzzel --launch-prefix
+#   f file      → ~/.local/share/recently-used.xbel, KDE RecentDocuments
+#   @ address   → Firefox history (a tmpfs copy of places.sqlite + WAL)
+# Shell + jq + sqlite3 + inotifywait (RAM/speed budget, AURA.md).
+set -euo pipefail
+
+data="${XDG_DATA_HOME:-$HOME/.local/share}"
+log="$data/aura-os/activity.log"          # ts<TAB>kind<TAB>value
+cfg="${XDG_CONFIG_HOME:-$HOME/.config}/aura-os/sidebar.json"
+xbel="$data/recently-used.xbel"
+kde_recent="$data/RecentDocuments"
+show=8                                     # items in the sidebar
+keep=2000                                  # activity.log lines kept
+
+mode() { jq -r '.recent_mode // "recent"' "$cfg" 2>/dev/null || echo recent; }
+poke() { pkill -RTMIN+10 -x waybar 2>/dev/null || true; }
+
+mask() {
+    sed -E 's/(sk|pk|ghp|gho|xox[abp])[-_][A-Za-z0-9_-]{8,}/***/g;
+            s/((api[_-]?key|token|secret|password|passwd)[= :]+)[^ ]+/\1***/Ig;
+            s/Bearer [A-Za-z0-9._-]+/Bearer ***/g' | tr '\n\t' '  '
+}
+
+cmd_log() {   # log <kind> <value>
+    local kind="$1"; shift
+    local value; value="$(printf '%s' "$*" | mask | cut -c1-300)"
+    [[ -n ${value// } ]] || return 0
+    mkdir -p "$(dirname "$log")"
+    printf '%s\t%s\t%s\n' "$(date +%s)" "$kind" "$value" >> "$log"
+    if (( $(wc -l < "$log") > keep + 200 )); then      # trim now and then
+        tail -n "$keep" "$log" > "$log.tmp" && mv "$log.tmp" "$log"
+    fi
+}
+
+# ── sources → lines "ts<TAB>kind<TAB>value" ──────────────────────────
+
+src_log() { [[ -f $log ]] && tail -n "$keep" "$log" || true; }
+
+src_files() {
+    if [[ -f $xbel ]]; then   # <bookmark href="file:///…" … visited="2026-…Z">
+        local pairs when path i=0
+        pairs="$(grep -o '<bookmark [^>]*>' "$xbel" 2>/dev/null | sed -nE \
+            's/.*href="file:\/\/([^"]+)".*(visited|modified)="([^"]+)".*/\3\t\1/p' | tail -n 300)"
+        [[ -n $pairs ]] || return 0
+        # one `date` for all timestamps; %XX decoding with the printf builtin
+        local -a secs; mapfile -t secs < <(cut -f1 <<<"$pairs" | date -f - +%s 2>/dev/null)
+        while IFS=$'\t' read -r when path; do
+            printf -v path '%b' "${path//%/\\x}"
+            printf '%s\tf\t%s\n' "${secs[i]:-0}" "$path"; i=$((i + 1))
+        done <<<"$pairs"
+    fi
+    if [[ -d $kde_recent ]]; then
+        local f; for f in "$kde_recent"/*.desktop; do
+            [[ -f $f ]] || continue
+            printf '%s\tf\t%s\n' "$(stat -c %Y "$f")" \
+                "$(sed -n 's/^URL\(\[[^]]*\]\)\?=file:\/\/\(.*\)/\2/p' "$f" | head -n1)"
+        done
+    fi
+}
+
+ff_profiles() {   # Firefox ≥ 15x uses ~/.config/mozilla; older ~/.mozilla; snap
+    local d; for d in "${XDG_CONFIG_HOME:-$HOME/.config}"/mozilla/firefox/*/ \
+                      "$HOME"/.mozilla/firefox/*/ "$HOME"/snap/firefox/common/.mozilla/firefox/*/; do
+        [[ -f $d/places.sqlite ]] && printf '%s\n' "${d%/}"
+    done
+}
+
+src_urls() {
+    # Firefox holds places.sqlite locked and keeps new visits in the WAL,
+    # so read a copy in tmpfs — refreshed only when Firefox wrote since.
+    command -v sqlite3 >/dev/null || return 0
+    local prof copy
+    while IFS= read -r prof; do
+        copy="${XDG_RUNTIME_DIR:-/tmp}/aura-os/ff-$(basename "$prof")"
+        mkdir -p "$copy"; chmod 700 "$copy"
+        if [[ ! -f $copy/places.sqlite || $prof/places.sqlite -nt $copy/places.sqlite \
+              || ( -f $prof/places.sqlite-wal && $prof/places.sqlite-wal -nt $copy/places.sqlite ) ]]; then
+            # fresh snapshot dir per refresh, swapped in with one rename, so
+            # a concurrent reader never sees a half-copied database
+            local snap; snap="$(mktemp -d "$copy.XXXX")"
+            cp "$prof/places.sqlite" "$snap/" 2>/dev/null || { rm -rf "$snap"; continue; }
+            [[ -f $prof/places.sqlite-wal ]] && cp "$prof/places.sqlite-wal" "$snap/"
+            rm -rf "$copy.old"; mv "$copy" "$copy.old"; mv "$snap" "$copy"; rm -rf "$copy.old"
+        fi
+        sqlite3 -separator $'\t' "file:$copy/places.sqlite?mode=ro" "
+            SELECT v.visit_date/1000000, '@', p.url FROM moz_historyvisits v
+            JOIN moz_places p ON p.id = v.place_id
+            WHERE p.url LIKE 'http%'
+            ORDER BY v.visit_date DESC LIMIT 300;" 2>/dev/null || true
+    done < <(ff_profiles)
+}
+
+# Addresses: drop ?query/#fragment (one entry per page) and skip
+# sign-in / auth pages — noise, and not something to show on screen.
+all_items() {
+    { src_log; src_files; src_urls; } | awk -F'\t' -v OFS='\t' '
+        NF != 3 || $3 == "" { next }
+        $2 == "@" { sub(/[?#].*/, "", $3); sub(/^http:/, "https:", $3); sub(/:\/\/www\./, "://", $3)
+                    if ($3 ~ /(^https?:\/\/(accounts|login|auth|signin)\.|\/(signin|login|logout|oauth|auth|CheckCookie|ServiceLogin)([\/_]|$))/) next }
+        { print }'
+}
+
+# Ranked, unique by kind+value: recent = newest first; frequent = most
+# uses in the last 30 days, ties broken by recency.
+ranked() {
+    local m; m="$(mode)"
+    all_items | awk -F'\t' -v m="$m" -v since="$(( $(date +%s) - 30*86400 ))" '
+        { k = $2 "\t" $3
+          if (!(k in last) || $1 > last[k]) last[k] = $1
+          if ($1 >= since) n[k]++ }
+        END { for (k in last) printf "%d\t%d\t%s\n", (m == "frequent" ? n[k] : 0), last[k], k }' \
+    | sort -t$'\t' -k1,1nr -k2,2nr | cut -f3-
+}
+
+pretty() {   # kind<TAB>value → "tag short-value" (one line, no markup)
+    local kind value
+    while IFS=$'\t' read -r kind value; do
+        case $kind in
+            @) value="${value#*://}"; value="${value#www.}"; value="${value%%\?*}" ;;
+            f) value="${value##*/}" ;;                          # file name
+            d) value="${value/#"$HOME"/\~}"                     # last 2 parts
+               [[ $value == */*/* ]] && value="…/${value#"${value%/*/*}"/}" ;;
+        esac
+        printf '%s %s\n' "$kind" "$value"
+    done
+}
+
+cmd_label() {
+    local lines
+    lines="$(ranked | head -n "$show" | pretty)" || true   # head closes early: SIGPIPE is fine
+    jq -cn --arg l "$lines" --arg m "$(mode)" '
+        def cut(n): if length > n then .[0:n-1] + "…" else . end;
+        def esc: gsub("&"; "&amp;") | gsub("<"; "&lt;") | gsub(">"; "&gt;");
+        {text: ("<span color=\"#5c5f77\">" + $m + "</span>\n"
+                + ($l | split("\n") | map(select(. != ""))
+                   | map("<span color=\"#8b7cf6\">" + .[0:1] + "</span> "
+                         + "<span color=\"#c8cad8\">" + (.[2:] | cut(32) | esc) + "</span>")
+                   | if length == 0 then ["<span color=\"#5c5f77\">nothing yet</span>"] else . end
+                   | join("\n"))),
+         tooltip: "click: open any recent item — mode in settings (Super+,)"}'
+}
+
+open_item() {   # open_item <kind> <value>
+    case $1 in
+        '$') printf '%s' "$2" | wl-copy; notify-send -t 2000 "copied" "$2" 2>/dev/null || true ;;
+        d)   swaymsg exec "aura-term --working-directory=$(printf '%q' "$2")" >/dev/null ;;
+        f)   xdg-open "$2" >/dev/null 2>&1 & ;;
+        @)   xdg-open "$2" >/dev/null 2>&1 & ;;
+        a)   swaymsg exec "$2" >/dev/null ;;
+    esac
+    cmd_log "$1" "$2"
+}
+
+cmd_pick() {
+    local items choice n
+    items="$(ranked | head -n 200)" || true
+    choice="$(printf '%s\n' "$items" | pretty | fuzzel --dmenu --index --prompt "$(mode) > " --width 80 --lines 20)" || exit 0
+    [[ $choice =~ ^[0-9]+$ ]] || exit 0
+    n=$((choice + 1))
+    IFS=$'\t' read -r kind value < <(printf '%s\n' "$items" | sed -n "${n}p")
+    open_item "$kind" "$value"
+}
+
+cmd_mode() {
+    if [[ -z ${1:-} ]]; then mode; return; fi
+    [[ $1 == recent || $1 == frequent ]] || { echo "mode: recent|frequent" >&2; exit 2; }
+    mkdir -p "$(dirname "$cfg")"
+    jq -n --argjson old "$(cat "$cfg" 2>/dev/null || echo '{}')" --arg m "$1" '$old + {recent_mode: $m}' \
+        > "$cfg.tmp" && mv "$cfg.tmp" "$cfg"
+    poke; echo "recent list: $1"
+}
+
+cmd_launch() {   # fuzzel --launch-prefix: log the app (its desktop id), run it
+    local id="${FUZZEL_DESKTOP_FILE_ID:-${1##*/}}"
+    cmd_log a "${id%.desktop}"
+    exec "$@"
+}
+
+cmd_watch() {   # coalesce bursts (Firefox writes often) into one refresh
+    command -v inotifywait >/dev/null || { echo "needs inotify-tools" >&2; exit 1; }
+    mkdir -p "$(dirname "$log")"; touch "$log"
+    local paths=("$(dirname "$log")") p
+    [[ -f $xbel ]] && paths+=("$xbel")
+    [[ -d $kde_recent ]] && paths+=("$kde_recent")
+    while IFS= read -r p; do paths+=("$p"); done < <(ff_profiles)
+    poke
+    inotifywait -m -q -e close_write,moved_to,create,modify --format '%w%f' "${paths[@]}" 2>/dev/null \
+    | while IFS= read -r _; do
+        while IFS= read -r -t 2 _; do :; done      # drain the burst
+        poke
+      done
+}
+
+case "${1:-}" in
+    label)  cmd_label ;;
+    pick)   cmd_pick ;;
+    mode)   cmd_mode "${2:-}" ;;
+    watch)  cmd_watch ;;
+    log)    shift; cmd_log "$@" ;;
+    launch) shift; cmd_launch "$@" ;;
+    *)      sed -n '3,9p' "$0" >&2; exit 2 ;;
+esac

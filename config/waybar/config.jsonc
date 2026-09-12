@@ -168,6 +168,7 @@
     "spacing": 0,
     "on-sigusr1": "toggle",
     "modules-left": ["custom/spaces", "memory"],
+    "modules-center": ["custom/recent"],
     "modules-right": ["custom/agents"],
     // The one system reading in the sidebar. The only polled module:
     // RAM has no change event; one /proc/meminfo read every 5 s.
@@ -177,6 +178,16 @@
       "format": "ram {used:0.1f}/{total:0.1f}G {percentage}%",
       "tooltip-format": "swap {swapUsed:0.1f}/{swapTotal:0.1f}G",
       "states": { "high": 85 }
+    },
+    // Last used anything: $ command, d folder, f file, @ address, a app.
+    "custom/recent": {
+      "exec": "aura-os-recent label",
+      "return-type": "json",
+      "escape": false,
+      "signal": 10,
+      "align": 0,
+      "justify": "left",
+      "on-click": "aura-os-recent pick"
     },
     "custom/spaces": {
       "align": 0,

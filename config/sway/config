@@ -8,9 +8,13 @@
 
 set $mod Mod4
 set $term aura-term
-set $menu fuzzel
+set $menu fuzzel --launch-prefix='aura-os-recent launch'
 
-floating_modifier $mod
+# Super+left-drag moves any window: drop a tiled one on another
+# pane's edge to re-tile it there. Super+right-drag resizes.
+floating_modifier $mod normal
+tiling_drag enable
+tiling_drag_threshold 9
 
 # herdr theme: monospace everywhere, 1px borders, square corners.
 font pango:JetBrainsMono Nerd Font 11
@@ -48,6 +52,7 @@ exec pgrep -x waybar >/dev/null || waybar
 exec pgrep -x mako >/dev/null || mako
 exec pgrep -f 'aura-os-status [w]atch' >/dev/null || aura-os-status watch
 exec pgrep -f 'aura-os-agents [w]atch' >/dev/null || aura-os-agents watch
+exec pgrep -f 'aura-os-recent [w]atch' >/dev/null || aura-os-recent watch
 exec pgrep -f 'wl-paste --watch .*aura-os-clip' >/dev/null || aura-os-clip watch
 
 # Floating TUIs opened from the top bar (bt, wifi, vol, calendar).

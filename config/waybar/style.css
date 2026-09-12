@@ -96,3 +96,7 @@ window#waybar.top #custom-sidebar { color: #5c5f77; padding: 0 10px; }
 window#waybar.top #custom-sidebar:hover { color: #c8cad8; background: #14141e; }
 window#waybar.left #memory { color: #7f849c; padding: 4px 10px; }
 window#waybar.left #memory.high { color: #f38ba8; }
+
+/* sidebar middle: last used anything */
+window#waybar.left #custom-recent { padding: 8px 10px; }
+window#waybar.left #custom-recent:hover { background: #14141e; }

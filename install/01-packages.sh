@@ -20,6 +20,7 @@ packages=(
     swaybg                   # solid theme background (sway `output bg`), ~3 MB
     mako                     # notifications daemon (also serves Electron/Chrome)
     inotify-tools            # inotifywait: aura-os-agents follows agent logs
+    sqlite3                  # read Firefox history for the sidebar's recent list
     cliphist wl-clipboard    # clipboard history, last 500 copies (top bar "clip")
     wiremix                  # volume TUI (top bar "vol" click)
     bluez bluez-utils        # bluetooth + bluetoothctl (top bar "bt")

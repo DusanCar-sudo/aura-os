@@ -36,6 +36,13 @@ for f in aura-term.bash aura-term.zsh; do
     fi
 done
 
+install -m 644 "$REPO/config/shell/aura-os-recent.bash" "$share/aura-os-recent.bash"
+line2=". $share/aura-os-recent.bash"
+if ! grep -qxF "$line2" "$home/.bashrc" 2>/dev/null; then
+    printf '# Aura OS: commands and folders for the sidebar recent list\n%s\n' "$line2" >> "$home/.bashrc"
+    echo "05-aura-term: sourced aura-os-recent.bash from $home/.bashrc"
+fi
+
 line=". $share/aura-term.bash"
 if ! grep -qxF "$line" "$home/.bashrc" 2>/dev/null; then
     printf '\n# aura-term: command blocks, cwd/branch, Ask Aura (task 005)\n%s\n' "$line" >> "$home/.bashrc"

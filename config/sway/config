@@ -51,3 +51,10 @@ exec pgrep -f 'wl-paste --watch .*aura-os-clip' >/dev/null || aura-os-clip watch
 for_window [app_id="aura-float"] floating enable, resize set 960 600, move position center
 
 include ~/.config/sway/config.d/*
+
+# Keyboard: US, Serbian Latin, Serbian Cyrillic — Alt+Shift cycles.
+input type:keyboard {
+    xkb_layout us,rs,rs
+    xkb_variant ,latin,
+    xkb_options grp:alt_shift_toggle
+}

@@ -12,12 +12,13 @@
     "spacing": 0,
     "on-sigusr1": "noop",
     "modules-left": [
+      "custom/sidebar",
       "custom/tab1", "custom/tab2", "custom/tab3", "custom/tab4",
       "custom/tab5", "custom/tab6", "custom/tab7", "custom/tab8",
       "custom/tab9", "custom/tabplus"
     ],
     "modules-center": ["sway/window"],
-    "modules-right": ["clock"],
+    "modules-right": ["bluetooth", "network", "wireplumber", "custom/clip", "clock"],
     "custom/tab1": {
       "exec": "aura-os-tab label 1",
       "return-type": "json",
@@ -99,13 +100,65 @@
       "on-click-middle": "aura-os-tab rename 9",
       "on-click-right": "aura-os-tab color-pick 9"
     },
+    "custom/sidebar": {
+      "format": "\u2261",
+      "tooltip-format": "hide/show sidebar (Super+B)",
+      "on-click": "aura-os-tab sidebar toggle"
+    },
     "custom/tabplus": {
       "format": "+",
       "tooltip": false,
       "on-click": "aura-os-tab new"
     },
     "sway/window": { "max-length": 60 },
-    "clock": { "format": "{:%H:%M}" }
+    // Classic system items, plain text (herdr look). Click → a floating
+    // TUI in aura-term (app_id aura-float, see sway config).
+    "bluetooth": {
+      "format": "bt {status}",
+      "format-connected": "bt {device_alias}",
+      "format-off": "bt off",
+      "format-disabled": "bt off",
+      "format-no-controller": "",
+      "tooltip-format-connected": "{device_enumerate}",
+      "tooltip-format-enumerate-connected": "{device_alias} {device_address}",
+      "on-click": "aura-term --app-id=aura-float -e bluetoothctl"
+    },
+    "network": {
+      "format-wifi": "wifi {essid} {signalStrength}%",
+      "format-ethernet": "eth {ifname}",
+      "format-disconnected": "net off",
+      "tooltip-format": "{ifname} {ipaddr}/{cidr} via {gwaddr}",
+      "on-click": "aura-term --app-id=aura-float -e nmtui"
+    },
+    "wireplumber": {
+      "format": "vol {volume}%",
+      "format-muted": "vol mute",
+      "scroll-step": 5,
+      "on-click": "aura-term --app-id=aura-float -e wiremix",
+      "on-click-right": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"
+    },
+    "custom/clip": {
+      "exec": "aura-os-clip label",
+      "return-type": "json",
+      "signal": 9,
+      "on-click": "aura-os-clip pick",
+      "on-click-right": "aura-os-clip clear"
+    },
+    "clock": {
+      "format": "{:%a %d %b  %H:%M}",
+      "tooltip-format": "<tt>{calendar}</tt>",
+      "calendar": {
+        "mode": "month",
+        "weeks-pos": "left",
+        "on-scroll": 1,
+        "format": {
+          "today": "<span color='#8b7cf6'><b>{}</b></span>",
+          "weeks": "<span color='#5c5f77'>{}</span>"
+        }
+      },
+      "actions": { "on-scroll-up": "shift_up", "on-scroll-down": "shift_down" },
+      "on-click": "aura-term --app-id=aura-float -e sh -c 'cal -3 --monday; read -rsn1'"
+    }
   },
   {
     "name": "left",
@@ -114,8 +167,17 @@
     "width": 300,
     "spacing": 0,
     "on-sigusr1": "toggle",
-    "modules-left": ["custom/spaces"],
+    "modules-left": ["custom/spaces", "memory"],
     "modules-right": ["custom/agents"],
+    // The one system reading in the sidebar. The only polled module:
+    // RAM has no change event; one /proc/meminfo read every 5 s.
+    "memory": {
+      "interval": 5,
+      "align": 0,
+      "format": "ram {used:0.1f}/{total:0.1f}G {percentage}%",
+      "tooltip-format": "swap {swapUsed:0.1f}/{swapTotal:0.1f}G",
+      "states": { "high": 85 }
+    },
     "custom/spaces": {
       "align": 0,
       "justify": "left",

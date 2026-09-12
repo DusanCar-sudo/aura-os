@@ -70,3 +70,27 @@ window#waybar.top #clock  { color: #8b7cf6; padding: 0 12px; }
 window#waybar.left #custom-spaces { padding: 8px 10px; }
 window#waybar.left #custom-agents { padding: 8px 10px; }
 window#waybar.left #custom-agents:hover { background: #14141e; }
+
+/* ── top bar: system items (bt, wifi, vol, clip), plain text ─── */
+
+window#waybar.top #bluetooth,
+window#waybar.top #network,
+window#waybar.top #wireplumber,
+window#waybar.top #custom-clip { color: #7f849c; padding: 0 10px; }
+window#waybar.top #bluetooth:hover,
+window#waybar.top #network:hover,
+window#waybar.top #wireplumber:hover,
+window#waybar.top #custom-clip:hover,
+window#waybar.top #clock:hover { color: #c8cad8; background: #14141e; }
+window#waybar.top #network.disconnected,
+window#waybar.top #wireplumber.muted,
+window#waybar.top #bluetooth.off { color: #f38ba8; }
+
+tooltip { background: #14141e; border: 1px solid #2a2a3a; border-radius: 0; }
+tooltip label { color: #c8cad8; }
+
+/* sidebar toggle (top-left) and the sidebar's RAM line */
+window#waybar.top #custom-sidebar { color: #5c5f77; padding: 0 10px; }
+window#waybar.top #custom-sidebar:hover { color: #c8cad8; background: #14141e; }
+window#waybar.left #memory { color: #7f849c; padding: 4px 10px; }
+window#waybar.left #memory.high { color: #f38ba8; }

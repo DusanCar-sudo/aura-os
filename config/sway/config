@@ -45,5 +45,9 @@ exec pgrep -x waybar >/dev/null || waybar
 exec pgrep -x mako >/dev/null || mako
 exec pgrep -f 'aura-os-status [w]atch' >/dev/null || aura-os-status watch
 exec pgrep -f 'aura-os-agents [w]atch' >/dev/null || aura-os-agents watch
+exec pgrep -f 'wl-paste --watch .*aura-os-clip' >/dev/null || aura-os-clip watch
+
+# Floating TUIs opened from the top bar (bt, wifi, vol, calendar).
+for_window [app_id="aura-float"] floating enable, resize set 960 600, move position center
 
 include ~/.config/sway/config.d/*

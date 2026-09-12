@@ -1,0 +1,2 @@
+# Hidden from the launcher: helper apps pulled in as dependencies.
+# One NoDisplay stub per .desktop id; deployed to ~/.local/share/applications.

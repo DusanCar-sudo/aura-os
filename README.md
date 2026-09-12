@@ -5,6 +5,14 @@
 > dotfiles, but a system she runs: installs, themes, fixes, backs up.
 > You ask; Aura does it, snapshots first, and every change is a commit.
 
+## Direction: a dev OS, not a polished one
+
+Omarchy is beautiful and polished. Aura OS is a working desk for
+developers and their agents: text over icons, square panes, every
+agent's last step in the sidebar, the numbers that matter (RAM, the
+last 500 copies) one glance away. If it doesn't help you ship, it
+isn't on screen.
+
 ## Two projects in one
 
 1. **The OS** — an Omarchy-style layer on Arch Linux: install script,

@@ -20,6 +20,9 @@ packages=(
     swaybg                   # solid theme background (sway `output bg`), ~3 MB
     mako                     # notifications daemon (also serves Electron/Chrome)
     inotify-tools            # inotifywait: aura-os-agents follows agent logs
+    cliphist wl-clipboard    # clipboard history, last 500 copies (top bar "clip")
+    wiremix                  # volume TUI (top bar "vol" click)
+    bluez bluez-utils        # bluetooth + bluetoothctl (top bar "bt")
     libnotify                # notify-send: mako's CLI; aura-term needs it for
                              # "agent needs input" alerts (task 005)
     jq                       # aura-os-tab / aura-os-status JSON (task 003)
@@ -64,4 +67,11 @@ if [[ -x "$REPO/bin/aura-os-remove" ]]; then
     bash "$REPO/bin/aura-os-remove" "${replaced[@]}"
 else
     echo "01-packages: WARNING: bin/aura-os-remove missing — old packages left alone" >&2
+fi
+
+# bluetooth for the top bar "bt" item (starts at next boot; harmless
+# without a controller — waybar then hides the item).
+if ! systemctl is-enabled --quiet bluetooth.service 2>/dev/null; then
+    systemctl enable bluetooth.service
+    echo "01-packages: enabled bluetooth.service"
 fi

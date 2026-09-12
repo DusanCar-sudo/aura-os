@@ -102,7 +102,7 @@ cmd_agents() {
                   done:    "<span color=\"#83e6a0\">\u2713</span>"}[.state] // "\u00b7")
                 + " <span color=\"#c8cad8\">" + .agent + "</span> <span color=\"#5c5f77\">"
                 + (.where | split("/") | last | cut(18) | esc) + "</span>\n"
-                + "  <span color=\"#7f849c\">" + (.step | cut(34) | esc) + "</span>")
+                + "  <span color=\"#7f849c\">" + (.step | cut(30) | esc) + "</span>")
             | join("\n")' "$agents_dir"/*.json 2>/dev/null || true)"
     fi
     if compgen -G "$panes_dir/*.json" >/dev/null; then
@@ -115,7 +115,7 @@ cmd_agents() {
                   done:    "<span color=\"#83e6a0\">\u2713</span>"}[.state] // "\u00b7")
                 + " <span color=\"#c8cad8\">" + ((.cmd // .agent // "job") | cut(22) | esc)
                 + "</span> <span color=\"#5c5f77\">" + ((.cwd // "") | split("/") | last | cut(12) | esc) + "</span>"
-                + (if (.last // "") != "" then "\n  <span color=\"#7f849c\">" + (.last | cut(34) | esc) + "</span>" else "" end))
+                + (if (.last // "") != "" then "\n  <span color=\"#7f849c\">" + (.last | cut(30) | esc) + "</span>" else "" end))
             | join("\n")' "$panes_dir"/*.json 2>/dev/null || true)"
     fi
     local text="<span color='#5c5f77'>agents</span>"$'\n'"${a:-<span color='#5c5f77'>none</span>}"

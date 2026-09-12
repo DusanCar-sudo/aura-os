@@ -36,6 +36,11 @@ put "$REPO/config/sway/config.d/10-binds.conf" "$cfg/sway/config.d/10-binds.conf
 put "$REPO/config/sway/config.d/05-aura-term.conf" "$cfg/sway/config.d/05-aura-term.conf"
 put "$REPO/config/waybar/config.jsonc" "$cfg/waybar/config.jsonc"
 put "$REPO/config/waybar/style.css" "$cfg/waybar/style.css"
+install -d -o "$user" -g "$user" "$cfg/fuzzel" "$home/.local/share/applications"
+put "$REPO/config/fuzzel/fuzzel.ini" "$cfg/fuzzel/fuzzel.ini"
+for f in "$REPO"/config/applications/*.desktop; do   # hide dependency clutter from the launcher
+    put "$f" "$home/.local/share/applications/$(basename "$f")"
+done
 
 # Stale SDDM autologin from task 001 — greetd replaces it.
 if [[ -e /etc/sddm.conf.d/10-aura.conf ]]; then

@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# aura-os-clip — clipboard history for the top bar (last 500 copies).
+#
+#   aura-os-clip watch    run from sway: store every copy (wl-paste --watch)
+#   aura-os-clip store    (internal) store stdin, refresh the bar
+#   aura-os-clip label    waybar JSON: "clip N"
+#   aura-os-clip pick     fuzzel list of the history → copy the choice
+#   aura-os-clip clear    wipe the history
+#
+# cliphist keeps the history on disk (~/.cache/cliphist); nothing polls —
+# each copy pokes waybar (RTMIN+9).
+set -euo pipefail
+
+max=500
+poke() { pkill -RTMIN+9 -x waybar 2>/dev/null || true; }
+
+case "${1:-}" in
+    watch) exec wl-paste --watch "$0" store ;;
+    store) cliphist -max-items "$max" store; poke ;;
+    label)
+        n="$(cliphist list 2>/dev/null | wc -l)"
+        jq -cn --arg t "clip $n" --arg tip "last $max copies — click: pick, right-click: clear" \
+            '{text:$t, tooltip:$tip}' ;;
+    pick)
+        choice="$(cliphist list | fuzzel --dmenu --prompt 'clip ' --width 80 --lines 20)" || exit 0
+        [[ -n $choice ]] && printf '%s' "$choice" | cliphist decode | wl-copy ;;
+    clear) cliphist wipe; poke ;;
+    *) sed -n '3,8p' "$0" >&2; exit 2 ;;
+esac

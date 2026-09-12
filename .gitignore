@@ -1,0 +1,5 @@
+/bld/
+/pkg/
+/src/
+/subprojects/*/
+/subprojects/.wraplock

@@ -23,6 +23,7 @@
 #include "config.h"
 #include "fdm.h"
 #include "foot-features.h"
+#include "aura-names.h"
 #include "key-binding.h"
 #include "macros.h"
 #include "reaper.h"
@@ -420,7 +421,7 @@ main(int argc, char *const *argv)
             break;
 
         case 'v':
-            print_version_and_features("foot ");
+            print_version_and_features(AURA_TERM_SERVER_NAME " ");
             return EXIT_SUCCESS;
 
         case 'h':
@@ -649,7 +650,7 @@ main(int argc, char *const *argv)
         goto out;
 
     if (!as_server && (term = term_init(
-                           &conf, fdm, reaper, wayl, "foot", cwd, token, pty_path,
+                           &conf, fdm, reaper, wayl, AURA_TERM_SERVER_NAME, cwd, token, pty_path,
                            argc, argv, NULL,
                            &term_shutdown_cb, &shutdown_ctx)) == NULL) {
         goto out;

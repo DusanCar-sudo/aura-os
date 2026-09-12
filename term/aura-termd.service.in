@@ -1,0 +1,14 @@
+[Service]
+ExecStart=@bindir@/aura-termd --server=3
+UnsetEnvironment=LISTEN_PID LISTEN_FDS LISTEN_FDNAMES
+NonBlocking=true
+
+[Unit]
+Requires=%N.socket
+Description=aura-term server (one process for all Aura OS terminal windows)
+PartOf=graphical-session.target
+After=graphical-session.target
+ConditionEnvironment=WAYLAND_DISPLAY
+
+[Install]
+WantedBy=graphical-session.target

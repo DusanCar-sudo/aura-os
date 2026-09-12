@@ -19,6 +19,7 @@
 #define LOG_ENABLE_DBG 0
 #include "log.h"
 #include "client-protocol.h"
+#include "aura-names.h"
 #include "debug.h"
 #include "foot-features.h"
 #include "macros.h"
@@ -357,7 +358,7 @@ main(int argc, char *const *argv)
             break;
 
         case 'v':
-            print_version_and_features("footclient ");
+            print_version_and_features(AURA_TERM_NAME " ");
             ret = EXIT_SUCCESS;
             goto err;
 
@@ -403,22 +404,22 @@ main(int argc, char *const *argv)
             const char *wayland_display = getenv("WAYLAND_DISPLAY");
             if (wayland_display != NULL) {
                 snprintf(addr.sun_path, sizeof(addr.sun_path),
-                         "%s/foot-%s.sock", xdg_runtime, wayland_display);
+                         "%s/" AURA_TERM_SOCK_PREFIX "-%s.sock", xdg_runtime, wayland_display);
                 connected = (connect(fd, (const struct sockaddr *)&addr, sizeof(addr)) == 0);
             }
             if (!connected) {
-                LOG_WARN("%s: failed to connect, will now try %s/foot.sock",
+                LOG_WARN("%s: failed to connect, will now try %s/" AURA_TERM_SOCK_PREFIX ".sock",
                          addr.sun_path, xdg_runtime);
                 snprintf(addr.sun_path, sizeof(addr.sun_path),
-                         "%s/foot.sock", xdg_runtime);
+                         "%s/" AURA_TERM_SOCK_PREFIX ".sock", xdg_runtime);
                 connected = (connect(fd, (const struct sockaddr *)&addr, sizeof(addr)) == 0);
             }
             if (!connected)
-                LOG_WARN("%s: failed to connect, will now try /tmp/foot.sock", addr.sun_path);
+                LOG_WARN("%s: failed to connect, will now try /tmp/" AURA_TERM_SOCK_PREFIX ".sock", addr.sun_path);
         }
 
         if (!connected) {
-            strncpy(addr.sun_path, "/tmp/foot.sock", sizeof(addr.sun_path) - 1);
+            strncpy(addr.sun_path, "/tmp/" AURA_TERM_SOCK_PREFIX ".sock", sizeof(addr.sun_path) - 1);
             if (connect(fd, (const struct sockaddr *)&addr, sizeof(addr)) < 0) {
                 LOG_ERRNO("failed to connect (is 'foot --server' running?)");
                 goto err;

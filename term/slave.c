@@ -1,4 +1,5 @@
 #include "slave.h"
+#include "aura-names.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -158,7 +159,7 @@ emit_one_notification(int fd, const struct user_notification *notif)
     xassert(prefix != NULL);
 
     if (write(fd, prefix, strlen(prefix)) < 0 ||
-        write(fd, "foot: ", 6) < 0 ||
+        write(fd, AURA_TERM_NAME ": ", strlen(AURA_TERM_NAME ": ")) < 0 ||
         write(fd, notif->text, strlen(notif->text)) < 0 ||
         write(fd, postfix, strlen(postfix)) < 0)
     {

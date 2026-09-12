@@ -316,7 +316,7 @@ if get_option('b_pgo') == 'generate'
 endif
 
 executable(
-  'foot',
+  'aura-termd',
   'async.c', 'async.h',
   'box-drawing.c', 'box-drawing.h',
   'config.c', 'config.h',
@@ -350,7 +350,7 @@ executable(
   install: true)
 
 executable(
-  'footclient',
+  'aura-term',
   'client.c', 'client-protocol.h',
   'foot-features.c', 'foot-features.h',
   'macros.h',
@@ -361,7 +361,7 @@ executable(
   install: true)
 
 install_data(
-  'foot.desktop', 'foot-server.desktop', 'footclient.desktop',
+  'aura-term.desktop',
   install_dir: join_paths(get_option('datadir'), 'applications'))
 
 systemd = dependency('systemd', required: false)
@@ -379,18 +379,18 @@ if systemd.found() or custom_systemd_units_dir != ''
 
   configure_file(
     configuration: configuration,
-    input: 'foot-server.service.in',
+    input: 'aura-termd.service.in',
     output: '@BASENAME@',
     install_dir: systemd_units_dir
     )
 
   install_data(
-    'foot-server.socket',
+    'aura-termd.socket',
     install_dir: systemd_units_dir)
 endif
 
 scdoc = dependency('scdoc', native: true, required: get_option('docs'))
-install_data('foot.ini', install_dir: join_paths(get_option('sysconfdir'), 'xdg', 'foot'))
+install_data('foot.ini', rename: 'aura-term.ini', install_dir: join_paths(get_option('sysconfdir'), 'xdg', 'aura-term'))
 if scdoc.found()
   install_data(
     'LICENSE', 'README.md', 'CHANGELOG.md',
@@ -430,8 +430,8 @@ if tic.found()
   )
 endif
 
-subdir('completions')
-subdir('icons')
+# Aura: foot's completions and icons are named after foot; not installed
+# by aura-term (they would shadow the distro foot package's copies).
 subdir('utils')
 
 if (get_option('tests'))

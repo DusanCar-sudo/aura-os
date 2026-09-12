@@ -62,7 +62,9 @@ window#waybar.top .tab.focused.c-gray   { background: #7f849c; }
 
 /* ── top bar: window title + clock ───────────────────────────── */
 
-window#waybar.top #window { color: #5c5f77; padding: 0 12px; }
+/* focused window title: hidden until you hover the top-left area */
+window#waybar.top #window { color: transparent; padding: 0 16px; min-width: 360px; }
+window#waybar.top #window:hover { color: #c8cad8; background: #14141e; }
 window#waybar.top #clock  { color: #8b7cf6; padding: 0 12px; }
 
 /* ── left sidebar ────────────────────────────────────────────── */

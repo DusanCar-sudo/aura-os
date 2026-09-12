@@ -14,7 +14,10 @@ floating_modifier $mod
 
 # herdr theme: monospace everywhere, 1px borders, square corners.
 font pango:JetBrainsMono Nerd Font 11
-default_border normal 1
+# No window title bars: 1px border only. The focused title shows on
+# hover at the top-left of the bar (waybar sway/window). Tabbed and
+# stacked containers still show their titles (sway draws those).
+default_border pixel 1
 default_floating_border pixel 1
 gaps inner 2
 gaps outer 0

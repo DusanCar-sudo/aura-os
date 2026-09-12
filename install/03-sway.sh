@@ -33,6 +33,7 @@ put() { # put <src> <dst> — install only when it differs, say so either way
 
 put "$REPO/config/sway/config" "$cfg/sway/config"
 put "$REPO/config/sway/config.d/10-binds.conf" "$cfg/sway/config.d/10-binds.conf"
+put "$REPO/config/sway/config.d/05-aura-term.conf" "$cfg/sway/config.d/05-aura-term.conf"
 put "$REPO/config/waybar/config.jsonc" "$cfg/waybar/config.jsonc"
 put "$REPO/config/waybar/style.css" "$cfg/waybar/style.css"
 

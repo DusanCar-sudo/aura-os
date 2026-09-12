@@ -7,7 +7,7 @@
 # Bindings live in config.d/.
 
 set $mod Mod4
-set $term foot
+set $term aura-term
 set $menu fuzzel
 
 floating_modifier $mod

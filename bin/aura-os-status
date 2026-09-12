@@ -53,17 +53,20 @@ cmd_watch() {
 
 cmd_spaces() {
     local text="" num name pid focused cwd branch marker line
-    while IFS=$'\t' read -r num name pid focused; do
+    while IFS=$'\t' read -r num name pid focused tag; do
         [[ -n ${num:-} && $num -gt 0 ]] || continue
         cwd=""
         branch=""
-        if [[ -n ${pid:-} && $pid != 0 && -d /proc/$pid ]]; then
+        # aura-term windows all share the server's pid; their tag names
+        # the pane file that has the real cwd + branch (docs/pane-status.md).
+        if [[ ${tag:-} == aura-pane-* && -f $panes_dir/${tag#aura-pane-}.json ]]; then
+            IFS=$'\t' read -r cwd branch < <(jq -r '[.cwd // "", .branch // ""] | @tsv' \
+                "$panes_dir/${tag#aura-pane-}.json" 2>/dev/null) || true
+        elif [[ -n ${pid:-} && $pid != 0 && -d /proc/$pid ]]; then
             cwd="$(readlink "/proc/$pid/cwd" 2>/dev/null || true)"
+            [[ -n $cwd ]] && branch="$(git -C "$cwd" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
         fi
-        if [[ -n $cwd ]]; then
-            branch="$(git -C "$cwd" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
-            cwd="${cwd/#$HOME/~}"
-        fi
+        cwd="${cwd/#"$HOME"/\~}"
         marker="  "
         [[ $focused == true ]] && marker="▸ "
         line="<span color='#8b7cf6'>${marker}$num</span>"
@@ -78,7 +81,8 @@ cmd_spaces() {
         | select(.type == "workspace" and .num > 0)
         | [ .num, .name,
             (([.. | objects | select(.focused and .pid != null) | .pid] | first) // 0),
-            (.focused | tostring) ]
+            (.focused | tostring),
+            (([.. | objects | select(.focused and .pid != null) | .tag // ""] | first) // "") ]
         | @tsv' 2>/dev/null)
     [[ -n $text ]] || text="<span color='#5c5f77'>no workspaces</span>"
     jq -cn --arg text "<span color='#5c5f77'>spaces</span>"$'\n'"$text" '{text:$text}'

@@ -2,3 +2,5 @@ vm/*.iso
 vm/*.qcow2
 vm/*.fd
 vm/*.log
+vm/monitor.sock
+vm/*.png

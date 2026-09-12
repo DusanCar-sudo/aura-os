@@ -17,7 +17,8 @@ args=(
   -drive if=pflash,format=raw,file=OVMF_VARS.fd
   -drive file=aura-os.qcow2,if=virtio,discard=unmap
   -nic user,model=virtio-net-pci,hostfwd=tcp::2222-:22
-  -device virtio-vga-gl -display gtk,gl=on
+  -device virtio-vga -display gtk,zoom-to-fit=on,grab-on-hover=on   # no GL: screendump works
+  -monitor unix:monitor.sock,server,nowait   # host control: ./vm-keys.py
   -audiodev pipewire,id=snd0 -device intel-hda -device hda-duplex,audiodev=snd0
   -device qemu-xhci -device usb-tablet
 )

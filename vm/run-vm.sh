@@ -19,7 +19,7 @@ args=(
   -nic user,model=virtio-net-pci,hostfwd=tcp::2222-:22
   -device virtio-vga,xres=1920,yres=1080 -display gtk,zoom-to-fit=on,grab-on-hover=on   # no GL: screendump works
   -monitor unix:monitor.sock,server,nowait   # host control: ./vm-keys.py
-  -audiodev pipewire,id=snd0 -device intel-hda -device hda-duplex,audiodev=snd0
+  -audiodev pipewire,id=snd0,out.latency=80000 -device intel-hda -device hda-duplex,audiodev=snd0
   -device qemu-xhci -device usb-tablet
 )
 [ "${1:-}" = install ] && args+=(-cdrom archlinux-x86_64.iso -boot d)

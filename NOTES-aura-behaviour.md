@@ -101,3 +101,8 @@ Stumbles (found at 23:50, VM boot shows swaynag "errors in config")
   spawns per sway event (9 labels × swaymsg+jq), sidebar centered,
   black background (swaybg missing). Tag: aura — never looked at a
   screenshot of her own result (vm-keys.py shot was available).
+- 01:5x "sound is problematic": the VM's HDA card sat on profile "off",
+  so pipewire only had a Dummy Output; rtkit missing too. Fixed live
+  (profile analog duplex, persisted by wireplumber) + rtkit in 01.
+  Neither Aura nor Claude had ever tested audio: "done" never included
+  it. Tag: brief — task briefs must list audio in "done when".

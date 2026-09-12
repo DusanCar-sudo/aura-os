@@ -24,6 +24,7 @@ packages=(
     sqlite3                  # read Firefox history for the sidebar's recent list
     cliphist wl-clipboard    # clipboard history, last 500 copies (top bar "clip")
     wiremix                  # volume TUI (top bar "vol" click)
+    rtkit                    # realtime priority for pipewire: no crackling
     bluez bluez-utils        # bluetooth + bluetoothctl (top bar "bt")
     libnotify                # notify-send: mako's CLI; aura-term needs it for
                              # "agent needs input" alerts (task 005)

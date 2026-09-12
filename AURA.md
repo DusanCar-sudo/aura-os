@@ -6,8 +6,10 @@ build it and you operate it. Omarchy is inspiration, not a source
 to copy; write our own scripts and cite ideas in commit messages.
 
 ## Where you run
-Develop in this repo on the host. Test ONLY inside the VM
-(vm/run-vm.sh, ssh -p 2222). Never run install steps, pacman,
+Develop in this repo on the host. Test ONLY inside the VM:
+ssh -i ~/.ssh/aura_vm_ed25519 -p 2222 dusan@localhost (sudo
+needs no password there; sync with rsync to ~/aura-os). Reset
+with snapper snapshot 1 "base-clean". Never run install steps, pacman,
 systemctl or config writes against the host machine. The host is
 Ubuntu, not Arch; if a command would touch it, stop and ask.
 

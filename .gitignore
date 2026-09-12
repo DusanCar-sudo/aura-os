@@ -1,0 +1,3 @@
+vm/*.iso
+vm/*.qcow2
+vm/*.fd

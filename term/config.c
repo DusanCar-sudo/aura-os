@@ -182,6 +182,10 @@ static const char *const binding_action_map[] = {
     [BIND_ACTION_PROMPT_NEXT] = "prompt-next",
     [BIND_ACTION_AURA_COPY_BLOCK] = "aura-copy-block",
     [BIND_ACTION_AURA_ASK] = "aura-ask",
+    [BIND_ACTION_AURA_SPLIT_LEFT] = "aura-split-left",
+    [BIND_ACTION_AURA_SPLIT_RIGHT] = "aura-split-right",
+    [BIND_ACTION_AURA_SPLIT_UP] = "aura-split-up",
+    [BIND_ACTION_AURA_SPLIT_DOWN] = "aura-split-down",
     [BIND_ACTION_UNICODE_INPUT] = "unicode-input",
     [BIND_ACTION_QUIT] = "quit",
     [BIND_ACTION_REGEX_LAUNCH] = "regex-launch",
@@ -3391,6 +3395,10 @@ add_default_key_bindings(struct config *conf)
         {BIND_ACTION_PROMPT_NEXT, m(XKB_MOD_NAME_CTRL "+" XKB_MOD_NAME_SHIFT), {{XKB_KEY_Down}}},
         {BIND_ACTION_AURA_COPY_BLOCK, m(XKB_MOD_NAME_CTRL "+" XKB_MOD_NAME_SHIFT), {{XKB_KEY_y}}},
         {BIND_ACTION_AURA_ASK, m(XKB_MOD_NAME_CTRL "+" XKB_MOD_NAME_SHIFT), {{XKB_KEY_a}}},
+        {BIND_ACTION_AURA_SPLIT_LEFT, m(XKB_MOD_NAME_CTRL "+" XKB_MOD_NAME_ALT), {{XKB_KEY_Left}}},
+        {BIND_ACTION_AURA_SPLIT_RIGHT, m(XKB_MOD_NAME_CTRL "+" XKB_MOD_NAME_ALT), {{XKB_KEY_Right}}},
+        {BIND_ACTION_AURA_SPLIT_UP, m(XKB_MOD_NAME_CTRL "+" XKB_MOD_NAME_ALT), {{XKB_KEY_Up}}},
+        {BIND_ACTION_AURA_SPLIT_DOWN, m(XKB_MOD_NAME_CTRL "+" XKB_MOD_NAME_ALT), {{XKB_KEY_Down}}},
     };
 
     conf->bindings.key.count = ALEN(bindings);

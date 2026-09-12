@@ -14,11 +14,12 @@ so upstream foot merges apply cleanly (checked against foot master).
 | Ctrl+Shift+↑ / ↓ | jump to the previous / next command block (also foot's Ctrl+Shift+Z / X) |
 | Ctrl+Shift+Y | copy the last command's output |
 | Ctrl+Shift+A | Ask Aura about the selection, or the last failed command |
+| Ctrl+Alt+← / → / ↑ / ↓ | split: new pane left / right / above / below, in this pane's directory |
 | Ctrl+Shift+C / V, Ctrl+Shift+R, Ctrl+Shift+N, Ctrl+Shift+O, Ctrl+Shift+U | foot defaults: copy / paste, search, new window, URL mode, Unicode input |
 
 Rebind in `~/.config/aura-term/aura-term.ini`, `[key-bindings]` section
-(same format as foot.ini; Aura's actions are `aura-copy-block` and
-`aura-ask`).
+(same format as foot.ini; Aura's actions are `aura-copy-block`,
+`aura-ask` and `aura-split-left|right|up|down`).
 
 ## Features
 
@@ -37,6 +38,14 @@ Rebind in `~/.config/aura-term/aura-term.ini`, `[key-bindings]` section
   done ✓ / needs input !) — for the aura-os-status sidebar, and tags its
   sway window `aura-pane-<pid>`. Needs-input also sends a desktop
   notification. See [pane-status.md](pane-status.md).
+- **herdr-style splits.** Ctrl+Alt+arrows open a new pane next to the
+  current one in its working directory, using sway's native splits
+  (`split h|v` + `exec aura-term`): every pane is a real sway window, so
+  focus/resize/move keys, pane status and the sidebar all work on it.
+  Sway only inserts after the focused window, so a left/up pane is
+  opened with the marker tag `aura-split-left|up` and moves itself
+  (`[tag="aura-pane-<pid>"] move left|up`) once mapped; it still gets
+  its normal `aura-pane-<pid>` tag. Outside sway: a new window.
 - **Own terminfo.** `TERM=foot`, with foot 1.28's own entry installed in
   `/usr/local/share/aura-term/terminfo` and exported as `$TERMINFO`;
   anything that loses `$TERMINFO` (sudo, ssh) falls back to ncurses' own

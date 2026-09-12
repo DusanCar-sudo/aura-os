@@ -36,6 +36,7 @@
 #include "spawn.h"
 #include "terminal.h"
 #include "aura-ask.h"
+#include "aura-split.h"
 #include "tokenize.h"
 #include "unicode-mode.h"
 #include "url-mode.h"
@@ -376,6 +377,16 @@ execute_binding(struct seat *seat, struct terminal *term,
 
     case BIND_ACTION_AURA_ASK:
         aura_ask(term);
+        return true;
+
+    case BIND_ACTION_AURA_SPLIT_LEFT:
+    case BIND_ACTION_AURA_SPLIT_RIGHT:
+    case BIND_ACTION_AURA_SPLIT_UP:
+    case BIND_ACTION_AURA_SPLIT_DOWN:
+        aura_split(term,
+                   action == BIND_ACTION_AURA_SPLIT_LEFT ? AURA_SPLIT_LEFT :
+                   action == BIND_ACTION_AURA_SPLIT_RIGHT ? AURA_SPLIT_RIGHT :
+                   action == BIND_ACTION_AURA_SPLIT_UP ? AURA_SPLIT_UP : AURA_SPLIT_DOWN);
         return true;
 
     case BIND_ACTION_PROMPT_PREV: {

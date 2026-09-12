@@ -1,5 +1,6 @@
 #include "wayland.h"
 #include "aura-window.h"
+#include "aura-split.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -1125,6 +1126,8 @@ xdg_surface_configure(void *data, struct xdg_surface *xdg_surface,
     }
 
     xdg_surface_ack_configure(xdg_surface, serial);
+    if (wasnt_configured)
+        aura_split_first_configure(win);
 
     enum resize_options opts = RESIZE_BY_CELLS;
 

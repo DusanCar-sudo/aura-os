@@ -57,6 +57,8 @@ struct aura_term {
     char *cmd_text;       /* command of the running block */
 
     struct aura_failed_block failed;  /* last block with exit != 0 */
+
+    uint8_t split_place;  /* enum aura_split_dir: pending move after map */
 };
 
 static inline void

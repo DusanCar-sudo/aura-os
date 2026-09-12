@@ -1,4 +1,5 @@
 #include "aura-window.h"
+#include "aura-split.h"
 
 #include <stdio.h>
 
@@ -9,10 +10,11 @@ void
 aura_window_set_pane_tag(struct wl_window *win)
 {
 #if defined(HAVE_XDG_TOPLEVEL_TAG)
-    const struct terminal *term = win->term;
+    struct terminal *term = win->term;
     const struct config *conf = term->conf;
 
-    if (conf->toplevel_tag != NULL && conf->toplevel_tag[0] != '\0')
+    if (conf->toplevel_tag != NULL && conf->toplevel_tag[0] != '\0' &&
+        !aura_split_parse_tag(win->term, conf->toplevel_tag))
         return;
     if (term->wl->toplevel_tag_manager == NULL || term->slave <= 0)
         return;

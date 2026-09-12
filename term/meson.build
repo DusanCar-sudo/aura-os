@@ -322,6 +322,7 @@ executable(
   'async.c', 'async.h',
   'aura-blocks-render.c',
   'aura-ask.c', 'aura-ask.h',
+  'aura-split.c', 'aura-split.h',
   'aura-window.c', 'aura-window.h',
   'box-drawing.c', 'box-drawing.h',
   'config.c', 'config.h',

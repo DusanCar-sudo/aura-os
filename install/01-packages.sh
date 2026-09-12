@@ -19,6 +19,7 @@ packages=(
     foot                     # terminal (Super+Return)
     swaybg                   # solid theme background (sway `output bg`), ~3 MB
     mako                     # notifications daemon (also serves Electron/Chrome)
+    inotify-tools            # inotifywait: aura-os-agents follows agent logs
     libnotify                # notify-send: mako's CLI; aura-term needs it for
                              # "agent needs input" alerts (task 005)
     jq                       # aura-os-tab / aura-os-status JSON (task 003)

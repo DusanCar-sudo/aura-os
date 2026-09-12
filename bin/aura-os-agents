@@ -1,0 +1,159 @@
+#!/usr/bin/env bash
+# aura-os-agents — "last step" of every coding agent, for the sidebar.
+#
+#   aura-os-agents watch        follow agent session logs (inotify, no
+#                               polling) and keep the status files fresh
+#   aura-os-agents scan         rebuild all status files once
+#   aura-os-agents print        show what would be written (read-only)
+#
+# One status file per session in $XDG_RUNTIME_DIR/aura-os/agents/:
+#   {"agent","session","where","state":"working|done","step","updated"}
+# `aura-os-status agents` renders them. Adapters read each agent's own
+# log format; secrets are masked before anything is written.
+# Shell + jq + inotifywait only (RAM/speed budget, AURA.md).
+set -euo pipefail
+
+out_dir="${XDG_RUNTIME_DIR:-/tmp}/aura-os/agents"
+recent_min=120        # sessions untouched longer than this are hidden
+working_s=45          # a log written this recently = agent still working
+
+claude_dir="$HOME/.claude/projects"
+codex_dir="$HOME/.codex/sessions"
+aura_dir="$HOME/.aura/sessions"
+hermes_dir="$HOME/.hermes/sessions"
+
+mask() {   # hide tokens/keys, collapse whitespace, cut to one short line
+    sed -E 's/(sk|pk|ghp|gho|xox[abp])[-_][A-Za-z0-9_-]{8,}/***/g;
+            s/((api[_-]?key|token|secret|password|passwd)["'"'"' ]*[:=]["'"'"' ]*)[^ "'"'"',}]+/\1***/Ig;
+            s/Bearer [A-Za-z0-9._-]+/Bearer ***/g' \
+        | sed -E 's/\\[nt]/ /g' | tr '\n\t' '  ' | sed -E 's/ +/ /g; s/^ //' | cut -c1-120
+}
+
+# Each adapter prints: where<TAB>step   (step already one line)
+adapt_claude() {
+    tail -n 40 "$1" | jq -rs '
+        [.[] | select(.type == "assistant")] | last // empty
+        | (.cwd // "") as $cwd
+        | (.message.content // "") as $c
+        | ( if ($c | type) == "string" then $c
+            else ($c | map(
+                if .type == "tool_use" then
+                    .name + ": " + ((.input.command // .input.file_path // .input.pattern
+                                      // .input.description // .input.prompt // "") | tostring)
+                elif .type == "text" then .text
+                else empty end) | last // "")
+            end) as $step
+        | [$cwd, $step] | @tsv' 2>/dev/null
+}
+
+adapt_codex() {
+    local cwd
+    cwd="$(head -n 1 "$1" | jq -r '.payload.cwd // empty' 2>/dev/null || true)"
+    tail -n 40 "$1" | jq -rs --arg cwd "$cwd" '
+        [.[] | .payload // {} | select(.type != null)] | map(
+            if .type == "task_complete" then "done: " + (.last_agent_message // "")
+            elif .type == "exec_command_begin" then "$ " + ((.command // []) | if type == "array" then join(" ") else tostring end)
+            elif .type == "agent_message" then .message
+            elif .type == "function_call" then .name + " " + (.arguments // "" | tostring)
+            elif .type == "user_message" then "(you) " + (.message // "")
+            else empty end) | last // empty
+        | [$cwd, .] | @tsv' 2>/dev/null
+}
+
+adapt_aura() {   # the fact log's last bullet is literally her last step
+    local where main="${1%.run.factlog.json}.json"
+    where="$(jq -r '.projectRoot // empty' "$main" 2>/dev/null || true)"
+    [[ -n $where ]] || where="/$(basename "$(dirname "$1")" | sed 's/^_//; s/_/\//g')"
+    jq -r --arg w "$where" '[$w, ((.bullets // []) | last // "" | tostring | ltrimstr("- "))] | @tsv' "$1" 2>/dev/null
+}
+
+adapt_hermes() {
+    jq -r '[(.platform // "hermes"),
+            ((.messages // []) | map(select(.role == "assistant" or .role == "user")) | last // {}
+             | ((if .role == "user" then "(in) " else "" end) + ((.content // "") | tostring)))]
+           | @tsv' "$1" 2>/dev/null
+}
+
+agent_of() {   # agent_of <file> → claude|codex|aura|hermes|""
+    case $1 in
+        "$claude_dir"/*.jsonl)                     echo claude ;;
+        "$codex_dir"/*rollout-*.jsonl)             echo codex ;;
+        "$aura_dir"/*.factlog.json)                echo aura ;;
+        "$hermes_dir"/session_*.json)              echo hermes ;;
+    esac
+}
+
+summarize() {   # summarize <file> → one JSON status line (or nothing)
+    local f="$1" agent where step now mtime state
+    agent="$(agent_of "$f")"; [[ -n $agent ]] || return 0
+    IFS=$'\t' read -r where step < <("adapt_$agent" "$f") || true
+    [[ -n ${step:-} ]] || return 0
+    now="$(date +%s)"; mtime="$(stat -c %Y "$f")"
+    state=done; (( now - mtime < working_s )) && state=working
+    step="$(printf '%s' "$step" | mask)"
+    where="${where/#"$HOME"/\~}"
+    jq -cn --arg a "$agent" --arg s "$(basename "$f" | sed -E 's/\.(run\.)?(factlog\.)?jsonl?$//' | tail -c 12)" \
+        --arg w "$where" --arg st "$state" --arg step "$step" --argjson u "$mtime" \
+        '{agent:$a, session:$s, where:$w, state:$st, step:$step, updated:$u}'
+}
+
+recent_files() {
+    local d
+    for d in "$claude_dir" "$codex_dir" "$aura_dir" "$hermes_dir"; do
+        [[ -d $d ]] || continue
+        find "$d" -type f \( -name '*.jsonl' -o -name '*.factlog.json' -o -name 'session_*.json' \) \
+            -mmin "-$recent_min" 2>/dev/null
+    done | while IFS= read -r f; do [[ -n $(agent_of "$f") ]] && echo "$f"; done
+}
+
+write_one() {   # atomically (re)write the status file for one log
+    local f="$1" line id
+    line="$(summarize "$f")"; [[ -n $line ]] || return 0
+    id="$(printf '%s' "$f" | md5sum | cut -c1-10)"
+    mkdir -p "$out_dir"; chmod 700 "$(dirname "$out_dir")" "$out_dir" 2>/dev/null || true
+    printf '%s\n' "$line" > "$out_dir/.$id.tmp" && mv "$out_dir/.$id.tmp" "$out_dir/$id.json"
+}
+
+prune() {   # drop sessions that went quiet
+    find "$out_dir" -name '*.json' -mmin "+$recent_min" -delete 2>/dev/null || true
+}
+
+poke() { aura-os-status poke 2>/dev/null || true; }
+
+cmd_scan() {
+    local f; while IFS= read -r f; do write_one "$f"; done < <(recent_files)
+    prune
+}
+
+cmd_watch() {
+    command -v inotifywait >/dev/null || { echo "aura-os-agents: needs inotify-tools" >&2; exit 1; }
+    cmd_scan; poke
+    local dirs=() d f
+    for d in "$claude_dir" "$codex_dir" "$aura_dir" "$hermes_dir"; do [[ -d $d ]] && dirs+=("$d"); done
+    [[ ${#dirs[@]} -gt 0 ]] || { echo "aura-os-agents: no agent logs to watch" >&2; exit 0; }
+    # Blocks on inotify. The 45 s timeout only re-ages "working" → "done"
+    # after an agent stops writing; with nothing working it just re-arms.
+    local rc
+    while true; do
+        rc=0; IFS= read -r -t "$working_s" f || rc=$?
+        if (( rc == 0 )); then
+            [[ -n $(agent_of "$f") ]] || continue
+            write_one "$f"; poke
+        elif (( rc > 128 )); then        # timeout: age "working" → "done"
+            if grep -qs '"state":"working"' "$out_dir"/*.json; then cmd_scan; poke; fi
+        else
+            echo "aura-os-agents: inotifywait ended" >&2; exit 1
+        fi
+    done < <(inotifywait -m -q -r -e close_write,moved_to --format '%w%f' "${dirs[@]}")
+}
+
+cmd_print() {
+    local f; while IFS= read -r f; do summarize "$f"; done < <(recent_files)
+}
+
+case "${1:-}" in
+    watch) cmd_watch ;;
+    scan)  cmd_scan; poke ;;
+    print) cmd_print ;;
+    *)     sed -n '3,8p' "$0" >&2; exit 2 ;;
+esac

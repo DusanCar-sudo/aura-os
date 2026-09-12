@@ -23,10 +23,25 @@ flat text panes, no decoration. Screenshot: tasks/ref/herdr.png.
 - Tabs inside a pane: sway `layout tabbed`, Super+T toggles tabbed/split.
 
 ## Top bar — desktops as tabs
-- Waybar across the top, thin, only: `1 2 3 +`.
-- Each workspace is a tab; active tab highlighted purple.
+- Waybar across the top, thin, only: `1 2 3 4 5 +`. Tabs 1-5 always
+  exist (sway workspaces); `+` adds 6, 7... Square corners.
+- Each workspace is a tab; the active tab is filled, others dim.
 - Click `+` or Super+N → new empty workspace, switch to it.
 - Super+1..9 switch, Super+W closes an empty workspace's tab.
+- Rename: Super+Shift+R (or double-click the tab) → fuzzel prompt →
+  tab shows `2 api`. Uses `swaymsg rename workspace` keeping the
+  number prefix, so Super+2 still works.
+- Color: Super+Shift+C (or right-click the tab) → pick from the theme
+  palette (8 colors: purple, blue, cyan, green, yellow, orange, red,
+  gray). Tab fill uses that color; the active pane border in that tab
+  uses it too, so you always see which tab you are in.
+- Names and colors persist across reboots in
+  ~/.config/aura-os/tabs.json, managed by `bin/aura-os-tab`
+  (rename|color|new|close), which voice (002) can call too:
+  "aura, rename tab 2 to api and make it green".
+- Waybar's built-in workspace module cannot color per tab: use a
+  custom module fed by aura-os-tab from `swaymsg -t subscribe`
+  events (no polling).
 
 ## Left sidebar — spaces / agents
 - Narrow Waybar on the left (not eww: too heavy), like herdr's panel:

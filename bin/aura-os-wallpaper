@@ -27,6 +27,7 @@ theme_bg() { sed -n 's/^output \* bg \(#[0-9a-fA-F]\{6\}\) solid_color/\1/p' \
 cmd_set() {
     local img; img="$(readlink -f "$1")"
     [[ -f $img ]] || { echo "aura-os-wallpaper: no such file: $1" >&2; exit 2; }
+    [[ $(file --mime-type -b -- "$img") == image/* ]] || { echo "aura-os-wallpaper: not an image: $1" >&2; exit 2; }
     mkdir -p "$(dirname "$conf")"
     printf '# aura-os-wallpaper\noutput * bg "%s" fill\n' "$img" > "$conf"
     sway output '*' bg "$img" fill
@@ -41,9 +42,12 @@ cmd_solid() {
 
 cmd_pick() {
     local list choice
+    # By content, not by name: browsers happily save a JPEG as "exit".
     list="$(find "$HOME/Pictures/Wallpapers" "$HOME/Pictures" "$HOME/Downloads" /usr/share/aura-os/wallpapers \
-              -maxdepth 2 -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) \
-              2>/dev/null | sort -u | sed "s|^$HOME|~|")"
+              -maxdepth 2 -type f -size -60M -print0 2>/dev/null \
+            | xargs -0 -r file --mime-type -F $'\t' -N -- \
+            | awk -F'\t' '$2 ~ /^ *image\/(jpeg|png|webp|bmp|gif|tiff)$/ {print $1}' \
+            | sort -u | sed "s|^$HOME|~|")"
     choice="$(printf 'solid (theme color)\n%s\n' "$list" | sed '/^$/d' \
               | fuzzel --dmenu --prompt 'wallpaper > ' --width 80 --lines 15)" || exit 0
     case $choice in

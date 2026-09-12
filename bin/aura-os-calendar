@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# aura-os-calendar — the top bar clock's calendar (floating aura-term).
+# Big title + big month on the right; previous and next month small on
+# the left.  ←/→ or h/l: month   ↑/↓ or k/j: year   t: today   q: quit
+set -euo pipefail
+
+P=$'\e[38;2;139;124;246m'   # accent purple
+D=$'\e[38;2;92;95;119m'     # dim
+F=$'\e[38;2;200;202;216m'   # text
+T=$'\e[48;2;139;124;246;38;2;14;14;20;1m'   # today: filled
+R=$'\e[0m'
+
+today_y=$(date +%Y); today_m=$((10#$(date +%m))); today_d=$((10#$(date +%d)))
+y=$today_y; m=$today_m
+
+small() {   # small <y> <m> → lines of `cal`, today marked
+    local out; out="$(cal --monday "$2" "$1" 2>/dev/null || cal -m "$2" "$1")"
+    if [[ $1 == "$today_y" && $2 == "$today_m" ]]; then
+        out="$(sed -E "3,\$ s/(^| )($today_d)( |$)/\1${P}\2${R}${D}\3/" <<<"$out")"
+    fi
+    sed "1s/.*/${F}&${R}${D}/" <<<"$out"
+}
+
+big() {     # big <y> <m> → title + 7x6 grid, cells 7 wide, 3 rows high
+    local name first days cell row col d line
+    name="$(date -d "$1-$2-01" '+%B %Y')"
+    if command -v figlet >/dev/null; then
+        figlet -f small -w 100 "$name" | sed "s/.*/${P}&${R}/"
+    else
+        printf '\n%s%s%s\n\n' "$P" "${name^^}" "$R"
+    fi
+    printf '%s' "$D"; for d in Mon Tue Wed Thu Fri Sat Sun; do printf ' %-6s' "$d"; done; printf '%s\n' "$R"
+    first=$(date -d "$1-$2-01" +%u)
+    days=$((10#$(date -d "$1-$2-01 +1 month -1 day" +%d)))
+    d=$((1 - (first - 1)))
+    for row in 1 2 3 4 5 6; do
+        (( d > days )) && break
+        line=""
+        for col in 1 2 3 4 5 6 7; do
+            if (( d < 1 || d > days )); then cell="       "
+            elif [[ $1 == "$today_y" && $2 == "$today_m" && $d == "$today_d" ]]; then
+                cell=" ${T} $(printf '%2d' "$d") ${R}  "
+            elif (( col >= 6 )); then cell="  ${D}$(printf '%2d' "$d")${R}   "
+            else cell="  ${F}$(printf '%2d' "$d")${R}   "; fi
+            line+="$cell"; d=$((d + 1))
+        done
+        printf '%s\n\n' "$line"
+    done
+}
+
+draw() {
+    local py pm ny nm
+    py=$(date -d "$y-$m-01 -1 month" +%Y); pm=$((10#$(date -d "$y-$m-01 -1 month" +%m)))
+    ny=$(date -d "$y-$m-01 +1 month" +%Y); nm=$((10#$(date -d "$y-$m-01 +1 month" +%m)))
+    local -a L Rt
+    mapfile -t L < <(printf '\n'; small "$py" "$pm"; printf '\n\n'; small "$ny" "$nm")
+    mapfile -t Rt < <(big "$y" "$m")
+    local n=$(( ${#L[@]} > ${#Rt[@]} ? ${#L[@]} : ${#Rt[@]} )) i left vis
+    printf '\e[H\e[2J'
+    for (( i = 0; i < n; i++ )); do
+        left="${L[i]:-}"
+        vis="$(sed 's/\x1b\[[0-9;]*m//g' <<<"$left")"            # pad by visible width
+        printf '  %s%s%*s%s   %s\n' "$D" "$left" $(( 22 - ${#vis} )) "" "$R" "${Rt[i]:-}"
+    done
+    printf '\n  %s←/→ month  ↑/↓ year  t today  q quit%s' "$D" "$R"
+}
+
+shift_month() { local s; s="$(date -d "$y-$m-01 $1 month" '+%Y %m')"; y=${s% *}; m=$((10#${s#* })); }
+
+trap 'printf "\e[?25h"' EXIT
+printf '\e[?25l'
+while true; do
+    draw
+    IFS= read -rsn1 k || break
+    [[ $k == $'\e' ]] && { read -rsn2 -t 0.05 k2 || true; k+="$k2"; }
+    case $k in
+        q|Q|$'\e') break ;;
+        h|$'\e[D') shift_month -1 ;;
+        l|$'\e[C') shift_month +1 ;;
+        k|$'\e[A') shift_month -12 ;;
+        j|$'\e[B') shift_month +12 ;;
+        t|T) y=$today_y; m=$today_m ;;
+    esac
+done

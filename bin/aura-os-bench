@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# aura-os-bench — idle RAM, measured the way AURA.md's budget is.
+#
+# Settles (default 30 s) with no apps running, then prints used RAM
+# against the 350 MB idle budget and the top eight processes by RSS.
+# Run before and after every change; over budget is a bug.
+#
+# Usage: aura-os-bench [settle-seconds]
+set -euo pipefail
+
+settle="${1:-30}"
+if [[ ! $settle =~ ^[0-9]+$ ]]; then
+    echo "usage: aura-os-bench [settle-seconds]" >&2
+    exit 2
+fi
+
+budget=350
+echo "aura-os-bench: $(date '+%F %T') — settling ${settle}s (idle, no apps)"
+sleep "$settle"
+
+read -r total used avail <<<"$(free -m | awk '/^Mem:/ {print $2, $3, $7}')"
+if (( used <= budget )); then
+    verdict="ok"
+else
+    verdict="OVER BUDGET"
+fi
+echo
+echo "idle RAM: used ${used} MB of ${total} MB (available ${avail} MB) — budget ${budget} MB: ${verdict}"
+echo "swap:     $(free -m | awk '/^Swap:/ {print $3 " MB used of " $2 " MB"}')"
+echo
+echo "top 8 by RSS:"
+ps -eo rss=,pid=,comm= --sort=-rss | head -8 | awk '{ printf "  %6.1f MB  pid %-7s %s\n", $1/1024, $2, $3 }'

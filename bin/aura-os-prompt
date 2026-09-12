@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# aura-os-prompt — the Aura prompt surface.
+#
+# Super+A in sway opens this in a foot window. Skeleton: it is a shell
+# for now (task 002 wires the real thing in). System changes go only
+# through aura-os-* commands, snapshot first.
+set -euo pipefail
+
+self="$(readlink -f "$0")"
+
+# Started from sway (or anywhere that is not our own window): open a
+# foot window and run ourselves inside it. AURA_PROMPT_WINDOW is set
+# on the inner run, so only one window ever opens.
+if [[ -z ${AURA_PROMPT_WINDOW:-} ]]; then
+    exec foot --app-id=aura-prompt --title="Aura prompt" env AURA_PROMPT_WINDOW=1 "$self"
+fi
+
+cat <<'BANNER'
+    Aura OS — prompt
+    ------------------------------------------------
+    This is where Aura will listen. Not wired up yet —
+    for now it is a shell where system changes go through
+    aura-os-* commands:
+
+      aura-os-install <pkg>   install a package (snapshot first)
+      aura-os-remove <pkg>    uninstall a package (snapshot first)
+      aura-os-snapshot        take a snapper snapshot now
+      aura-os-reset [n]       reset to a snapper snapshot (default 1)
+      aura-os-bench           idle RAM vs the 350 MB budget
+
+    Close with Super+Q, or type 'exit'.
+BANNER
+
+exec "${SHELL:-/bin/bash}" -i

@@ -1,0 +1,35 @@
+# Aura OS — sway.
+#
+# Replaces Hyprland (task 001b: about half the RAM, native split
+# commands for the herdr look in task 003). Muscle memory from 001:
+#   Super+Return  terminal (foot)
+#   Super+D       launcher (fuzzel)
+#   Super+A       Aura prompt
+# Bindings live in config.d/ so task 003 can add more without
+# touching this file.
+
+set $mod Mod4
+set $term foot
+set $menu fuzzel
+
+floating_modifier $mod
+
+font pango:DejaVu Sans Mono 10
+default_border pixel 2
+default_floating_border pixel 2
+gaps inner 5
+gaps outer 5
+
+# Xwayland stays on but lazy (task 001b): it starts only when an X11
+# app opens. Many of Dusan's apps need it — never disable it.
+xwayland enable
+
+# Autostart. sway re-runs exec lines on every config reload, so each
+# one checks before starting.
+exec pgrep -x waybar >/dev/null || waybar
+exec pgrep -x mako >/dev/null || mako
+# polkit: agent installed (polkit-gnome) but not autostarted — nothing
+# in the core authenticates through polkit. Start it on demand with:
+#   /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1 &
+
+include ~/.config/sway/config.d/*

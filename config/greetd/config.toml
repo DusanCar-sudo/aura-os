@@ -1,0 +1,15 @@
+# Aura OS greetd — the test VM boots straight into sway (autologin).
+# Logging out of sway shows tuigreet; its --cmd sway logs back in.
+# For a normal login prompt, drop the [initial_session] block.
+
+[terminal]
+vt = 1
+
+[initial_session]
+# VM-only: autologin straight into the desktop.
+command = "sway"
+user = "@AURA_USER@"
+
+[default_session]
+command = "tuigreet --time --remember --cmd sway"
+user = "greeter"

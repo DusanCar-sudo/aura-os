@@ -1,0 +1,40 @@
+/* Aura OS — Waybar. Dark bar, violet accent. */
+
+* {
+    font-family: "DejaVu Sans", sans-serif;
+    font-size: 13px;
+    min-height: 0;
+}
+
+window#waybar {
+    background: rgba(17, 17, 27, 0.85);
+    color: #cdd6f4;
+    border-bottom: 1px solid rgba(167, 139, 250, 0.35);
+}
+
+#workspaces button {
+    padding: 0 8px;
+    color: #8b93b8;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+}
+
+#workspaces button.active {
+    color: #11111b;
+    background: #a78bfa;
+}
+
+#workspaces button:hover {
+    background: rgba(167, 139, 250, 0.25);
+    color: #ffffff;
+}
+
+#window {
+    color: #8b93b8;
+}
+
+#clock {
+    color: #a78bfa;
+    padding: 0 10px;
+}

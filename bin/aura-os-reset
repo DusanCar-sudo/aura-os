@@ -1,0 +1,187 @@
+#!/usr/bin/env bash
+# aura-os-reset — reset the system to a snapper snapshot.
+#
+#   aura-os-reset [snapshot-number]     reset (default 1, "base-clean")
+#   aura-os-reset --prep-only           prepare the boot chain, no reset
+#
+# snapper rollback only takes effect when the boot chain mounts the
+# filesystem's default subvolume. archinstall pins subvol=/@ in fstab and
+# rootflags=subvol=@ in the kernel cmdline, which would silently undo any
+# rollback. This command removes both pins (rebuilding the kernel image),
+# points the default subvolume at the running root, then runs
+# "snapper rollback" and patches the new writable copy the same way, so
+# the next boot really starts from the chosen snapshot.
+#
+# /home is a separate subvolume: user data and ~/aura-os survive a reset.
+# The pre-reset state is kept as a snapshot ("rollback backup").
+# Safe to re-run.
+set -euo pipefail
+
+if [[ $EUID -ne 0 ]]; then
+    exec sudo -E "$(readlink -f "$0")" "$@"
+fi
+
+prep_only=0
+num=""
+for arg in "$@"; do
+    case $arg in
+        --prep-only) prep_only=1 ;;
+        ''|*[!0-9]*) echo "usage: aura-os-reset [--prep-only] [snapshot-number]" >&2; exit 2 ;;
+        *) if [[ -n $num ]]; then echo "usage: aura-os-reset [--prep-only] [snapshot-number]" >&2; exit 2; fi
+           num=$arg ;;
+    esac
+done
+num="${num:-1}"
+
+if [[ $(findmnt -no FSTYPE /) != btrfs ]]; then
+    echo "aura-os-reset: / is not btrfs — nothing to reset" >&2
+    exit 1
+fi
+if [[ ! -e /etc/snapper/configs/root ]]; then
+    echo "aura-os-reset: snapper has no 'root' config (run install/02-snapper.sh)" >&2
+    exit 1
+fi
+
+dev="$(findmnt -no SOURCE /)"
+uuid="$(findmnt -no UUID /)"
+if [[ -z $uuid ]]; then
+    uuid="$(blkid -s UUID -o value "$dev")"
+fi
+
+if ((!prep_only)) && [[ ! -d /.snapshots/$num/snapshot ]]; then
+    echo "aura-os-reset: snapshot $num not found:" >&2
+    snapper -c root list >&2 || true
+    exit 1
+fi
+
+# prep_tree <root-dir> — unpin subvol=/@ in fstab and the kernel cmdline
+# of a tree, so the boot chain follows the default subvolume. Sets
+# cmdline_changed=1 when the kernel cmdline file changed.
+prep_tree() {
+    local r="$1"
+
+    if grep -qE '(^|[[:space:],])subvol=/@([[:space:],]|$)' "$r/etc/fstab"; then
+        sed -ri 's#(,?subvol=/@)([,]|[[:space:]]|$)#\2#' "$r/etc/fstab"
+        echo "aura-os-reset: $r/etc/fstab: dropped the subvol=/@ pin on /"
+    fi
+    if grep -qE '[[:space:],]subvol=/@([[:space:],]|$)' "$r/etc/fstab"; then
+        echo "aura-os-reset: could not remove the subvol=/@ pin from $r/etc/fstab" >&2
+        return 1
+    fi
+    if ! awk '$2 == "/.snapshots" { found=1 } END { exit !found }' "$r/etc/fstab"; then
+        printf 'UUID=%s\t/.snapshots\tbtrfs\trw,relatime,compress=zstd:3,discard=async,space_cache=v2,subvol=/@/.snapshots\t0 0\n' "$uuid" >> "$r/etc/fstab"
+        echo "aura-os-reset: $r/etc/fstab: added the /.snapshots mount (keeps snapshot history after a reset)"
+    fi
+
+    if [[ -f $r/etc/kernel/cmdline ]] && grep -qE '(^|[[:space:]])rootflags=subvol=/?@([[:space:]]|$)' "$r/etc/kernel/cmdline"; then
+        sed -ri -e 's#[[:space:]]*rootflags=subvol=/?@([[:space:]]|$)#\1#' -e 's/^[[:space:]]+//' "$r/etc/kernel/cmdline"
+        if grep -qE '(^|[[:space:]])rootflags=subvol=/?@([[:space:]]|$)' "$r/etc/kernel/cmdline"; then
+            echo "aura-os-reset: could not remove rootflags=subvol=@ from $r/etc/kernel/cmdline" >&2
+            return 1
+        fi
+        cmdline_changed=1
+        echo "aura-os-reset: $r/etc/kernel/cmdline: dropped rootflags=subvol=@"
+    fi
+    return 0
+}
+
+root_id="$(btrfs subvolume show / | awk '/Subvolume ID:/ { id=$NF } END { print id }')"
+if [[ ! $root_id =~ ^[0-9]+$ ]]; then
+    echo "aura-os-reset: cannot read the root subvolume id of /" >&2
+    exit 1
+fi
+
+# Safety snapshot first: every change is preceded by one.
+snapshot_cmd="$(dirname "$(readlink -f "$0")")/aura-os-snapshot"
+if [[ ! -x $snapshot_cmd ]]; then
+    snapshot_cmd="$(command -v aura-os-snapshot || true)"
+fi
+if [[ -n ${snapshot_cmd:-} && -x $snapshot_cmd ]]; then
+    if ((prep_only)); then
+        "$snapshot_cmd" "aura-os-reset: before boot-chain prep for reset"
+    else
+        "$snapshot_cmd" "aura-os-reset: before rollback to snapshot $num"
+    fi
+else
+    echo "aura-os-reset: WARNING: aura-os-snapshot not found; snapper rollback still takes its own backup" >&2
+fi
+
+desc="$(sed -n 's:.*<description>\(.*\)</description>.*:\1:p' /.snapshots/$num/info.xml 2>/dev/null || true)"
+
+# Let a rollback take effect: the boot chain must follow the default
+# subvolume, and the default subvolume must be a real subvolume.
+echo "aura-os-reset: checking the boot chain ..."
+if [[ $(btrfs subvolume get-default / | awk '{ print $2 }') != "$root_id" ]]; then
+    btrfs subvolume set-default "$root_id" /
+    echo "aura-os-reset: default subvolume -> $root_id (the running root)"
+fi
+cmdline_changed=0
+prep_tree / || exit 1
+if ((cmdline_changed)); then
+    echo "aura-os-reset: rebuilding the kernel image for the new command line ..."
+    if ! mkinitcpio -P >/tmp/aura-os-reset-mkinitcpio.log 2>&1; then
+        tail -n 20 /tmp/aura-os-reset-mkinitcpio.log >&2
+        echo "aura-os-reset: mkinitcpio -P failed — fix this before rebooting" >&2
+        exit 1
+    fi
+    echo "aura-os-reset: kernel image rebuilt"
+fi
+
+if ((prep_only)); then
+    echo "aura-os-reset: boot chain ready — the next boot follows the default subvolume; a reset will take effect"
+    exit 0
+fi
+
+echo "aura-os-reset: rolling back to snapshot $num${desc:+ ($desc)} ..."
+if ! out="$(snapper --ambit classic rollback --print-number "$num" 2>&1)"; then
+    printf '%s\n' "$out" >&2
+    echo "aura-os-reset: snapper rollback failed" >&2
+    exit 1
+fi
+printf '%s\n' "$out" | sed 's/^/  /'
+# Find which snapshot the default subvolume now points at. Do not trust
+# snapper's printed number: scan the snapshot list for the subvolume that
+# is now the default.
+default_id="$(btrfs subvolume get-default / | awk '{ print $2 }')"
+copy_num=""
+for d in /.snapshots/*/snapshot; do
+    sid="$(btrfs subvolume show "$d" 2>/dev/null | awk '/Subvolume ID:/ { id=$NF } END { print id }')"
+    if [[ -n $sid && $sid == "$default_id" ]]; then
+        copy_num="$(basename "$(dirname "$d")")"
+        break
+    fi
+done
+if [[ ! $copy_num =~ ^[0-9]+$ ]]; then
+    echo "aura-os-reset: default subvolume $default_id does not match any snapshot" >&2
+    btrfs subvolume set-default "$root_id" /
+    echo "aura-os-reset: default subvolume -> $root_id (reverted); nothing changed, fix and re-run" >&2
+    exit 1
+fi
+echo "aura-os-reset: snapshot $num restored as writable copy $copy_num (subvolume $default_id)"
+
+# A read-only copy cannot boot as / — make sure it is writable.
+if [[ $(btrfs property get "/.snapshots/$copy_num/snapshot" ro 2>/dev/null) == *ro=true* ]]; then
+    btrfs property set "/.snapshots/$copy_num/snapshot" ro false
+    echo "aura-os-reset: writable copy was read-only — set ro=false"
+fi
+
+# The copy boots next: give it the same unpinned boot config.
+mnt="$(mktemp -d /tmp/aura-os-reset.XXXXXX)"
+if ! mount -o "subvol=/@/.snapshots/$copy_num/snapshot" "$dev" "$mnt"; then
+    echo "aura-os-reset: cannot mount the new writable copy" >&2
+    btrfs subvolume set-default "$root_id" /
+    echo "aura-os-reset: default subvolume reverted — nothing changed; fix and re-run" >&2
+    exit 1
+fi
+cmdline_changed=0
+if ! prep_tree "$mnt"; then
+    umount "$mnt"
+    rmdir "$mnt"
+    btrfs subvolume set-default "$root_id" /
+    echo "aura-os-reset: patching the copy failed; default subvolume reverted — do not reboot, fix and re-run" >&2
+    exit 1
+fi
+umount "$mnt"
+rmdir "$mnt"
+
+echo "aura-os-reset: reset ready — reboot to start snapshot $num (${desc:-no description}); the pre-reset state is kept as a snapshot"

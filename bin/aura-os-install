@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# aura-os-install — the sanctioned way to install packages.
+#
+# Snapshot first, then pacman, then report what changed. Asking for
+# packages that are already installed is a no-op.
+#
+# Usage: aura-os-install <pkg> [pkg...]
+set -euo pipefail
+
+if [[ $# -eq 0 ]]; then
+    echo "usage: aura-os-install <pkg> [pkg...]" >&2
+    exit 2
+fi
+
+if [[ $EUID -ne 0 ]]; then
+    exec sudo -E "$(readlink -f "$0")" "$@"
+fi
+
+here="$(dirname "$(readlink -f "$0")")"
+snapshot="$here/aura-os-snapshot"
+if [[ ! -x $snapshot ]]; then
+    snapshot="$(command -v aura-os-snapshot || true)"
+fi
+if [[ -z ${snapshot:-} || ! -x $snapshot ]]; then
+    echo "aura-os-install: aura-os-snapshot not found (run install/04-aura.sh?)" >&2
+    exit 1
+fi
+
+missing=()
+for pkg in "$@"; do
+    if ! pacman -Qq "$pkg" >/dev/null 2>&1; then
+        missing+=("$pkg")
+    fi
+done
+
+if [[ ${#missing[@]} -eq 0 ]]; then
+    echo "aura-os-install: already installed: $* — nothing to do"
+    exit 0
+fi
+
+for pkg in "${missing[@]}"; do
+    if ! pacman -Sii "$pkg" >/dev/null 2>&1; then
+        echo "aura-os-install: no package or group named '$pkg' in the repos" >&2
+        exit 1
+    fi
+done
+
+before="$(pacman -Qq | LC_ALL=C sort)"
+
+"$snapshot" "aura-os-install: before installing: ${missing[*]}"
+
+pacman -S --needed --noconfirm "${missing[@]}"
+
+after="$(pacman -Qq | LC_ALL=C sort)"
+added="$(LC_ALL=C comm -13 <(echo "$before") <(echo "$after") || true)"
+
+if [[ -n $added ]]; then
+    echo "aura-os-install: newly installed:"
+    sed 's/^/  /' <<<"$added"
+else
+    echo "aura-os-install: pacman ran, but no new packages appeared"
+fi

@@ -1,0 +1,20 @@
+// Aura OS — minimal Waybar: sway workspaces, active window, clock.
+{
+    "layer": "top",
+    "position": "top",
+    "height": 30,
+    "spacing": 6,
+    "modules-left": ["sway/workspaces"],
+    "modules-center": ["sway/window"],
+    "modules-right": ["clock"],
+    "sway/workspaces": {
+        "disable-scroll": true,
+        "format": "{name}"
+    },
+    "sway/window": {
+        "max-length": 60
+    },
+    "clock": {
+        "format": "{:%a %d %b  %H:%M}"
+    }
+}

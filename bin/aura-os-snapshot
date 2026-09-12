@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# aura-os-snapshot — take a snapper snapshot before a system change.
+#
+# Every other aura-os-* command calls this first. Snapshots use the
+# "number" cleanup algorithm so they are never auto-pruned.
+#
+# Usage: aura-os-snapshot [-m] "message"
+set -euo pipefail
+
+if [[ $EUID -ne 0 ]]; then
+    exec sudo -E "$(readlink -f "$0")" "$@"
+fi
+
+msg="aura-os: manual snapshot"
+if [[ ${1:-} == -m || ${1:-} == --message ]]; then
+    msg="${2:?usage: aura-os-snapshot [-m] \"message\"}"
+elif [[ $# -gt 0 ]]; then
+    msg="$*"
+fi
+
+if ! command -v snapper >/dev/null 2>&1; then
+    echo "aura-os-snapshot: snapper is not installed" >&2
+    exit 1
+fi
+if [[ ! -e /etc/snapper/configs/root ]]; then
+    echo "aura-os-snapshot: no snapper 'root' config (run install/02-snapper.sh)" >&2
+    exit 1
+fi
+
+number="$(snapper -c root create -c number -d "$msg" --print-number)"
+if [[ -z $number ]]; then
+    echo "aura-os-snapshot: snapper did not return a snapshot number" >&2
+    exit 1
+fi
+
+echo "snapshot $number created: $msg"

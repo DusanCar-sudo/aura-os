@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# 03-sway — deploy Aura's sway + Waybar configs, swap display managers.
+#
+# Replaces 03-hyprland.sh (task 001b: sway over Hyprland). Also brings
+# up greetd+tuigreet (autologin on the test VM, tuigreet after logout),
+# keeps the zram config versioned, and retires sddm once greetd is live.
+# Safe to re-run.
+set -euo pipefail
+
+if [[ $EUID -ne 0 ]]; then
+    exec sudo -E "$(readlink -f "$0")" "$@"
+fi
+
+REPO="${REPO_DIR:-$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)}"
+user="${AURA_USER:?AURA_USER is not set — run this through install.sh}"
+home="$(getent passwd "$user" | cut -d: -f6)"
+if [[ ! -d $home ]]; then
+    echo "03-sway: no home directory for $user" >&2
+    exit 1
+fi
+
+cfg="$home/.config"
+install -d -o "$user" -g "$user" "$cfg/sway/config.d" "$cfg/waybar"
+
+put() { # put <src> <dst> — install only when it differs, say so either way
+    if cmp -s "$1" "$2" 2>/dev/null; then
+        echo "03-sway: up to date: $2"
+    else
+        install -m 644 -o "$user" -g "$user" "$1" "$2"
+        echo "03-sway: wrote $2"
+    fi
+}
+
+put "$REPO/config/sway/config" "$cfg/sway/config"
+put "$REPO/config/sway/config.d/10-binds.conf" "$cfg/sway/config.d/10-binds.conf"
+put "$REPO/config/waybar/config.jsonc" "$cfg/waybar/config.jsonc"
+put "$REPO/config/waybar/style.css" "$cfg/waybar/style.css"
+
+# Stale SDDM autologin from task 001 — greetd replaces it.
+if [[ -e /etc/sddm.conf.d/10-aura.conf ]]; then
+    rm -f /etc/sddm.conf.d/10-aura.conf
+    echo "03-sway: removed stale /etc/sddm.conf.d/10-aura.conf (superseded by greetd)"
+fi
+
+# greetd: the greeter user, the config, the service.
+if [[ -f /usr/lib/systemd/system/greetd.service ]]; then
+    if ! id greeter >/dev/null 2>&1; then
+        useradd --system --home-dir /var/lib/greetd --create-home \
+            --shell /usr/bin/nologin greeter
+        echo "03-sway: created system user 'greeter'"
+    fi
+    want="$(sed "s/@AURA_USER@/$user/" "$REPO/config/greetd/config.toml")"
+    if [[ "$(cat /etc/greetd/config.toml 2>/dev/null)" != "$want" ]]; then
+        printf '%s\n' "$want" > /etc/greetd/config.toml
+        echo "03-sway: wrote /etc/greetd/config.toml"
+    else
+        echo "03-sway: up to date: /etc/greetd/config.toml"
+    fi
+else
+    echo "03-sway: greetd is not installed — skipping the display manager swap" >&2
+fi
+
+# zram swap (task 001b). Keep the config versioned so it is inspectable.
+zram_conf=/etc/systemd/zram-generator.conf
+want_zram="$(cat "$REPO/config/zram/zram-generator.conf")"
+if [[ "$(cat "$zram_conf" 2>/dev/null)" != "$want_zram" ]]; then
+    printf '%s\n' "$want_zram" > "$zram_conf"
+    systemctl daemon-reload
+    systemctl restart systemd-zram-setup@zram0.service 2>/dev/null || true
+    echo "03-sway: wrote $zram_conf (zram0 (re)started)"
+else
+    echo "03-sway: up to date: $zram_conf"
+fi
+
+# Display manager swap: stop and disable sddm first, then greetd; sway
+# comes up on vt1 (autologin via [initial_session] on this VM).
+if [[ -f /usr/lib/systemd/system/greetd.service ]]; then
+    if systemctl is-active --quiet sddm; then
+        systemctl stop sddm
+        echo "03-sway: stopped sddm"
+    fi
+    if systemctl is-enabled --quiet sddm 2>/dev/null; then
+        systemctl disable sddm
+        echo "03-sway: disabled sddm"
+    fi
+    if ! systemctl is-enabled --quiet greetd 2>/dev/null; then
+        systemctl enable greetd
+        echo "03-sway: enabled greetd"
+    fi
+    if ! systemctl is-active --quiet greetd; then
+        systemctl start greetd
+        echo "03-sway: started greetd — the session comes up on vt1"
+    fi
+
+    # sddm is retired once greetd is the display manager; xorg-server
+    # exists here only for sddm. xorg-xwayland stays installed: task 001b
+    # keeps Xwayland available, lazily. Removal goes through aura-os-remove.
+    if pacman -Qq sddm >/dev/null 2>&1 && [[ -x $REPO/bin/aura-os-remove ]]; then
+        "$REPO/bin/aura-os-remove" sddm xorg-server
+    fi
+fi

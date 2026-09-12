@@ -54,3 +54,18 @@ Stumbles
   She found the risk herself (man page, then fetched snapper source
   from GitHub) and took safety snapshot 7 first. Tag: brief — 001b told
   her to "roll back to base-clean" without saying how on this layout.
+
+Verified by Claude at 22:58 (001b reported done)
+- Good: hyprland/kitty/sddm/xorg/polkit-kde all removed; greetd +
+  tuigreet, zram (1.2 GB), foot, sway 1.12 in place. aura-os-bench
+  works and honestly prints "OVER BUDGET".
+- Bench: 473 MB idle, but 141 MB of that is dolphin + kioworker
+  (running 39 min, parent PID 1 — D-Bus activated, not in the plan;
+  archinstall's Hyprland profile installed it). Without it ~330 MB:
+  within budget.
+- Repo and VM disagree: repo config/sway/config has `xwayland enable`
+  (correct per brief), VM has `xwayland disable`; bin/aura-os-reset is
+  in the repo but not installed in the VM. So the final repo state was
+  never deployed — "done" was not verified on what's committed.
+  Tag: aura — "done means tested" (AURA.md) not applied to the last
+  edits. The fresh-from-base-clean run would have caught it.

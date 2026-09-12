@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# 01-packages — the packages a minimal Aura OS desktop needs.
+# sway + Waybar + launcher + terminal (+ notifications, a font, the
+# wlroots portal, greetd). Packages the Hyprland-era setup replaced
+# are removed through bin/aura-os-remove, which snapshots first and
+# prints what went away. Safe to re-run.
+set -euo pipefail
+
+if [[ $EUID -ne 0 ]]; then
+    exec sudo -E "$(readlink -f "$0")" "$@"
+fi
+
+REPO="${REPO_DIR:-$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)}"
+
+packages=(
+    sway                     # the compositor
+    waybar                   # status bar
+    fuzzel                   # launcher (Super+D)
+    foot                     # terminal (Super+Return)
+    mako                     # notifications
+    ttf-dejavu               # font for bar and terminal
+    xdg-desktop-portal-wlr   # portal backend for wlroots compositors
+    greetd                   # display manager (replaces sddm)
+    greetd-tuigreet          # text-mode greeter — fits the RAM budget
+    xorg-xwayland            # X11 apps via lazy Xwayland (task 001b)
+    polkit-gnome             # polkit agent, started on demand only
+)
+
+# Packages this environment replaces. sddm is not here: 03-sway.sh
+# swaps display managers first and retires it afterwards, because
+# sddm owns the running session until greetd is up.
+replaced=(
+    hyprland
+    hyprland-guiutils
+    xdg-desktop-portal-hyprland
+    kitty
+    kitty-shell-integration
+    kitty-terminfo
+    uwsm                     # Hyprland session shim (and it is python)
+    polkit-kde-agent
+)
+
+echo "01-packages: full system upgrade first (fresh install, current mirrors)"
+pacman -Syu --noconfirm
+
+before="$(pacman -Qq | LC_ALL=C sort)"
+pacman -S --needed --noconfirm "${packages[@]}"
+after="$(pacman -Qq | LC_ALL=C sort)"
+
+added="$(LC_ALL=C comm -13 <(echo "$before") <(echo "$after") || true)"
+if [[ -n $added ]]; then
+    echo "01-packages: newly installed:"
+    sed 's/^/  /' <<<"$added"
+else
+    echo "01-packages: nothing new — already complete"
+fi
+
+if [[ -x "$REPO/bin/aura-os-remove" ]]; then
+    bash "$REPO/bin/aura-os-remove" "${replaced[@]}"
+else
+    echo "01-packages: WARNING: bin/aura-os-remove missing — old packages left alone" >&2
+fi

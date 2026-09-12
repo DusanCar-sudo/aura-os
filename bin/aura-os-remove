@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# aura-os-remove — the sanctioned way to uninstall packages.
+#
+# Snapshot first, then pacman -Rns, then report what actually left.
+# Packages that other installed packages still require are skipped
+# with a note instead of failing the whole run. Safe to re-run.
+#
+# Usage: aura-os-remove <pkg> [pkg...]
+set -euo pipefail
+
+if [[ $# -eq 0 ]]; then
+    echo "usage: aura-os-remove <pkg> [pkg...]" >&2
+    exit 2
+fi
+
+if [[ $EUID -ne 0 ]]; then
+    exec sudo -E "$(readlink -f "$0")" "$@"
+fi
+
+here="$(dirname "$(readlink -f "$0")")"
+snapshot="$here/aura-os-snapshot"
+if [[ ! -x $snapshot ]]; then
+    snapshot="$(command -v aura-os-snapshot || true)"
+fi
+
+declare -A wanted=()
+for pkg in "$@"; do
+    wanted["$pkg"]=1
+done
+
+installed=()
+for pkg in "$@"; do
+    if pacman -Qq "$pkg" >/dev/null 2>&1; then
+        installed+=("$pkg")
+    else
+        echo "aura-os-remove: not installed, skipping: $pkg"
+    fi
+done
+if [[ ${#installed[@]} -eq 0 ]]; then
+    echo "aura-os-remove: nothing to do"
+    exit 0
+fi
+
+# Keep anything that something outside this list still requires.
+removable=()
+for pkg in "${installed[@]}"; do
+    required_by="$(pacman -Qi "$pkg" | awk -F': +' '/^Required By/{print $2}')"
+    blockers=""
+    for r in $required_by; do
+        [[ $r == None ]] && continue
+        [[ -n ${wanted[$r]:-} ]] && continue
+        blockers+=" $r"
+    done
+    if [[ -n $blockers ]]; then
+        echo "aura-os-remove: keeping $pkg — still required by:$blockers"
+    else
+        removable+=("$pkg")
+    fi
+done
+if [[ ${#removable[@]} -eq 0 ]]; then
+    echo "aura-os-remove: nothing removable"
+    exit 0
+fi
+
+if [[ -x ${snapshot:-} ]] && command -v snapper >/dev/null 2>&1 && [[ -e /etc/snapper/configs/root ]]; then
+    "$snapshot" "aura-os-remove: before removing: ${removable[*]}"
+else
+    echo "aura-os-remove: WARNING: no snapper snapshot possible — proceeding anyway" >&2
+fi
+
+before="$(pacman -Qq | LC_ALL=C sort)"
+pacman -Rns --noconfirm "${removable[@]}"
+after="$(pacman -Qq | LC_ALL=C sort)"
+
+removed="$(LC_ALL=C comm -23 <(echo "$before") <(echo "$after") || true)"
+echo "aura-os-remove: removed:"
+sed 's/^/  /' <<<"$removed"

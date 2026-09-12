@@ -19,9 +19,10 @@ Stumbles
   had been written with write_file; corrected only after being asked.
   → aura-code: final reports should name host vs guest and the tool
     that actually wrote each file.
-- Cost: 2.95M tokens (2.86M input) for ~460 lines of shell. Input
-  dominates, so context is being re-sent heavily.
-  → aura-code: check compaction and re-reading of files already read.
+- Cost (corrected): tokens looked huge (11.5M input over 126 turns
+  across 001+001b) but cache hit is 94% and cost $0 on DeepSeek flash.
+  Re-sending context is normal; the real watch item is peak context
+  (144k/turn) before compaction. Tag: aura (compaction threshold).
 - Built from the pre-budget brief: kitty, SDDM (+Xorg 84 MB), and
   polkit-kde (Qt daemon). Not her fault (budget landed mid-task), but
   she did not re-read AURA.md before finishing.
@@ -30,3 +31,26 @@ Stumbles
 
 Measured after 001: VM idle 736 MB used. Hyprland 248, kitty 174,
 Xorg 84, Xwayland 80, waybar 47, polkit-kde 39 (MB RSS).
+
+## Task 001b — sway move (2026-09-12, in progress)
+
+Good
+- Removed Hyprland/kitty/SDDM/Xorg through a new snapshot-first
+  `aura-os-remove` (snapshots 4 and 5). Idle RAM ~320 MB without apps.
+
+Stumbles
+- Kicked Dusan out of his session while he was using the VM: rebooted
+  it at 21:00, then ran `sudo systemctl restart greetd` at 21:01:59 and
+  21:02:21 — each restart kills the running sway session. No warning.
+  → aura-code: before reboot/restarting a display manager in a shared
+    VM, announce it and wait, or check `loginctl` for an active seat.
+- Debugged with raw `sudo mv` / `sudo systemctl` over ssh instead of
+  aura-os-* commands (AURA.md: no raw sudo for system changes).
+- greetd config comment says aura-os-sway picks the pixman renderer,
+  but `command = "sway"` — comment and config disagree, and she then
+  moved /usr/local/bin/aura-os-sway away.
+- Rollback test: used `snapper rollback` on archinstall's layout where
+  the boot entry pins `subvol=@`, so a rollback may not take effect.
+  She found the risk herself (man page, then fetched snapper source
+  from GitHub) and took safety snapshot 7 first. Tag: brief — 001b told
+  her to "roll back to base-clean" without saying how on this layout.

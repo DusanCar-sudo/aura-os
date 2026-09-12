@@ -15,6 +15,8 @@
 
 #include <pixman.h>
 
+#include "aura-status.h"
+
 struct terminal;
 struct row;
 struct seat;
@@ -37,6 +39,7 @@ struct aura_row_mark {
 struct aura_term {
     bool cmd_running;
     struct timespec cmd_started;
+    struct aura_status status;
 };
 
 static inline void

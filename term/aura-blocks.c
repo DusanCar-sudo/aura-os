@@ -25,11 +25,26 @@ command_row(struct terminal *term)
     return grid->rows[abs];
 }
 
+static uint32_t
+elapsed_ms(const struct terminal *term)
+{
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    int64_t ms =
+        (int64_t)(now.tv_sec - term->aura.cmd_started.tv_sec) * 1000 +
+        (now.tv_nsec - term->aura.cmd_started.tv_nsec) / 1000000;
+    return ms < 0 ? 0 : ms > UINT32_MAX ? UINT32_MAX : (uint32_t)ms;
+}
+
 void
 aura_blocks_prompt(struct terminal *term)
 {
-    /* A new prompt without D: the shell doesn't report D, forget the block */
-    term->aura.cmd_running = false;
+    /* A new prompt without D: the shell doesn't report D. No label for
+     * the block, but the pane is no longer running anything. */
+    if (term->aura.cmd_running) {
+        term->aura.cmd_running = false;
+        aura_status_cmd_finished(term, elapsed_ms(term));
+    }
 }
 
 void
@@ -42,6 +57,7 @@ aura_blocks_cmd_executed(struct terminal *term)
     row->shell_integration.aura.state = AURA_BLOCK_RUNNING;
     term->aura.cmd_running = true;
     clock_gettime(CLOCK_MONOTONIC, &term->aura.cmd_started);
+    aura_status_cmd_started(term);
 }
 
 void
@@ -56,11 +72,8 @@ aura_blocks_cmd_finished(struct terminal *term, const char *params)
     if (params[0] == ';')
         exit_code = strtol(params + 1, NULL, 10);
 
-    struct timespec now;
-    clock_gettime(CLOCK_MONOTONIC, &now);
-    int64_t ms =
-        (int64_t)(now.tv_sec - term->aura.cmd_started.tv_sec) * 1000 +
-        (now.tv_nsec - term->aura.cmd_started.tv_nsec) / 1000000;
+    const uint32_t ms = elapsed_ms(term);
+    aura_status_cmd_finished(term, ms);
 
     /* Walk back to the row marked at C; it may have scrolled off, in
      * which case the block simply gets no label */
@@ -75,7 +88,7 @@ aura_blocks_cmd_finished(struct terminal *term, const char *params)
         if (m->state == AURA_BLOCK_RUNNING) {
             m->state = AURA_BLOCK_DONE;
             m->exit_code = exit_code < 0 || exit_code > 255 ? 255 : (uint8_t)exit_code;
-            m->duration_ms = ms < 0 ? 0 : ms > UINT32_MAX ? UINT32_MAX : (uint32_t)ms;
+            m->duration_ms = ms;
             row->dirty = true;
             LOG_DBG("block done: exit=%u, %ums", m->exit_code, m->duration_ms);
             return;

@@ -577,6 +577,8 @@ osc_notify(struct terminal *term, char *string)
         return;
     }
 
+    aura_status_notification(term, title, msg);
+
     char *msgdup = NULL;
     if (msg != NULL)
         msgdup = xstrdup(msg);
@@ -1121,6 +1123,7 @@ kitty_notification(struct terminal *term, char *string)
              * only load icon data into the icon cache
              */
             if (notif->title != NULL || notif->body != NULL) {
+                aura_status_notification(term, notif->title, notif->body);
                 notify_notify(term, notif);
             }
         }
@@ -1374,6 +1377,7 @@ osc_dispatch(struct terminal *term)
     case 7:
         /* Update terminal's understanding of PWD */
         osc_set_pwd(term, string);
+        aura_status_cwd_changed(term);
         break;
 
     case 8:

@@ -295,6 +295,8 @@ fdm_ptmx(struct fdm *fdm, int fd, int events, void *data)
 
         xassert(term->interactive_resizing.grid == NULL);
         vt_from_slave(term, buf, count);
+        if (unlikely(term->aura.status.classify_pending))
+            aura_status_classify(term);
     }
 
     if (!term->render.app_sync_updates.enabled) {
@@ -1445,6 +1447,7 @@ term_init(const struct config *conf, struct fdm *fdm, struct reaper *reaper,
         }
 
         reaper_add(term->reaper, term->slave, &fdm_client_terminated, term);
+        aura_status_init(term);
     }
 
     /* Guess scale; we're not mapped yet, so we don't know on which
@@ -1815,6 +1818,8 @@ term_destroy(struct terminal *term)
 {
     if (term == NULL)
         return 0;
+
+    aura_status_destroy(term);
 
     tll_foreach(term->wl->terms, it) {
         if (it->item == term) {
@@ -3770,6 +3775,7 @@ term_flash(struct terminal *term, unsigned duration_ms)
 void
 term_bell(struct terminal *term)
 {
+    aura_status_bell(term);
 
     if (!term->bell_action_enabled)
         return;

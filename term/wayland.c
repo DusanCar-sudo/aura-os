@@ -1,4 +1,5 @@
 #include "wayland.h"
+#include "aura-window.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -2124,6 +2125,7 @@ wayl_win_init(struct terminal *term, const char *token)
         }
     }
 #endif
+    aura_window_set_pane_tag(win);
 
     if (wayl->toplevel_icon_manager != NULL) {
         const char *app_id =

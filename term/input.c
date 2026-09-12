@@ -1843,6 +1843,7 @@ key_press_release(struct seat *seat, struct terminal *term, uint32_t serial,
     if (handled && !keysym_is_modifier(sym)) {
         term_reset_view(term);
         selection_cancel(term);
+        aura_status_key(term);
     }
 
     free(utf32);

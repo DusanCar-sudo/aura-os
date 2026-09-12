@@ -50,10 +50,10 @@ if ! grep -qxF "$line" "$home/.bashrc" 2>/dev/null; then
     echo "05-aura-term: sourced the shell integration from $home/.bashrc"
 fi
 
-# herdr theme for the user (a user file overrides the xdg default).
+# aura-term config for the user (a user file overrides the xdg default).
 cfg="$home/.config/aura-term"
 install -d -o "$user" -g "$user" "$cfg"
 if ! cmp -s "$REPO/config/aura-term/aura-term.ini" "$cfg/aura-term.ini"; then
     install -m 644 -o "$user" -g "$user" "$REPO/config/aura-term/aura-term.ini" "$cfg/aura-term.ini"
-    echo "05-aura-term: wrote $cfg/aura-term.ini (herdr theme)"
+    echo "05-aura-term: wrote $cfg/aura-term.ini (purplerain theme)"
 fi

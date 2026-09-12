@@ -15,7 +15,7 @@ wifi        networks, VPN, ethernet        (nmtui)
 bluetooth   pair and connect devices       (bluetoothctl)
 display     resolution and scale           (sway outputs)
 keyboard    layouts us / sr latin / sr cyrillic
-theme       color combos: herdr, tokyo-night, gruvbox, nord, mono, paper
+theme       color combos: purplerain, tokyo-night, gruvbox, nord, mono, paper
 wallpaper   solid theme color or an image
 keys        every key binding              (read)
 snapshots   system snapshots, roll back    (snapper)

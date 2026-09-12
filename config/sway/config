@@ -1,6 +1,6 @@
-# Aura OS — sway + herdr theme (task 003).
+# Aura OS — sway, herdr-style layout, purplerain theme (task 003).
 # Flat, dark, no decoration: one monospace font, square corners, 1px
-# borders, no blur/shadow/animation. Palette: themes/herdr/.
+# borders, no blur/shadow/animation. Palette: themes/purplerain/.
 # Muscle memory from 001:
 #   Super+Return  terminal (foot)     Super+D  launcher (fuzzel)
 #   Super+A       Aura prompt         Super+T  tabbed/split toggle
@@ -16,7 +16,7 @@ floating_modifier $mod normal
 tiling_drag enable
 tiling_drag_threshold 9
 
-# herdr theme: monospace everywhere, 1px borders, square corners.
+# herdr look: monospace everywhere, 1px borders, square corners.
 font pango:JetBrainsMono Nerd Font 11
 # No window title bars: 1px border only. The focused title shows on
 # hover at the top-left of the bar (waybar sway/window). Tabbed and
@@ -31,7 +31,7 @@ title_align left
 titlebar_padding 4
 for_window [title=".*"] title_format "─ %title ─"
 
-# herdr palette (themes/herdr/palette): active purple, inactive dim.
+# purplerain palette (themes/purplerain/palette): active purple, inactive dim.
 client.focused          #8b7cf6 #0e0e14 #c8cad8 #8b7cf6
 client.focused_inactive #2a2a3a #0e0e14 #5c5f77 #2a2a3a
 client.unfocused        #2a2a3a #0e0e14 #5c5f77 #2a2a3a

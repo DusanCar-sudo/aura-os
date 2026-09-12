@@ -12,7 +12,7 @@
 # files stay untouched:
 #   ~/.config/sway/config.d/50-theme.conf   ~/.config/waybar/theme.css
 #   ~/.config/aura-term/theme.ini           ~/.config/fuzzel/theme.ini
-#   ~/.config/aura-os/colors.sed   (sidebar scripts: herdr hex → theme)
+#   ~/.config/aura-os/colors.sed   (sidebar scripts: purplerain hex → theme)
 # Tab colors (Super+Shift+C) are fixed names and don't change with themes.
 set -euo pipefail
 
@@ -22,7 +22,7 @@ dirs=("$cfg/aura-os/themes" /usr/share/aura-os/themes "${AURA_OS_REPO:-$HOME/aur
 
 theme_dir() { local d; for d in "${dirs[@]}"; do [[ -f $d/$1/palette ]] && { echo "$d/$1"; return; }; done; return 1; }
 names() { local d; for d in "${dirs[@]}"; do [[ -d $d ]] && ls "$d"; done | sort -u; }
-current() { cat "$state" 2>/dev/null || echo herdr; }
+current() { cat "$state" 2>/dev/null || echo purplerain; }
 
 load() {   # load <name> → exports c_<key> for all 15 colors
     local dir line k v
@@ -105,7 +105,7 @@ selection-match=$(nohash "$c_accent_bright")ff
 counter=$(nohash "$c_dim")ff
 border=$(nohash "$c_accent")ff
 EOF
-    # sidebar scripts write herdr hex in their Pango markup; map it.
+    # sidebar scripts write purplerain hex in their Pango markup; map it.
     put "$cfg/aura-os/colors.sed" <<EOF
 s/#0e0e14/$c_bg/Ig
 s/#14141e/$c_bg_alt/Ig

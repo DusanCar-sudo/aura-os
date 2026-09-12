@@ -21,6 +21,9 @@ done
 
 # Color combos (aura-os-theme reads /usr/share/aura-os/themes).
 install -d /usr/share/aura-os/themes /usr/share/aura-os/wallpapers
+for t in /usr/share/aura-os/themes/*/; do       # drop themes removed/renamed in the repo
+    [[ -d $t && ! -d "$REPO/themes/$(basename "$t")" ]] && rm -rf -- "$t" && echo "04-aura: removed theme $(basename "$t")"
+done
 for t in "$REPO"/themes/*/; do
     t="$(basename "$t")"
     if ! cmp -s "$REPO/themes/$t/palette" "/usr/share/aura-os/themes/$t/palette"; then

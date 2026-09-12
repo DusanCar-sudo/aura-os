@@ -29,7 +29,7 @@ packages=(
     libnotify                # notify-send: mako's CLI; aura-term needs it for
                              # "agent needs input" alerts (task 005)
     jq                       # aura-os-tab / aura-os-status JSON (task 003)
-    ttf-jetbrains-mono-nerd  # herdr theme: monospace everywhere (task 003)
+    ttf-jetbrains-mono-nerd  # herdr look: monospace everywhere (task 003)
     xdg-desktop-portal-wlr   # portal backend for wlroots compositors
     greetd                   # display manager (replaces sddm)
     greetd-tuigreet          # text-mode greeter — fits the RAM budget

@@ -2081,6 +2081,7 @@ erase_line(struct terminal *term, struct row *row)
     row->shell_integration.prompt_marker = false;
     row->shell_integration.cmd_start = -1;
     row->shell_integration.cmd_end = -1;
+    aura_row_mark_reset(&row->shell_integration.aura);
 }
 
 static void

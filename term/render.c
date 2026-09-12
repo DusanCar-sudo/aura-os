@@ -1208,8 +1208,10 @@ render_row(struct terminal *term, pixman_image_t *pix,
            pixman_region32_t *damage, struct row *row,
            int row_no, int cursor_col)
 {
+    aura_blocks_row_pre_render(term, row);
     for (int col = term->cols - 1; col >= 0; col--)
         render_cell(term, pix, damage, row, row_no, col, cursor_col == col);
+    aura_blocks_row_post_render(term, pix, row, row_no);
 }
 
 static void

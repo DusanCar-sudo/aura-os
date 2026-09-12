@@ -1630,6 +1630,7 @@ osc_dispatch(struct terminal *term)
                     term->grid->cursor.point.col);
 
             term->grid->cur_row->shell_integration.prompt_marker = true;
+            aura_blocks_prompt(term);
             break;
 
         case 'B':
@@ -1641,6 +1642,7 @@ osc_dispatch(struct terminal *term)
                     term->grid->cursor.point.row,
                     term->grid->cursor.point.col);
             term->grid->cur_row->shell_integration.cmd_start = term->grid->cursor.point.col;
+            aura_blocks_cmd_executed(term);
             break;
 
         case 'D':
@@ -1648,6 +1650,7 @@ osc_dispatch(struct terminal *term)
                     term->grid->cursor.point.row,
                     term->grid->cursor.point.col);
             term->grid->cur_row->shell_integration.cmd_end = term->grid->cursor.point.col;
+            aura_blocks_cmd_finished(term, &string[1]);
             break;
         }
         break;

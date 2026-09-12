@@ -444,6 +444,7 @@ grid_row_alloc(int cols, bool initialize)
     row->shell_integration.prompt_marker = false;
     row->shell_integration.cmd_start = -1;
     row->shell_integration.cmd_end = -1;
+    aura_row_mark_reset(&row->shell_integration.aura);
 
     if (initialize) {
         row->cells = xcalloc(cols, sizeof(row->cells[0]));
@@ -504,6 +505,7 @@ grid_resize_without_reflow(
         new_row->shell_integration.prompt_marker = old_row->shell_integration.prompt_marker;
         new_row->shell_integration.cmd_start = min(old_row->shell_integration.cmd_start, new_cols - 1);
         new_row->shell_integration.cmd_end = min(old_row->shell_integration.cmd_end, new_cols - 1);
+        new_row->shell_integration.aura = old_row->shell_integration.aura;
 
         if (new_cols > old_cols) {
             /* Clear "new" columns */
@@ -714,6 +716,7 @@ _line_wrap(struct grid *old_grid, struct row **new_grid, struct row *row,
         new_row->shell_integration.prompt_marker = false;
         new_row->shell_integration.cmd_start = -1;
         new_row->shell_integration.cmd_end = -1;
+        aura_row_mark_reset(&new_row->shell_integration.aura);
 
         tll_foreach(old_grid->sixel_images, it) {
             if (it->item.pos.row == *row_idx) {
@@ -1030,6 +1033,7 @@ grid_resize_and_reflow(
             }
 
             new_row->shell_integration.prompt_marker = old_row->shell_integration.prompt_marker;
+            new_row->shell_integration.aura = old_row->shell_integration.aura;
 
             for (int i = 0; i < width; i++) {
                 if (unlikely(uri_range != NULL && uri_range != uri_range_terminator)) {

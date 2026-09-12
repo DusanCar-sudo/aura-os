@@ -289,6 +289,7 @@ vtlib = static_library(
 
 pgolib = static_library(
   'pgolib',
+  'aura-blocks.c', 'aura-blocks.h',
   'grid.c', 'grid.h',
   'selection.c', 'selection.h',
   'terminal.c', 'terminal.h',
@@ -318,6 +319,7 @@ endif
 executable(
   'aura-termd',
   'async.c', 'async.h',
+  'aura-blocks-render.c',
   'box-drawing.c', 'box-drawing.h',
   'config.c', 'config.h',
   'commands.c', 'commands.h',

@@ -369,6 +369,10 @@ execute_binding(struct seat *seat, struct terminal *term,
         term_to_slave(term, binding->aux->text.data, binding->aux->text.len);
         return true;
 
+    case BIND_ACTION_AURA_COPY_BLOCK:
+        aura_blocks_copy_last(seat, term, serial);
+        return true;
+
     case BIND_ACTION_PROMPT_PREV: {
         if (term->grid != &term->normal)
             return false;

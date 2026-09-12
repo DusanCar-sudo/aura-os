@@ -15,6 +15,7 @@
 #include <fcft/fcft.h>
 
 #include "composed.h"
+#include "aura-blocks.h"
 #include "config.h"
 #include "debug.h"
 #include "fdm.h"
@@ -156,6 +157,7 @@ struct row {
         bool prompt_marker;
         int cmd_start;  /* Column, -1 if unset */
         int cmd_end;    /* Column, -1 if unset */
+        struct aura_row_mark aura;
     } shell_integration;
 };
 
@@ -833,6 +835,7 @@ struct terminal {
 
     char *foot_exe;
     char *cwd;
+    struct aura_term aura;
 
     bool grapheme_shaping;
     bool size_notifications;

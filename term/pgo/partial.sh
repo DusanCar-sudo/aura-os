@@ -22,8 +22,8 @@ rm -f "${blddir}"/pgo-ok
 cd "${blddir}"
 
 "${blddir}"/utils/xtgettcap
-"${blddir}"/footclient --version
-"${blddir}"/foot --version
+"${blddir}"/aura-term --version
+"${blddir}"/aura-termd --version
 "${blddir}"/pgo "${pgo_data}"
 
 touch "${blddir}"/pgo-ok

@@ -33,8 +33,8 @@ flat text panes, no decoration. Screenshot: tasks/ref/herdr.png.
   number prefix, so Super+2 still works.
 - Color: Super+Shift+C (or right-click the tab) → pick from the theme
   palette (8 colors: purple, blue, cyan, green, yellow, orange, red,
-  gray). Tab fill uses that color; the active pane border in that tab
-  uses it too, so you always see which tab you are in.
+  gray). ONLY the tab in the top bar gets that color — pane borders,
+  background and everything else on screen stay the theme default.
 - Names and colors persist across reboots in
   ~/.config/aura-os/tabs.json, managed by `bin/aura-os-tab`
   (rename|color|new|close), which voice (002) can call too:

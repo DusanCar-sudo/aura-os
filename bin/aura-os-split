@@ -2,7 +2,7 @@
 # aura-os-split — the next window opens in a chosen direction of the
 # focused one (task 003: Super+Alt+arrows).
 #
-#   aura-os-split left|right|up|down [command...]     (default: foot)
+#   aura-os-split left|right|up|down [command...]     (default: aura-term)
 #
 # sway can only append: for right/down it is enough to force the split
 # orientation and start the command. left/up need one step more — when
@@ -17,7 +17,7 @@ case $dir in
     left|right|up|down) ;;
     *) echo "usage: aura-os-split left|right|up|down [command...]" >&2; exit 2 ;;
 esac
-if [[ $# -gt 0 ]]; then cmd=("$@"); else cmd=(foot); fi
+if [[ $# -gt 0 ]]; then cmd=("$@"); else cmd=(aura-term); fi
 
 case $dir in
     left|right) swaymsg split horizontal >/dev/null ;;

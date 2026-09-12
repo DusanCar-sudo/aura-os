@@ -44,16 +44,18 @@ output * bg #0e0e14 solid_color
 # app opens. Many of Dusan's apps need it — never disable it.
 xwayland enable
 
-# Autostart. sway re-runs exec lines on every config reload, so each
+# Autostart. Guards match the running process's exact command line —
+# a loose pattern would also match this `sh -c` line itself and never
+# start anything. sway re-runs exec lines on every config reload, so each
 # one checks before starting. waybar runs both bars (top tabs + left
 # sidebar) in one process — see config/waybar/config.jsonc. The
 # watcher blocks on sway's event stream: event-driven, no polling.
 exec pgrep -x waybar >/dev/null || waybar
 exec pgrep -x mako >/dev/null || mako
-exec pgrep -f 'aura-os-status [w]atch' >/dev/null || aura-os-status watch
-exec pgrep -f 'aura-os-agents [w]atch' >/dev/null || aura-os-agents watch
-exec pgrep -f 'aura-os-recent [w]atch' >/dev/null || aura-os-recent watch
-exec pgrep -f 'wl-paste --watch .*aura-os-clip' >/dev/null || aura-os-clip watch
+exec pgrep -f '^bash /usr/local/bin/aura-os-status watch$' >/dev/null || aura-os-status watch
+exec pgrep -f '^bash /usr/local/bin/aura-os-agents watch$' >/dev/null || aura-os-agents watch
+exec pgrep -f '^bash /usr/local/bin/aura-os-recent watch$' >/dev/null || aura-os-recent watch
+exec pgrep -f '^wl-paste --watch /usr/local/bin/aura-os-clip store$' >/dev/null || aura-os-clip watch
 
 # Floating TUIs opened from the top bar (bt, wifi, vol, calendar).
 for_window [app_id="aura-float"] floating enable, resize set 960 600, move position center

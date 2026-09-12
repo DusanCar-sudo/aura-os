@@ -106,3 +106,9 @@ Stumbles (found at 23:50, VM boot shows swaynag "errors in config")
   (profile analog duplex, persisted by wireplumber) + rtkit in 01.
   Neither Aura nor Claude had ever tested audio: "done" never included
   it. Tag: brief — task briefs must list audio in "done when".
+- 03:00 after a VM restart no sidebar watcher ran: sway's `exec pgrep
+  -f 'aura-os-status [w]atch' || …` matched its own `sh -c` line (which
+  contains "aura-os-status watch"), so the guard always "found" one.
+  Written by Aura in 003, kept by Claude. Third self-matching pgrep/pkill
+  bug today (aura-term Claude's pkill -x foot, Claude's pkill over ssh
+  twice). Rule: match exact command lines (^…$) or PIDs, never loose -f.

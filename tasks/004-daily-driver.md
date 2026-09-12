@@ -4,7 +4,7 @@ Depends on 001b. AURA.md "Daily driver": Aura OS must run everything
 Dusan runs today on Ubuntu. The RAM budget is for the bare desktop;
 never drop compatibility to meet it.
 
-## Apps — each must launch and work, tested in the VM
+## Apps — install and configure all; test only what "Done when" lists
 - Chrome: native Wayland (`--ozone-platform-hint=auto` in a
   chrome-flags.conf), YouTube 1080p with hardware decode (VA-API:
   mesa / intel-media-driver), screen share in Meet via
@@ -54,6 +54,14 @@ never drop compatibility to meet it.
 - Test with a second headless output (`swaymsg create_output`).
 
 ## Done when
-A checklist in the report: every app above launched in the VM (or
-marked "hardware only — test on laptop" with a reason), and the
-bench idle number still under 350 MB with no apps open.
+Test in the VM only the normal stuff:
+- Chrome: opens natively on Wayland, loads ibm.com, plays a YouTube
+  video (software decode is fine in the VM).
+- Terminal system: foot, git, docker run hello-world, node, python
+  (uv), clipboard copy/paste, screenshot key, a TUI mixer.
+- Windows: 6+ windows on one workspace tiled/tabbed, a pop-up floats,
+  Super+Tab jumps between them, one window moved to a second
+  (headless) monitor.
+Everything else (media apps, games, Wine, Waydroid, Unity, OBS):
+installed and configured, NOT tested now — list it as "untested".
+Bench idle number still under 350 MB with no apps open.

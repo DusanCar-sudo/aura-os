@@ -2,7 +2,7 @@
 # drive.sh <shell-cmd...>: fresh aura-term window in the headless sway, run the block test
 eval $(~/aura-term-test/hl.sh env)
 export LANG=C.UTF-8
-pkill -x aura-term; pkill -x aura-termd; sleep 0.3
+~/aura-term-test/hl.sh kill aura-term aura-termd; sleep 0.3
 pgrep -x aura-termd >/dev/null || { setsid -f aura-termd --server --log-level=warning >$XDG_RUNTIME_DIR/termd.log 2>&1; sleep 0.5; }
 setsid -f aura-term -e "$@" </dev/null >/dev/null 2>&1; sleep 1.5
 t() { wtype -s 300 -d 15 "$1" -k Return; sleep ${2:-0.6}; }

@@ -689,7 +689,7 @@ main(int argc, char *const *argv)
     }
 
     if (as_server)
-        LOG_INFO("running as server; launch terminals by running footclient");
+        LOG_INFO("running as server; launch terminals by running " AURA_TERM_NAME);
 
     if (as_server && pid_file != NULL) {
         if (!print_pid(pid_file, &unlink_pid_file))

@@ -9,4 +9,4 @@ k Up; k Up; grim /tmp/j1.png            # two blocks up: second 'seq 100' prompt
 k Up; grim /tmp/j2.png                  # three up
 k Down; k Down; k Down; grim /tmp/j3.png  # back to bottom
 setsid -f aura-term -e sleep 30 </dev/null >/dev/null 2>&1; sleep 1.5; grim /tmp/j4.png   # split -> reflow
-swaymsg -q '[app_id=aura-term] focus'; pkill -f "aura-term -e sleep 30"; sleep 1; grim /tmp/j5.png  # un-split -> reflow back
+swaymsg -q '[app_id=aura-term] focus'; pkill -f "^aura-term -e sleep 30$"; sleep 1; grim /tmp/j5.png  # un-split -> reflow back

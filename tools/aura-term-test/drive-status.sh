@@ -5,7 +5,7 @@ export LANG=C.UTF-8 PATH=$HOME/aura-term-test/bin:$PATH
 P=$XDG_RUNTIME_DIR/aura-os/panes
 rm -f /tmp/aura-notify.log
 rm -rf ~/aura-term-test/repo && git init -q -b main ~/aura-term-test/repo
-pkill -x aura-term; pkill -x aura-termd; sleep 0.3
+~/aura-term-test/hl.sh kill aura-term aura-termd; sleep 0.3
 setsid -f aura-termd --server --config ~/aura-term-test/notify-test.ini --log-level=warning >$XDG_RUNTIME_DIR/termd.log 2>&1; sleep 0.5
 cd ~/aura-term-test/repo
 setsid -f aura-term -e bash --rcfile ~/aura-term-test/bashrc </dev/null >/dev/null 2>&1; sleep 1.5

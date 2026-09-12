@@ -1,0 +1,25 @@
+diff -ruN -U2 a/config/sway/config b/config/sway/config
+--- a/config/sway/config
++++ b/config/sway/config
+@@ -9,7 +9,7 @@
+ # touching this file.
+ 
+ set $mod Mod4
+-set $term foot
++set $term aura-term
+ set $menu fuzzel
+ 
+ floating_modifier $mod
+diff -ruN -U2 a/config/sway/config.d/05-aura-term.conf b/config/sway/config.d/05-aura-term.conf
+--- a/config/sway/config.d/05-aura-term.conf
++++ b/config/sway/config.d/05-aura-term.conf
+@@ -0,0 +1,9 @@
++# aura-term (task 005): Aura OS's terminal, a foot fork in server mode.
++# One aura-termd process serves every terminal window; `aura-term`
++# (Super+Return) is a ~2 MB client that connects to
++# $XDG_RUNTIME_DIR/aura-term-$WAYLAND_DISPLAY.sock.
++exec pgrep -x aura-termd >/dev/null || aura-termd --server
++
++# Ask Aura (Ctrl+Shift+A in aura-term) opens its answer next to the
++# terminal as a split; keep it narrower than the terminal it explains.
++for_window [app_id="aura-ask"] resize set width 40 ppt

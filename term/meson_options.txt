@@ -17,7 +17,7 @@ option('default-terminfo', type: 'string', value: 'foot',
        description: 'Default value of the "term" option in foot.ini.')
 option('terminfo-base-name', type: 'string',
        description: 'Base name of the generated terminfo files. Defaults to the value of the \'default-terminfo\' meson option')
-option('custom-terminfo-install-location', type: 'string', value: '',
+option('custom-terminfo-install-location', type: 'string', value: 'share/aura-term/terminfo',
        description: 'Path to foot\'s terminfo, relative to ${prefix}. If set, foot will set $TERMINFO to this value in the client process.')
 
 option('systemd-units-dir', type: 'string', value: '',

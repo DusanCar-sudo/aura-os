@@ -10,6 +10,7 @@
  */
 
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdint.h>
 #include <time.h>
 
@@ -49,3 +50,6 @@ void aura_status_bell(struct terminal *term);
 void aura_status_notification(struct terminal *term, const char *title, const char *body);
 void aura_status_key(struct terminal *term);
 void aura_status_classify(struct terminal *term); /* after pty reads, while pending */
+
+/* Writes s as a JSON string literal, or null */
+void aura_json_str(FILE *out, const char *s);

@@ -1,0 +1,28 @@
+#!/bin/sh
+# Fake `aura sidecar` for Ask Aura tests: speaks the NDJSON protocol,
+# streams a canned answer, sends one approval.request and logs every frame
+# it receives to /tmp/fake-aura.log. Not Aura.
+[ "$1" = sidecar ] || { echo "fake aura: only 'sidecar'" >&2; exit 2; }
+log=/tmp/fake-aura.log
+: > $log
+echo '{"kind":"evt","method":"engine.ready","params":{"protocolVersion":1}}'
+while IFS= read -r line; do
+    printf '%s\n' "$line" >> $log
+    case $line in
+    *'"method":"session.create"'*)
+        echo '{"kind":"res","id":"1","ok":true,"result":{"sessionId":"s-1"}}' ;;
+    *'"method":"turn.send"'*)
+        echo '{"kind":"res","id":"2","ok":true,"result":{"turnId":"t-1"}}'
+        echo '{"kind":"evt","method":"turn.started","sessionId":"s-1","params":{"turnId":"t-1"}}'
+        echo '{"kind":"req","id":"ap-1","method":"approval.request","params":{"sessionId":"s-1","tool":"run_shell","args":{"command":"rm -rf /tmp/x"},"tier":3}}'
+        ;;
+    *'"id":"ap-1"'*)
+        echo '{"kind":"evt","method":"turn.delta","sessionId":"s-1","params":{"turnId":"t-1","text":"`ls` exited with 2 because \"/nope\" does not exist \u2192 exit 2.\n\nTo check what is there:\n"}}'
+        echo '{"kind":"evt","method":"turn.delta","sessionId":"s-1","params":{"turnId":"t-1","text":"```sh\ntouch /tmp/aura-suggest-ran\n```\n"}}'
+        echo '{"kind":"evt","method":"turn.completed","sessionId":"s-1","params":{"turnId":"t-1","success":true}}'
+        ;;
+    *'"method":"session.destroy"'*)
+        echo '{"kind":"res","id":"3","ok":true,"result":{"destroyed":true}}'
+        exit 0 ;;
+    esac
+done

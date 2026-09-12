@@ -181,6 +181,7 @@ static const char *const binding_action_map[] = {
     [BIND_ACTION_PROMPT_PREV] = "prompt-prev",
     [BIND_ACTION_PROMPT_NEXT] = "prompt-next",
     [BIND_ACTION_AURA_COPY_BLOCK] = "aura-copy-block",
+    [BIND_ACTION_AURA_ASK] = "aura-ask",
     [BIND_ACTION_UNICODE_INPUT] = "unicode-input",
     [BIND_ACTION_QUIT] = "quit",
     [BIND_ACTION_REGEX_LAUNCH] = "regex-launch",
@@ -3389,6 +3390,7 @@ add_default_key_bindings(struct config *conf)
         {BIND_ACTION_PROMPT_PREV, m(XKB_MOD_NAME_CTRL "+" XKB_MOD_NAME_SHIFT), {{XKB_KEY_Up}}},
         {BIND_ACTION_PROMPT_NEXT, m(XKB_MOD_NAME_CTRL "+" XKB_MOD_NAME_SHIFT), {{XKB_KEY_Down}}},
         {BIND_ACTION_AURA_COPY_BLOCK, m(XKB_MOD_NAME_CTRL "+" XKB_MOD_NAME_SHIFT), {{XKB_KEY_y}}},
+        {BIND_ACTION_AURA_ASK, m(XKB_MOD_NAME_CTRL "+" XKB_MOD_NAME_SHIFT), {{XKB_KEY_a}}},
     };
 
     conf->bindings.key.count = ALEN(bindings);

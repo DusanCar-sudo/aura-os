@@ -35,6 +35,7 @@
 #include "selection.h"
 #include "spawn.h"
 #include "terminal.h"
+#include "aura-ask.h"
 #include "tokenize.h"
 #include "unicode-mode.h"
 #include "url-mode.h"
@@ -371,6 +372,10 @@ execute_binding(struct seat *seat, struct terminal *term,
 
     case BIND_ACTION_AURA_COPY_BLOCK:
         aura_blocks_copy_last(seat, term, serial);
+        return true;
+
+    case BIND_ACTION_AURA_ASK:
+        aura_ask(term);
         return true;
 
     case BIND_ACTION_PROMPT_PREV: {

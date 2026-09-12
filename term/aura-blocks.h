@@ -36,10 +36,27 @@ struct aura_row_mark {
 };
 
 /* Lives in struct terminal */
+struct aura_failed_block {
+    char *command;
+    char *output;   /* last AURA_FAILED_OUTPUT_MAX bytes */
+    char *cwd;
+    int exit_code;
+};
+
+#define AURA_FAILED_OUTPUT_MAX (16 * 1024)
+
 struct aura_term {
     bool cmd_running;
     struct timespec cmd_started;
     struct aura_status status;
+
+    /* OSC 133;B: where the typed command starts, until C */
+    bool cmd_line_valid;
+    int cmd_line_row;     /* absolute grid row */
+    int cmd_line_col;
+    char *cmd_text;       /* command of the running block */
+
+    struct aura_failed_block failed;  /* last block with exit != 0 */
 };
 
 static inline void
@@ -50,6 +67,7 @@ aura_row_mark_reset(struct aura_row_mark *m)
 
 /* OSC 133 hooks, called after foot's own handling of each mark */
 void aura_blocks_prompt(struct terminal *term);            /* A */
+void aura_blocks_cmd_line(struct terminal *term);          /* B */
 void aura_blocks_cmd_executed(struct terminal *term);      /* C */
 void aura_blocks_cmd_finished(struct terminal *term, const char *params); /* D */
 
@@ -58,6 +76,8 @@ void aura_blocks_cmd_finished(struct terminal *term, const char *params); /* D *
 void aura_blocks_row_pre_render(const struct terminal *term, struct row *row);
 void aura_blocks_row_post_render(const struct terminal *term, pixman_image_t *pix,
                                  const struct row *row, int row_no);
+
+void aura_blocks_free(struct terminal *term);
 
 /* Ctrl+Shift+Y: last finished block's output to the clipboard */
 bool aura_blocks_copy_last(struct seat *seat, struct terminal *term, uint32_t serial);

@@ -6,9 +6,11 @@
 #define LOG_MODULE "aura-blocks"
 #define LOG_ENABLE_DBG 0
 #include "log.h"
+#include "extract.h"
 #include "grid.h"
 #include "selection.h"
 #include "terminal.h"
+#include "xmalloc.h"
 
 /*
  * Row the user typed the command on. At OSC 133;C the shell has
@@ -48,8 +50,129 @@ aura_blocks_prompt(struct terminal *term)
 }
 
 void
+aura_blocks_cmd_line(struct terminal *term)
+{
+    struct grid *grid = term->grid;
+    term->aura.cmd_line_valid = true;
+    term->aura.cmd_line_row = grid_row_absolute(grid, grid->cursor.point.row);
+    term->aura.cmd_line_col = grid->cursor.point.col;
+}
+
+/* Text of grid rows [start_row:start_col, end_row:end_col), absolute rows */
+static char *
+grid_text(const struct terminal *term, int start_row, int start_col,
+          int end_row, int end_col)
+{
+    struct extraction_context *ctx = extract_begin(SELECTION_NONE, true);
+    if (ctx == NULL)
+        return NULL;
+
+    const struct grid *grid = term->grid;
+    for (int r = start_row, c0 = start_col; ; r = (r + 1) & (grid->num_rows - 1), c0 = 0) {
+        const struct row *row = grid->rows[r];
+        if (row == NULL)
+            break;
+        const int c1 = r == end_row ? end_col : term->cols;
+        for (int c = c0; c < c1 && c < term->cols; c++) {
+            if (!extract_one(term, row, &row->cells[c], c, ctx))
+                break;
+        }
+        if (r == end_row)
+            break;
+    }
+
+    char *text = NULL;
+    size_t len = 0;
+    if (!extract_finish(ctx, &text, &len))
+        return NULL;
+
+    /* Trim surrounding whitespace/newlines */
+    while (len > 0 && strchr(" \t\r\n", text[len - 1]) != NULL)
+        text[--len] = '\0';
+    size_t lead = strspn(text, " \t\r\n");
+    memmove(text, text + lead, len - lead + 1);
+    return text;
+}
+
+/* The command the user typed: from the B mark to where C was emitted */
+static void
+capture_command(struct terminal *term)
+{
+    free(term->aura.cmd_text);
+    term->aura.cmd_text = NULL;
+
+    if (!term->aura.cmd_line_valid)
+        return;
+    term->aura.cmd_line_valid = false;
+
+    const struct grid *grid = term->grid;
+    int end_row = grid_row_absolute(grid, grid->cursor.point.row);
+    int end_col = grid->cursor.point.col;
+    if (end_col == 0) {
+        end_row = (end_row - 1 + grid->num_rows) & (grid->num_rows - 1);
+        end_col = term->cols;
+    }
+
+    /* Rows may have been reflowed or recycled since B; only trust a
+     * short span */
+    const int span = (end_row - term->aura.cmd_line_row) & (grid->num_rows - 1);
+    if (span > 32)
+        return;
+
+    term->aura.cmd_text = grid_text(
+        term, term->aura.cmd_line_row, term->aura.cmd_line_col, end_row, end_col);
+}
+
+static void
+failed_block_free(struct aura_failed_block *f)
+{
+    free(f->command);
+    free(f->output);
+    free(f->cwd);
+    *f = (struct aura_failed_block){0};
+}
+
+static void
+remember_failed_block(struct terminal *term, int exit_code)
+{
+    struct aura_failed_block *f = &term->aura.failed;
+    failed_block_free(f);
+
+    f->command = xstrdup(term->aura.cmd_text != NULL ? term->aura.cmd_text : "");
+    f->cwd = term->cwd != NULL ? xstrdup(term->cwd) : NULL;
+    f->exit_code = exit_code;
+
+    char *out = NULL;
+    size_t len = 0;
+    if (term_command_output_to_text(term, &out, &len)) {
+        if (len > AURA_FAILED_OUTPUT_MAX) {
+            /* Keep the tail, starting on a UTF-8 character boundary */
+            size_t skip = len - AURA_FAILED_OUTPUT_MAX;
+            while (skip < len && ((unsigned char)out[skip] & 0xc0) == 0x80)
+                skip++;
+            memmove(out, out + skip, len - skip + 1);
+            len -= skip;
+        }
+        while (len > 0 && (out[len - 1] == '\n' || out[len - 1] == '\r'))
+            out[--len] = '\0';
+        f->output = out;
+    } else
+        f->output = xstrdup("");
+}
+
+void
+aura_blocks_free(struct terminal *term)
+{
+    free(term->aura.cmd_text);
+    term->aura.cmd_text = NULL;
+    failed_block_free(&term->aura.failed);
+}
+
+void
 aura_blocks_cmd_executed(struct terminal *term)
 {
+    capture_command(term);
+
     struct row *row = command_row(term);
     if (row == NULL)
         return;
@@ -74,6 +197,9 @@ aura_blocks_cmd_finished(struct terminal *term, const char *params)
 
     const uint32_t ms = elapsed_ms(term);
     aura_status_cmd_finished(term, ms);
+
+    if (exit_code != 0)
+        remember_failed_block(term, exit_code < 0 || exit_code > 255 ? 255 : (int)exit_code);
 
     /* Walk back to the row marked at C; it may have scrolled off, in
      * which case the block simply gets no label */

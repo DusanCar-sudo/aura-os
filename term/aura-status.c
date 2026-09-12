@@ -109,8 +109,8 @@ git_branch(const char *dir)
     }
 }
 
-static void
-json_str(FILE *out, const char *s)
+void
+aura_json_str(FILE *out, const char *s)
 {
     if (s == NULL) {
         fputs("null", out);
@@ -155,13 +155,13 @@ write_status(struct terminal *term)
         return;
 
     fprintf(out, "{\"pid\":%d,\"cwd\":", term->slave);
-    json_str(out, cwd);
+    aura_json_str(out, cwd);
     fputs(",\"branch\":", out);
-    json_str(out, st->branch);
+    aura_json_str(out, st->branch);
     fputs(",\"agent\":", out);
-    json_str(out, agent_names[st->agent]);
+    aura_json_str(out, agent_names[st->agent]);
     fputs(",\"state\":", out);
-    json_str(out, state_names[st->state]);
+    aura_json_str(out, state_names[st->state]);
     fprintf(out, ",\"since\":%lld}\n", (long long)st->since);
     fclose(out);
 
@@ -245,6 +245,7 @@ aura_status_destroy(struct terminal *term)
     free(st->branch);
     free(st->last_json);
     *st = (struct aura_status){0};
+    aura_blocks_free(term);
 }
 
 void

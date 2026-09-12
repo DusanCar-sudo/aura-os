@@ -321,6 +321,7 @@ executable(
   'aura-termd',
   'async.c', 'async.h',
   'aura-blocks-render.c',
+  'aura-ask.c', 'aura-ask.h',
   'aura-window.c', 'aura-window.h',
   'box-drawing.c', 'box-drawing.h',
   'config.c', 'config.h',
@@ -362,6 +363,14 @@ executable(
   version,
   dependencies: [tllist, utf8proc],
   link_with: [common, misc],
+  install: true)
+
+# Aura: Ask Aura bridge (Ctrl+Shift+A opens it in a split)
+executable(
+  'aura-term-ask',
+  'aura-term-ask.c',
+  # Not exercised by the PGO workload: no profile data is expected
+  c_args: cc.get_supported_arguments('-Wno-missing-profile'),
   install: true)
 
 install_data(

@@ -1639,6 +1639,7 @@ osc_dispatch(struct terminal *term)
 
         case 'B':
             LOG_DBG("FTCS_COMMAND_START");
+            aura_blocks_cmd_line(term);
             break;
 
         case 'C':

@@ -121,20 +121,20 @@
       "format-no-controller": "",
       "tooltip-format-connected": "{device_enumerate}",
       "tooltip-format-enumerate-connected": "{device_alias} {device_address}",
-      "on-click": "aura-term --app-id=aura-float -e bluetoothctl"
+      "on-click": "aura-os-settings bluetooth"
     },
     "network": {
       "format-wifi": "wifi {essid} {signalStrength}%",
       "format-ethernet": "eth {ifname}",
       "format-disconnected": "net off",
       "tooltip-format": "{ifname} {ipaddr}/{cidr} via {gwaddr}",
-      "on-click": "aura-term --app-id=aura-float -e nmtui"
+      "on-click": "aura-os-settings wifi"
     },
     "wireplumber": {
       "format": "vol {volume}%",
       "format-muted": "vol mute",
       "scroll-step": 5,
-      "on-click": "aura-term --app-id=aura-float -e wiremix",
+      "on-click": "aura-os-settings sound",
       "on-click-right": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"
     },
     "custom/clip": {

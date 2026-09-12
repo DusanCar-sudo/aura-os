@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Settings
+Comment=Aura OS settings (Super+,)
+Exec=aura-os-settings
+Terminal=false

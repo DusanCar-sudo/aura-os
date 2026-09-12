@@ -1,4 +1,4 @@
-# Task 004 — daily driver: runs everything, many windows, many screens
+# Task 004 — daily driver: all apps, multimedia, games, windows, screens
 
 Depends on 001b. AURA.md "Daily driver": Aura OS must run everything
 Dusan runs today on Ubuntu. The RAM budget is for the bare desktop;
@@ -19,6 +19,19 @@ never drop compatibility to meet it.
   with Alt+Shift (Super+Space is reserved for voice, task 002).
 - Clipboard (wl-clipboard + cliphist), screenshots (grim + slurp →
   Print key), Bluetooth and Wi-Fi via TUIs (bluetuith, impala/nmtui).
+- Multimedia: full codecs (ffmpeg, gst-plugins good/bad/ugly/libav),
+  mpv + VLC, imv for images, Spotify, Kdenlive, DaVinci Resolve
+  (hardware-only test), GIMP, Krita, Inkscape, Audacity, EasyEffects.
+  Volume/devices via a TUI mixer (wiremix or pulsemixer) + media keys
+  (playerctl, volume, brightness) working everywhere.
+- Games: multilib + 32-bit Vulkan/mesa, Steam with Proton, Heroic and
+  Lutris, gamemode, MangoHud, controllers (Xbox/PS via Bluetooth and
+  USB). Fullscreen games: sway `allow_tearing`, idle inhibit, no
+  compositor overhead. Test one Proton game on the laptop.
+- Every app format: pacman, AUR, flatpak, AppImage (fuse2), Wine +
+  Bottles for Windows apps, Waydroid for Android apps. Anything Dusan
+  now runs as a snap on Ubuntu gets a flatpak/AUR equivalent — list
+  the mapping (`snap list` on the host is read-only, allowed).
 - Install all of it through `aura-os-install`; add `aura-os-app
   <name>` for things needing more than a package (flags, groups).
 

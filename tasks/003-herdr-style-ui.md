@@ -13,12 +13,12 @@ flat text panes, no decoration. Screenshot: tasks/ref/herdr.png.
 - Palette lives in themes/herdr/ so other themes can swap it.
 
 ## Layout behaviour
-- Tiling with explicit split direction: Hyprland dwindle +
-  `layoutmsg preselect l|r|u|d`. Keys:
+- Tiling with explicit split direction: sway native splits:
+  `splith` / `splitv` then focus the new side. Keys:
   Super+Alt+←→↑↓ = next window opens left/right/up/down of focused.
 - Resize any direction: Super+Ctrl+←→↑↓ (repeatable) and Super+drag.
 - Focus: Super+←→↑↓. Move pane: Super+Shift+←→↑↓.
-- Tabs inside a pane (optional): Hyprland groups, Super+T toggles.
+- Tabs inside a pane: sway `layout tabbed`, Super+T toggles tabbed/split.
 
 ## Top bar — desktops as tabs
 - Waybar across the top, thin, only: `1 2 3 +`.
@@ -32,7 +32,7 @@ flat text panes, no decoration. Screenshot: tasks/ref/herdr.png.
   focused terminal.
   `agents`: running agents (aura, claude, codex) with status
   ✓ done / ● working / ! needs input, click to focus that pane.
-- Data comes from `bin/aura-os-status --json` (Aura writes it; push updates via the Hyprland event socket, no
+- Data comes from `bin/aura-os-status --json` (Aura writes it; push updates via `swaymsg -t subscribe` events, no
   polling). Super+B hides/shows the sidebar.
 
 ## Done when

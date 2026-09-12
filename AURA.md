@@ -1,7 +1,7 @@
 # Aura Standing Rules
 
 ## What this repo is
-Aura OS: your own Omarchy-style system on Arch + Hyprland. You
+Aura OS: your own Omarchy-style system on Arch + sway. You
 build it and you operate it. Omarchy is inspiration, not a source
 to copy; write our own scripts and cite ideas in commit messages.
 

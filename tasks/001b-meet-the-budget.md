@@ -1,27 +1,36 @@
-# Task 001b — meet the speed and RAM budget
+# Task 001b — move to sway, meet the speed and RAM budget
 
-AURA.md gained a "Speed and RAM budget" section after you started 001.
-Re-read AURA.md now. Your 001 desktop idles at 736 MB; budget is 350.
+Two changes landed after you started 001. Re-read AURA.md now.
+1. Dusan chose **sway** over Hyprland: native left/right/up/down
+   splits, tabbed containers and title bars fit the herdr look
+   (task 003), at about half the RAM.
+2. AURA.md has a "Speed and RAM budget": idle under 350 MB.
+   Your 001 desktop idles at 736 MB.
 
 Measured RSS after 001: Hyprland 248, kitty 174, Xorg 84 (SDDM),
 Xwayland 80, waybar 47, polkit-kde 39 (MB).
 
 ## Do
-- kitty → foot (update aura-os-prompt: it checks KITTY_WINDOW_ID).
-- SDDM → greetd + tuigreet, with autologin kept for the VM only.
-  Remove the SDDM config file and its install step.
-- polkit-kde → the lightest agent that works, or start one on demand;
+- Hyprland → sway. Replace install/03-hyprland.sh with 03-sway.sh
+  and config/hypr/ with config/sway/config (+ config.d/). Same keys:
+  Super+Return terminal, Super+D fuzzel, Super+A Aura prompt.
+  Waybar uses the sway/workspaces module.
+- kitty → foot (aura-os-prompt checks KITTY_WINDOW_ID; fix it).
+- SDDM → greetd + tuigreet, autologin into sway for the VM only.
+  Remove config/sddm/ and its install step.
+- polkit-kde → the lightest agent that works, or on demand;
   measure and justify.
-- Xwayland off by default (`xwayland { enabled = false }`) unless
-  something in the core needs it.
+- `xwayland disable` unless something in the core needs it.
 - zram swap (zram-generator).
-- Add `bin/aura-os-bench`: prints idle RAM (after 30 s settle) and
-  top 8 processes by RSS. Run it before and after, put both in your
+- Uninstall what you replaced (hyprland, kitty, sddm, polkit-kde)
+  through a snapshot-first aura-os-* command.
+- Add `bin/aura-os-bench`: idle RAM after a 30 s settle, plus the
+  top 8 processes by RSS. Run it before and after; both go in the
   report.
 
 ## Rules
-- Do this from the `base-clean` snapshot in a fresh run of install.sh
-  too, not only on top of the current VM state.
+- Also prove it from scratch: roll the VM back to snapper snapshot
+  1 "base-clean" and run install.sh end to end.
 - Report host vs guest for every file you wrote.
-- Note: the VM draws with llvmpipe (software), which inflates
-  Hyprland's RSS. Report it, don't chase it.
+- The VM draws with llvmpipe (software), which inflates the
+  compositor's RSS. Report it, don't chase it.

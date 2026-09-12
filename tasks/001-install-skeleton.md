@@ -4,7 +4,8 @@ You are building Aura OS for yourself. Read README.md and AURA.md first.
 
 ## Goal
 On a fresh Arch install inside the VM, `./install.sh` turns it into a
-minimal Aura OS desktop: Hyprland + Waybar + a launcher + a terminal,
+minimal Aura OS desktop: Hyprland + Waybar + fuzzel launcher + foot terminal (not kitty),
+light greeter (greetd + tuigreet replaces SDDM), zram,
 and a Super+A keybinding that opens an Aura prompt.
 
 ## Deliver

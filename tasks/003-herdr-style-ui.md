@@ -27,13 +27,13 @@ flat text panes, no decoration. Screenshot: tasks/ref/herdr.png.
 - Super+1..9 switch, Super+W closes an empty workspace's tab.
 
 ## Left sidebar — spaces / agents
-- Narrow Waybar (or eww) on the left, like herdr's panel:
+- Narrow Waybar on the left (not eww: too heavy), like herdr's panel:
   `spaces`: each workspace → project folder + git branch of its
   focused terminal.
   `agents`: running agents (aura, claude, codex) with status
   ✓ done / ● working / ! needs input, click to focus that pane.
-- Data comes from `bin/aura-os-status --json` (Aura writes it; poll
-  ≤1s). Super+B hides/shows the sidebar.
+- Data comes from `bin/aura-os-status --json` (Aura writes it; push updates via the Hyprland event socket, no
+  polling). Super+B hides/shows the sidebar.
 
 ## Done when
 In the VM: open 4 terminals in a 2x2 herdr-like grid using only the

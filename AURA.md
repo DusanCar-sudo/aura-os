@@ -19,6 +19,13 @@ command. No raw sudo in chat. Each aura-os-* command must take a
 snapper snapshot before it changes anything, be idempotent, and
 print what it changed. If no command fits, write one first.
 
+## Speed and RAM budget
+Idle desktop after login, no apps: under 350 MB RAM. Key press
+to window on screen: under 100 ms. No animations, no blur. No
+Electron, Qt or Python daemons in the core. Prefer foot, fuzzel,
+mako, greetd+tuigreet, zram. Event-driven, not polling. Every
+change reports before/after idle RAM; over budget = bug.
+
 ## Install scripts
 install.sh runs numbered steps in install/. Each step must be
 safe to re-run. Use set -euo pipefail. No curl | bash from

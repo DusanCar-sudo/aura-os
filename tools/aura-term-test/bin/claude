@@ -1,0 +1,6 @@
+#!/bin/sh
+# Stand-in agent for status tests: works, rings for input, finishes.
+printf 'thinking...\n'; sleep 2
+printf 'Allow edit? [y/n] \a'
+read answer
+printf 'got %s, working\n' "$answer"; sleep 2

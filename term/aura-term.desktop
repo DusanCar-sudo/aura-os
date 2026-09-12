@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Exec=aura-term
+Icon=utilities-terminal
+Terminal=false
+Categories=System;TerminalEmulator;
+Keywords=shell;prompt;command;commandline;
+
+Name=Aura Term
+GenericName=Terminal
+Comment=Aura OS terminal (foot fork, server mode)

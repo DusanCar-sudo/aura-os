@@ -7,7 +7,7 @@
 #   aura-os-wallpaper solid         back to the theme's solid color
 #   aura-os-wallpaper current
 #
-# Images are searched in ~/Pictures/Wallpapers, ~/Pictures and
+# Images are searched in ~/Pictures/Wallpapers, ~/Pictures, ~/Downloads and
 # /usr/share/aura-os/wallpapers. The choice lives in
 # ~/.config/sway/config.d/60-wallpaper.conf (after the theme's 50-,
 # so it wins) and applies live. An image costs ~8 MB RAM per 1080p
@@ -41,7 +41,7 @@ cmd_solid() {
 
 cmd_pick() {
     local list choice
-    list="$(find "$HOME/Pictures/Wallpapers" "$HOME/Pictures" /usr/share/aura-os/wallpapers \
+    list="$(find "$HOME/Pictures/Wallpapers" "$HOME/Pictures" "$HOME/Downloads" /usr/share/aura-os/wallpapers \
               -maxdepth 2 -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) \
               2>/dev/null | sort -u | sed "s|^$HOME|~|")"
     choice="$(printf 'solid (theme color)\n%s\n' "$list" | sed '/^$/d' \

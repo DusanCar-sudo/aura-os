@@ -5,8 +5,10 @@ uses for agents). The whole desktop must look and behave like herdr —
 flat text panes, no decoration. Screenshot: tasks/ref/herdr.png.
 
 ## Look — "no graphics"
+- Square 90° corners everywhere — windows, bars, tabs, launcher,
+  notifications. Plain sway, never SwayFX (it adds rounding).
 - Solid dark background, no wallpaper image. No blur, shadows,
-  rounding, animations or gaps larger than 2px.
+  animations or gaps larger than 2px.
 - 1px borders: active = purple (#8b7cf6-ish), inactive = dim gray.
 - One monospace font everywhere (JetBrains Mono / Iosevka), incl. bars.
 - Pane title drawn on the top border, left-aligned, like `─ claude ─`.

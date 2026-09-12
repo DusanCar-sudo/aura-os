@@ -1,0 +1,18 @@
+Aura OS
+Copyright (c) 2026 Dusan Milosavljevic. All rights reserved.
+
+This repository and the Aura OS software in it — install scripts,
+aura-os-* commands, configuration, themes, the installer, and the
+Aura-specific parts of aura-term — are proprietary. No license is
+granted to use, copy, modify or distribute them, except as expressly
+agreed in writing with the copyright holder.
+
+Aura OS is distributed to users only as a downloadable ISO image.
+
+Third-party software is NOT covered by this notice and remains under
+its own license; see THIRD-PARTY-NOTICES.md. In particular:
+  - term/ is a fork of foot (https://codeberg.org/dnkl/foot), MIT
+    licensed; its original copyright and license are kept in
+    term/LICENSE and must ship with every aura-term build.
+  - The ISO bundles Arch Linux packages under their own licenses
+    (GPL, LGPL, MIT, MPL, ...).

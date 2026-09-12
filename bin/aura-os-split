@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# aura-os-split — the next window opens in a chosen direction of the
+# focused one (task 003: Super+Alt+arrows).
+#
+#   aura-os-split left|right|up|down [command...]     (default: foot)
+#
+# sway can only append: for right/down it is enough to force the split
+# orientation and start the command. left/up need one step more — when
+# the new window appears (sway places it after the focused one), move
+# it before it. We wait for the window's focus event on sway's event
+# stream (swaymsg -t subscribe, timeout, no polling), then move.
+set -euo pipefail
+
+dir="${1:-}"
+shift || true
+case $dir in
+    left|right|up|down) ;;
+    *) echo "usage: aura-os-split left|right|up|down [command...]" >&2; exit 2 ;;
+esac
+if [[ $# -gt 0 ]]; then cmd=("$@"); else cmd=(foot); fi
+
+case $dir in
+    left|right) swaymsg split horizontal >/dev/null ;;
+    up|down)    swaymsg split vertical >/dev/null ;;
+esac
+
+if [[ $dir == right || $dir == down ]]; then
+    exec "${cmd[@]}"
+fi
+
+# left/up: listen from before the spawn so a fast window cannot slip
+# past us; move it once it has focus. 15 s timeout — a failed spawn
+# must not hang the keybinding.
+exec 3< <(timeout 15 swaymsg -t subscribe -m '["window"]' 2>/dev/null)
+"${cmd[@]}" &
+got=0
+while IFS= read -r -u 3 -t 15 event; do
+    case $event in
+        *'"change": "focus"'*|*'"change":"focus"'*) got=1; break ;;
+    esac
+done
+exec 3<&-
+
+if (( got )); then
+    swaymsg move "$dir" >/dev/null
+else
+    echo "aura-os-split: no focus event in time; window stays where sway put it" >&2
+fi

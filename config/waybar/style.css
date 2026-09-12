@@ -1,40 +1,72 @@
-/* Aura OS — Waybar. Dark bar, violet accent. */
+/* Aura OS — waybar, herdr theme (task 003).
+ * Flat, dark, square. No blur/shadow/rounding. One font.
+ * Two bars: window#waybar.top (tabs) and window#waybar.left (sidebar). */
 
 * {
-    font-family: "DejaVu Sans", sans-serif;
+    font-family: "JetBrainsMono Nerd Font", monospace;
     font-size: 13px;
     min-height: 0;
+    border-radius: 0;
 }
 
 window#waybar {
-    background: rgba(17, 17, 27, 0.85);
-    color: #cdd6f4;
-    border-bottom: 1px solid rgba(167, 139, 250, 0.35);
-}
-
-#workspaces button {
-    padding: 0 8px;
-    color: #8b93b8;
-    background: transparent;
+    background: #0e0e14;
+    color: #c8cad8;
     border: none;
-    border-radius: 6px;
 }
 
-#workspaces button.active {
-    color: #11111b;
-    background: #a78bfa;
-}
+window#waybar.top  { border-bottom: 1px solid #2a2a3a; }
+window#waybar.left { border-right: 1px solid #2a2a3a; }
 
-#workspaces button:hover {
-    background: rgba(167, 139, 250, 0.25);
-    color: #ffffff;
-}
+/* ── top bar: workspace tabs ─────────────────────────────────── */
 
-#window {
-    color: #8b93b8;
-}
-
-#clock {
-    color: #a78bfa;
+#custom-tab1, #custom-tab2, #custom-tab3, #custom-tab4,
+#custom-tab5, #custom-tab6, #custom-tab7, #custom-tab8,
+#custom-tab9 {
     padding: 0 10px;
+    margin: 0;
+    color: #5c5f77;
+    background: transparent;
 }
+
+window#waybar.top .tab.focused {
+    color: #0e0e14;
+    background: #8b7cf6;
+}
+
+window#waybar.top .tab:hover { color: #c8cad8; }
+window#waybar.top .tab.focused:hover { color: #0e0e14; }
+
+/* per-tab colors (aura-os-tab color): the tab only, never the screen */
+window#waybar.top .c-purple { color: #8b7cf6; }
+window#waybar.top .c-blue   { color: #6ea8fe; }
+window#waybar.top .c-cyan   { color: #5de4c7; }
+window#waybar.top .c-green  { color: #83e6a0; }
+window#waybar.top .c-yellow { color: #f9e2af; }
+window#waybar.top .c-orange { color: #f5a97f; }
+window#waybar.top .c-red    { color: #f38ba8; }
+window#waybar.top .c-gray   { color: #7f849c; }
+
+/* focused + colored: fill with the tab's color */
+window#waybar.top .tab.focused.c-purple { background: #8b7cf6; }
+window#waybar.top .tab.focused.c-blue   { background: #6ea8fe; }
+window#waybar.top .tab.focused.c-cyan   { background: #5de4c7; }
+window#waybar.top .tab.focused.c-green  { background: #83e6a0; }
+window#waybar.top .tab.focused.c-yellow { background: #f9e2af; }
+window#waybar.top .tab.focused.c-orange { background: #f5a97f; }
+window#waybar.top .tab.focused.c-red    { background: #f38ba8; }
+window#waybar.top .tab.focused.c-gray   { background: #7f849c; }
+
+#custom-tabplus { padding: 0 10px; color: #5c5f77; }
+#custom-tabplus:hover { color: #c8cad8; }
+
+/* ── top bar: window title + clock ───────────────────────────── */
+
+window#waybar.top #window { color: #5c5f77; padding: 0 12px; }
+window#waybar.top #clock  { color: #8b7cf6; padding: 0 12px; }
+
+/* ── left sidebar ────────────────────────────────────────────── */
+
+window#waybar.left #custom-spaces { padding: 8px 10px; }
+window#waybar.left #custom-agents { padding: 8px 10px; }
+window#waybar.left #custom-agents:hover { background: #14141e; }

@@ -1,0 +1,169 @@
+#!/usr/bin/env bash
+# aura-os-status — the left sidebar's data and the sway event watcher
+# (task 003).
+#
+#   aura-os-status watch         follow sway's event stream: refresh the
+#                                bars, keep sway tab names in sync
+#   aura-os-status poke          refresh the bars now
+#   aura-os-status spaces        waybar JSON: workspace → folder, branch
+#   aura-os-status agents        waybar JSON: claude / codex / aura rows
+#   aura-os-status focus-agent   focus the pane the first agent runs in
+#
+# Shell + jq only, no python (RAM/speed budget, AURA.md). Updates are
+# event-driven: the watcher blocks on `swaymsg -t subscribe`; nothing
+# polls and no module uses an interval.
+set -euo pipefail
+
+cfg_dir="${XDG_CONFIG_HOME:-$HOME/.config}/aura-os"
+tabs_file="$cfg_dir/tabs.json"
+
+rt_dir="${XDG_RUNTIME_DIR:-/tmp}/aura-os"
+ws_cache="$rt_dir/workspaces.json"
+panes_dir="$rt_dir/panes"          # written by aura-term, docs/pane-status.md
+
+# Refresh the workspace cache (one swaymsg per event instead of one per
+# tab label), then tell waybar to re-run its labels.
+poke() {
+    mkdir -p "$rt_dir"
+    swaymsg -t get_workspaces > "$ws_cache.tmp" 2>/dev/null && mv "$ws_cache.tmp" "$ws_cache"
+    pkill -RTMIN+8 -x waybar 2>/dev/null || true
+}
+
+# Keep sway's workspace names in step with tabs.json: switching to a
+# renamed tab (Super+2 → "2") picks up its saved name ("2 api").
+sync_names() {
+    [[ -f $tabs_file ]] || return 0
+    local num name want
+    num="$(swaymsg -t get_workspaces | jq -r '.[] | select(.focused) | .num' | head -n1)" || return 0
+    [[ -n ${num:-} && $num -gt 0 ]] || return 0
+    name="$(jq -r --arg n "$num" '.[$n].name // empty' "$tabs_file")"
+    [[ -n $name ]] || return 0
+    want="$num $name"
+    if ! swaymsg -t get_workspaces | jq -e --arg w "$want" 'any(.[]; .focused and .name == $w)' >/dev/null 2>&1; then
+        swaymsg rename workspace to "$want" >/dev/null 2>&1 || true
+    fi
+}
+
+cmd_watch() {
+    while IFS= read -r _event; do
+        sync_names
+        poke
+    done < <(swaymsg -t subscribe -m '["workspace", "window"]' 2>/dev/null)
+}
+
+cmd_spaces() {
+    local text="" num name pid focused cwd branch marker line
+    while IFS=$'\t' read -r num name pid focused; do
+        [[ -n ${num:-} && $num -gt 0 ]] || continue
+        cwd=""
+        branch=""
+        if [[ -n ${pid:-} && $pid != 0 && -d /proc/$pid ]]; then
+            cwd="$(readlink "/proc/$pid/cwd" 2>/dev/null || true)"
+        fi
+        if [[ -n $cwd ]]; then
+            branch="$(git -C "$cwd" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+            cwd="${cwd/#$HOME/~}"
+        fi
+        marker="  "
+        [[ $focused == true ]] && marker="▸ "
+        line="<span color='#8b7cf6'>${marker}$num</span>"
+        if [[ -n $name && $name != "$num" ]]; then
+            line+=" <span color='#c8cad8'>${name#* }</span>"
+        fi
+        [[ -n $cwd ]] && line+=" <span color='#5c5f77'>$cwd</span>"
+        [[ -n $branch ]] && line+=" <span color='#8b7cf6'>$branch</span>"
+        text+="$line"$'\n'
+    done < <(swaymsg -t get_tree | jq -r '
+        .nodes[].nodes[]
+        | select(.type == "workspace" and .num > 0)
+        | [ .num, .name,
+            (([.. | objects | select(.focused and .pid != null) | .pid] | first) // 0),
+            (.focused | tostring) ]
+        | @tsv' 2>/dev/null)
+    [[ -n $text ]] || text="<span color='#5c5f77'>no workspaces</span>"
+    jq -cn --arg text "<span color='#5c5f77'>spaces</span>"$'\n'"$text" '{text:$text}'
+}
+
+cmd_agents() {
+    # Source of truth: aura-term's pane files (agent + working/done/input,
+    # per window). Agents in other terminals only show as "running" ●,
+    # since a process state can't tell working from waiting.
+    local text="" name pid
+    if compgen -G "$panes_dir/*.json" >/dev/null; then
+        text="$(jq -rs '
+            map(select(.agent != null or .state == "done"))
+            | map({input:  "<span color=\"#f38ba8\">!</span>",
+                   working:"<span color=\"#f9e2af\">\u25cf</span>",
+                   done:   "<span color=\"#83e6a0\">\u2713</span>",
+                   idle:   "<span color=\"#5c5f77\">\u00b7</span>"}[.state]
+                   + " <span color=\"#c8cad8\">" + (.agent // "job")
+                   + "</span> <span color=\"#5c5f77\">"
+                   + ((.cwd // "") | sub("^" + env.HOME; "~")) + "</span>")
+            | join("\n")' "$panes_dir"/*.json 2>/dev/null || true)"
+    fi
+    for name in claude codex aura; do
+        while IFS= read -r pid; do
+            [[ -n $pid ]] || continue
+            [[ $(term_of "$pid") == aura-term* ]] && continue   # listed via pane files
+            text+="${text:+$'\n'}<span color='#f9e2af'>●</span> <span color='#c8cad8'>$name</span>"
+        done < <(pgrep -x "$name" 2>/dev/null || true)
+    done
+    [[ -n $text ]] || text="<span color='#5c5f77'>no agents</span>"
+    jq -cn --arg text "<span color='#5c5f77'>agents</span>"$'\n'"$text" '{text:$text}'
+}
+
+term_of() {   # term_of <pid> → comm of the terminal it runs in (foot, aura-termd, ...)
+    local t; t="$(foot_ancestor "$1" || true)"
+    [[ -n $t ]] && cat "/proc/$t/comm" 2>/dev/null || true
+}
+
+foot_ancestor() {   # foot_ancestor <pid> → the terminal pid it runs in, if any
+    local p="$1" comm ppid
+    while [[ $p -gt 1 ]]; do
+        comm="$(cat "/proc/$p/comm" 2>/dev/null || true)"
+        case $comm in
+            foot|footclient|aura-term|aura-termd) printf '%s\n' "$p"; return 0 ;;
+        esac
+        ppid="$(awk '{print $4}' "/proc/$p/stat" 2>/dev/null || true)"
+        [[ -n ${ppid:-} && $ppid =~ ^[0-9]+$ && $ppid -ne $p ]] || return 1
+        p="$ppid"
+    done
+    return 1
+}
+
+cmd_focus_agent() {
+    local name pid foot
+    for name in claude codex aura; do
+        pid="$(pgrep -x "$name" 2>/dev/null | head -n1 || true)"
+        [[ -n $pid ]] || continue
+        foot="$(foot_ancestor "$pid" || true)"
+        [[ -n $foot ]] || continue
+        if swaymsg "[pid=$foot]" focus >/dev/null 2>&1; then
+            echo "focused $name (foot pid $foot)"
+            return 0
+        fi
+    done
+    echo "aura-os-status: no agent pane found" >&2
+    exit 1
+}
+
+usage() {
+    cat >&2 <<'USAGE'
+usage: aura-os-status <command>
+  watch         follow sway events: refresh both bars, sync tab names
+  poke          refresh the bars now
+  spaces        waybar JSON for the sidebar: workspaces, folder, branch
+  agents        waybar JSON for the sidebar: claude / codex / aura
+  focus-agent   focus the pane the first agent runs in
+USAGE
+    exit 2
+}
+
+case "${1:-}" in
+    watch)       cmd_watch ;;
+    poke)        poke ;;
+    spaces)      cmd_spaces ;;
+    agents)      cmd_agents ;;
+    focus-agent) cmd_focus_agent ;;
+    *)           usage ;;
+esac

@@ -1,0 +1,216 @@
+#!/usr/bin/env bash
+# aura-os-tab — the workspace tabs of the top bar (task 003).
+#
+#   aura-os-tab label <n|plus>     waybar JSON for a tab (run by waybar)
+#   aura-os-tab new                create + switch to the next free tab
+#   aura-os-tab goto <n>           switch to tab n
+#   aura-os-tab close              close the focused tab when it is empty
+#   aura-os-tab rename [n] [name]  rename; asks with fuzzel when unnamed
+#   aura-os-tab color <n> <color>  set a tab color (8 theme colors)
+#   aura-os-tab color-pick [n]     pick the color with fuzzel
+#   aura-os-tab sidebar toggle     hide/show the left sidebar
+#
+# State: ~/.config/aura-os/tabs.json — names and colors survive reboots.
+# No polling: every change pokes waybar (RTMIN+8) so the labels re-run.
+# Shell + jq only, no python (RAM/speed budget, AURA.md).
+set -euo pipefail
+
+cfg_dir="${XDG_CONFIG_HOME:-$HOME/.config}/aura-os"
+tabs_file="$cfg_dir/tabs.json"
+colors="purple blue cyan green yellow orange red gray"
+
+init_state() {
+    mkdir -p "$cfg_dir"
+    [[ -f $tabs_file ]] || printf '{}\n' > "$tabs_file"
+}
+
+poke() { pkill -RTMIN+8 -x waybar 2>/dev/null || true; }
+
+# Workspace list: the watcher's cache when present, else ask sway.
+ws_cache="${XDG_RUNTIME_DIR:-/tmp}/aura-os/workspaces.json"
+ws_json() { cat "$ws_cache" 2>/dev/null || swaymsg -t get_workspaces; }
+
+focused_num() {
+    swaymsg -t get_workspaces | jq -r '.[] | select(.focused) | .num' | head -n1
+}
+
+is_focused() {
+    swaymsg -t get_workspaces \
+        | jq -e --argjson n "$1" 'any(.[]; .num == $n and .focused)' >/dev/null 2>&1
+}
+
+set_name() {   # set_name <n> <name>
+    local tmp; tmp="$(mktemp "$tabs_file.XXXXXX")"
+    jq --arg n "$1" --arg v "$2" '.[$n].name = $v' "$tabs_file" > "$tmp"
+    mv "$tmp" "$tabs_file"
+}
+
+set_color() {  # set_color <n> <color>
+    local tmp; tmp="$(mktemp "$tabs_file.XXXXXX")"
+    jq --arg n "$1" --arg v "$2" '.[$n].color = $v' "$tabs_file" > "$tmp"
+    mv "$tmp" "$tabs_file"
+}
+
+clear_tab() {  # clear_tab <n>
+    local tmp; tmp="$(mktemp "$tabs_file.XXXXXX")"
+    jq --arg n "$1" 'del(.[$n])' "$tabs_file" > "$tmp"
+    mv "$tmp" "$tabs_file"
+}
+
+cmd_label() {
+    local n="${1:?usage: aura-os-tab label <n|plus>}"
+    if [[ $n == plus ]]; then
+        printf '{"text":"+"}\n'
+        return 0
+    fi
+    [[ $n =~ ^[0-9]+$ ]] || { echo "usage: aura-os-tab label <n|plus>" >&2; exit 2; }
+    # One jq over the workspace list cached by `aura-os-status watch`
+    # (falls back to asking sway). Tabs 1-5 always show; 6+ only while
+    # that workspace exists — empty text makes waybar hide the module.
+    jq -cn --argjson n "$n" --argjson ws "$(ws_json)" \
+        --argjson t "$(cat "$tabs_file" 2>/dev/null || echo '{}')" '
+        ($t[$n | tostring] // {}) as $tab
+        | ($ws | map(select(.num == $n))) as $mine
+        | if $n > 5 and ($mine | length) == 0 then {text: ""}
+          else {text: ([$n | tostring, ($tab.name // empty)] | join(" ")),
+                class: (["tab"]
+                        + (if any($mine[]; .focused) then ["focused"] else [] end)
+                        + (if $tab.color then ["c-" + $tab.color] else [] end))}
+          end'
+}
+
+cmd_new() {
+    local nums free="" n
+    nums="$(swaymsg -t get_workspaces | jq -r '.[].num')"
+    for n in 6 7 8 9; do
+        if ! grep -qx "$n" <<<"$nums"; then free="$n"; break; fi
+    done
+    if [[ -z $free ]]; then
+        echo "aura-os-tab: no free tab slot (tabs 6-9 are all in use)" >&2
+        notify-send "Aura OS" "no free tab slot" 2>/dev/null || true
+        exit 1
+    fi
+    swaymsg workspace number "$free" >/dev/null
+    poke
+    echo "tab $free"
+}
+
+cmd_goto() {
+    local n="${1:?usage: aura-os-tab goto <n>}"
+    [[ $n =~ ^[0-9]+$ ]] || { echo "usage: aura-os-tab goto <n>" >&2; exit 2; }
+    swaymsg workspace number "$n" >/dev/null
+    poke
+}
+
+cmd_close() {
+    local n wins
+    n="$(focused_num)"
+    wins="$(swaymsg -t get_tree | jq --argjson n "$n" '
+        [ .. | objects | select(.type == "workspace" and .num == $n)
+          | ((.nodes // []) + (.floating_nodes // [])) ] | flatten | length')"
+    if [[ ${wins:-0} -gt 0 ]]; then
+        echo "aura-os-tab: tab $n has windows — close them with Super+Q first" >&2
+        notify-send "Aura OS" "tab $n has windows" 2>/dev/null || true
+        exit 1
+    fi
+    clear_tab "$n"
+    # Tabs 6-9 die with sway once empty; 1-5 stay — their tab just goes
+    # back to a plain number.
+    if [[ $n -gt 5 ]]; then
+        swaymsg workspace back_and_forth >/dev/null
+    fi
+    poke
+    echo "tab $n closed"
+}
+
+cmd_rename() {
+    local n="" name=""
+    if [[ ${1:-} =~ ^[0-9]+$ ]]; then
+        n="$1"; shift; name="$*"
+    else
+        name="$*"
+    fi
+    [[ -n $n ]] || n="$(focused_num)"
+    if [[ -z $name ]]; then
+        name="$(fuzzel --dmenu --prompt="rename tab $n: " </dev/null || true)"
+    fi
+    name="$(printf '%s' "$name" | tr -d '"\\' | tr '\n\r' '  ' \
+        | sed -e 's/^ *//' -e 's/ *$//' | cut -c1-24)"
+    if [[ -z $name ]]; then
+        echo "aura-os-tab: empty name — nothing changed" >&2
+        exit 1
+    fi
+    set_name "$n" "$name"
+    # sway only knows existing workspaces: rename when it is the focused
+    # one; otherwise the watcher applies the name when it is next visited.
+    if [[ $n == "$(focused_num)" ]]; then
+        swaymsg rename workspace to "$n $name" >/dev/null
+    fi
+    poke
+    echo "tab $n renamed to: $name"
+}
+
+cmd_color() {
+    local n="${1:-}" color="${2:-}"
+    [[ -n $n ]] || n="$(focused_num)"
+    if [[ -z $color ]]; then
+        echo "usage: aura-os-tab color <n> <color>" >&2
+        echo "colors: $colors" >&2
+        exit 2
+    fi
+    case " $colors " in
+        *" $color "*) ;;
+        *) echo "aura-os-tab: unknown color '$color' (use: $colors)" >&2; exit 1 ;;
+    esac
+    set_color "$n" "$color"
+    poke
+    echo "tab $n color: $color"
+}
+
+cmd_color_pick() {
+    local n="${1:-}"
+    [[ -n $n ]] || n="$(focused_num)"
+    local color
+    color="$(printf '%s\n' $colors | fuzzel --dmenu --prompt="color tab $n: " || true)"
+    [[ -z $color ]] && exit 0
+    cmd_color "$n" "$color"
+}
+
+cmd_sidebar() {
+    if [[ "${1:-}" != toggle ]]; then
+        echo "usage: aura-os-tab sidebar toggle" >&2
+        exit 2
+    fi
+    # waybar's left bar toggles on SIGUSR1 (on-sigusr1 in its config);
+    # the top bar is set to noop.
+    pkill -SIGUSR1 -x waybar 2>/dev/null || true
+    echo "sidebar toggled"
+}
+
+usage() {
+    cat >&2 <<'USAGE'
+usage: aura-os-tab <command>
+  label <n|plus>     waybar JSON for a tab
+  new                create + switch to the next free tab (6-9)
+  goto <n>           switch to tab n
+  close              close the focused tab when it is empty
+  rename [n] [name]  rename a tab (fuzzel prompt when name is missing)
+  color <n> <color>  set a tab color (purple blue cyan green yellow orange red gray)
+  color-pick [n]     pick the color with fuzzel
+  sidebar toggle     hide/show the left sidebar
+USAGE
+    exit 2
+}
+
+init_state
+case "${1:-}" in
+    label)      cmd_label "${2:-}" ;;
+    new)        cmd_new ;;
+    goto)       cmd_goto "${2:-}" ;;
+    close)      cmd_close ;;
+    rename)     shift; cmd_rename "$@" ;;
+    color)      cmd_color "${2:-}" "${3:-}" ;;
+    color-pick) cmd_color_pick "${2:-}" ;;
+    sidebar)    cmd_sidebar "${2:-}" ;;
+    *)          usage ;;
+esac

@@ -69,3 +69,35 @@ Verified by Claude at 22:58 (001b reported done)
   never deployed — "done" was not verified on what's committed.
   Tag: aura — "done means tested" (AURA.md) not applied to the last
   edits. The fresh-from-base-clean run would have caught it.
+
+## Task 003 — herdr desktop (2026-09-12, in progress)
+
+Stumbles (found at 23:50, VM boot shows swaynag "errors in config")
+- config.d/10-binds.conf: `bindsym --repeat` — no such flag in sway
+  (4 resize binds dead). `titlebar_padding 0 4` rejected (Invalid size).
+- A multi-line Python script pasted inline into the sway config
+  (lines 65-69) — sway config has no multi-line exec; also breaks the
+  "no Python in the core" budget rule.
+- Never ran `sway -C` (config check) before deploying: a headless
+  check (`WLR_BACKENDS=headless WLR_RENDERER=pixman sway -C`) catches
+  all of these over ssh. Tag: aura — validate before deploy.
+
+## Incidents in the shared VM (2026-09-13)
+- ~00:17 the aura-term Claude session ran `pkill -x foot` twice,
+  killing ~4 foot windows in the live sway session (Dusan's and the
+  Aura prompt's). Self-reported; fixed to PID-scoped kills.
+- ~/Aura-Pulse (Dusan's clone of dusancar-sudo/aura-pulse, created
+  ~23:00) is gone from the VM. /home mtime is 00:15. No sudo rm in the
+  journal, no rm in bash history, not in aura-term test scripts,
+  aura-os-reset leaves /home alone. Cause not yet found — both agents
+  asked to check their own transcripts for deletions under ~.
+- Lesson for both: a shared VM needs a written "who owns what" rule;
+  added to the brief for the next task.
+- 00:50 Dusan: "it doesn't seem good" — Claude took over 003. Found:
+  two waybar processes (double top bar + sidebar), literal `▸`
+  (bash double quotes don't expand \u), tabs 6-9 always shown (spec:
+  1-5 + "+"), agent states guessed from /proc state (T="input",
+  Z="done" — wrong; aura-term pane files exist for this), ~30 process
+  spawns per sway event (9 labels × swaymsg+jq), sidebar centered,
+  black background (swaybg missing). Tag: aura — never looked at a
+  screenshot of her own result (vm-keys.py shot was available).

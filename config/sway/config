@@ -1,12 +1,10 @@
-# Aura OS — sway.
-#
-# Replaces Hyprland (task 001b: about half the RAM, native split
-# commands for the herdr look in task 003). Muscle memory from 001:
-#   Super+Return  terminal (foot)
-#   Super+D       launcher (fuzzel)
-#   Super+A       Aura prompt
-# Bindings live in config.d/ so task 003 can add more without
-# touching this file.
+# Aura OS — sway + herdr theme (task 003).
+# Flat, dark, no decoration: one monospace font, square corners, 1px
+# borders, no blur/shadow/animation. Palette: themes/herdr/.
+# Muscle memory from 001:
+#   Super+Return  terminal (foot)     Super+D  launcher (fuzzel)
+#   Super+A       Aura prompt         Super+T  tabbed/split toggle
+# Bindings live in config.d/.
 
 set $mod Mod4
 set $term foot
@@ -14,22 +12,37 @@ set $menu fuzzel
 
 floating_modifier $mod
 
-font pango:DejaVu Sans Mono 10
-default_border pixel 2
-default_floating_border pixel 2
-gaps inner 5
-gaps outer 5
+# herdr theme: monospace everywhere, 1px borders, square corners.
+font pango:JetBrainsMono Nerd Font 11
+default_border normal 1
+default_floating_border pixel 1
+gaps inner 2
+gaps outer 0
+
+# Pane title drawn on the top border, left-aligned: ─ title ─
+title_align left
+titlebar_padding 4
+for_window [title=".*"] title_format "─ %title ─"
+
+# herdr palette (themes/herdr/palette): active purple, inactive dim.
+client.focused          #8b7cf6 #0e0e14 #c8cad8 #8b7cf6
+client.focused_inactive #2a2a3a #0e0e14 #5c5f77 #2a2a3a
+client.unfocused        #2a2a3a #0e0e14 #5c5f77 #2a2a3a
+client.background       #0e0e14
+
+# No wallpaper: the theme background everywhere (herdr look).
+output * bg #0e0e14 solid_color
 
 # Xwayland stays on but lazy (task 001b): it starts only when an X11
 # app opens. Many of Dusan's apps need it — never disable it.
 xwayland enable
 
 # Autostart. sway re-runs exec lines on every config reload, so each
-# one checks before starting.
+# one checks before starting. waybar runs both bars (top tabs + left
+# sidebar) in one process — see config/waybar/config.jsonc. The
+# watcher blocks on sway's event stream: event-driven, no polling.
 exec pgrep -x waybar >/dev/null || waybar
 exec pgrep -x mako >/dev/null || mako
-# polkit: agent installed (polkit-gnome) but not autostarted — nothing
-# in the core authenticates through polkit. Start it on demand with:
-#   /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1 &
+exec pgrep -f 'aura-os-status [w]atch' >/dev/null || aura-os-status watch
 
 include ~/.config/sway/config.d/*

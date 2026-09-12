@@ -17,8 +17,12 @@ packages=(
     waybar                   # status bar
     fuzzel                   # launcher (Super+D)
     foot                     # terminal (Super+Return)
-    mako                     # notifications
-    ttf-dejavu               # font for bar and terminal
+    swaybg                   # solid theme background (sway `output bg`), ~3 MB
+    mako                     # notifications daemon (also serves Electron/Chrome)
+    libnotify                # notify-send: mako's CLI; aura-term needs it for
+                             # "agent needs input" alerts (task 005)
+    jq                       # aura-os-tab / aura-os-status JSON (task 003)
+    ttf-jetbrains-mono-nerd  # herdr theme: monospace everywhere (task 003)
     xdg-desktop-portal-wlr   # portal backend for wlroots compositors
     greetd                   # display manager (replaces sddm)
     greetd-tuigreet          # text-mode greeter — fits the RAM budget

@@ -60,11 +60,15 @@ adapt_codex() {
         | [$cwd, .] | @tsv' 2>/dev/null
 }
 
-adapt_aura() {   # the fact log's last bullet is literally her last step
-    local where main="${1%.run.factlog.json}.json"
-    where="$(jq -r '.projectRoot // empty' "$main" 2>/dev/null || true)"
-    [[ -n $where ]] || where="/$(basename "$(dirname "$1")" | sed 's/^_//; s/_/\//g')"
-    jq -r --arg w "$where" '[$w, ((.bullets // []) | last // "" | tostring | ltrimstr("- "))] | @tsv' "$1" 2>/dev/null
+adapt_aura() {   # <id>.json: projectRoot + the last message of the session
+    jq -r '
+        (.projectRoot // "") as $w
+        | ([.history[]? | select(.role == "assistant" or .role == "user")] | last // {}) as $m
+        | ($m.content // "" | if type == "array"
+              then map(.text? // (.name? // empty | "tool: " + .) // empty) | join(" ")
+              else tostring end) as $c
+        | ($c | split("\n") | map(gsub("^[#>*| -]+"; "")) | map(select(length > 0)) | first // "") as $line
+        | [$w, (if $m.role == "user" then "(you) " + $line else $line end)] | @tsv' "$1" 2>/dev/null
 }
 
 adapt_hermes() {
@@ -78,7 +82,8 @@ agent_of() {   # agent_of <file> → claude|codex|aura|hermes|""
     case $1 in
         "$claude_dir"/*.jsonl)                     echo claude ;;
         "$codex_dir"/*rollout-*.jsonl)             echo codex ;;
-        "$aura_dir"/*.factlog.json)                echo aura ;;
+        "$aura_dir"/*.run.json|"$aura_dir"/*.factlog.json|"$aura_dir"/*/latest*.json) ;;
+        "$aura_dir"/*/*.json)                      echo aura ;;
         "$hermes_dir"/session_*.json)              echo hermes ;;
     esac
 }
@@ -101,7 +106,7 @@ recent_files() {
     local d
     for d in "$claude_dir" "$codex_dir" "$aura_dir" "$hermes_dir"; do
         [[ -d $d ]] || continue
-        find "$d" -type f \( -name '*.jsonl' -o -name '*.factlog.json' -o -name 'session_*.json' \) \
+        find "$d" -type f \( -name '*.jsonl' -o -name '*.json' \) \
             -mmin "-$recent_min" 2>/dev/null
     done | while IFS= read -r f; do [[ -n $(agent_of "$f") ]] && echo "$f"; done
 }

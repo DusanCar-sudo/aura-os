@@ -155,13 +155,27 @@ cmd_label() {
          tooltip: "click: open any recent item — mode in settings (Super+,)"}' | recolor
 }
 
+launch_app() {   # launch_app <desktop-id> — run its Exec= (terminal apps in aura-term)
+    local id="$1" f="" d exec_line
+    for d in "${XDG_DATA_HOME:-$HOME/.local/share}" ${XDG_DATA_DIRS:-/usr/local/share:/usr/share} \
+             /var/lib/flatpak/exports/share "$HOME/.local/share/flatpak/exports/share"; do
+        for d in ${d//:/ }; do
+            [[ -f $d/applications/$id.desktop ]] && { f="$d/applications/$id.desktop"; break 2; }
+        done
+    done
+    if [[ -z $f ]]; then swaymsg exec "$id" >/dev/null; return; fi   # maybe a plain command
+    exec_line="$(sed -n '/^\[Desktop Entry\]/,/^\[/{s/^Exec=//p}' "$f" | head -n1 | sed -E 's/ ?%[fFuUdDnNickvm]//g')"
+    if grep -q '^Terminal=true' "$f"; then exec_line="aura-term -e $exec_line"; fi
+    swaymsg exec "$exec_line" >/dev/null
+}
+
 open_item() {   # open_item <kind> <value>
     case $1 in
         '$') printf '%s' "$2" | wl-copy; notify-send -t 2000 "copied" "$2" 2>/dev/null || true ;;
         d)   swaymsg exec "aura-term --working-directory=$(printf '%q' "$2")" >/dev/null ;;
         f)   xdg-open "$2" >/dev/null 2>&1 & ;;
         @)   xdg-open "$2" >/dev/null 2>&1 & ;;
-        a)   swaymsg exec "$2" >/dev/null ;;
+        a)   launch_app "$2" ;;
     esac
     cmd_log "$1" "$2"
 }

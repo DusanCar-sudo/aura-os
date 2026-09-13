@@ -1,6 +1,6 @@
 # Task 005 — aura-term: Aura's own native terminal
 
-Depends on 003 (herdr theme). Aura OS gets its own terminal, `aura-term`,
+Depends on 003 (desktop theme). Aura OS gets its own terminal, `aura-term`,
 replacing foot as the default. It is a **fork of foot** (C, Wayland-
 native, CPU-rendered): VT parsing, fonts, Unicode and IME are solved
 there — our work is what makes it Aura's.
@@ -10,7 +10,7 @@ there — our work is what makes it Aura's.
   mergeable: Aura changes in separate files/commits, minimal diffs
   to foot's own sources). Binary `aura-term`, server `aura-termd`.
 - Server mode by default: one process for all windows (RAM budget).
-- herdr look from themes/herdr: square, 1px, monospace, no padding.
+- Aura OS look from the active theme: square, 1px, monospace, no padding.
 
 ## What makes it Aura's
 1. **Command blocks** — shell integration via OSC 133 (bash + zsh

@@ -1,8 +1,7 @@
-# Task 003 — herdr-style desktop
+# Task 003 — the Aura OS desktop
 
-Depends on task 001. Reference: herdr (the terminal multiplexer Dusan
-uses for agents). The whole desktop must look and behave like herdr —
-flat text panes, no decoration. Screenshot: tasks/ref/herdr.png.
+Depends on task 001. A developer's desktop: flat text panes, tabs and
+a sidebar that shows what every agent is doing — no decoration.
 
 ## Look — "no graphics"
 - Square 90° corners everywhere — windows, bars, tabs, launcher,
@@ -12,7 +11,7 @@ flat text panes, no decoration. Screenshot: tasks/ref/herdr.png.
 - 1px borders: active = purple (#8b7cf6-ish), inactive = dim gray.
 - One monospace font everywhere (JetBrains Mono / Iosevka), incl. bars.
 - Pane title drawn on the top border, left-aligned, like `─ claude ─`.
-- Palette lives in themes/herdr/ so other themes can swap it.
+- Palette lives in themes/<name>/ so other themes can swap it.
 
 ## Layout behaviour
 - Tiling with explicit split direction: sway native splits:
@@ -44,7 +43,7 @@ flat text panes, no decoration. Screenshot: tasks/ref/herdr.png.
   events (no polling).
 
 ## Left sidebar — spaces / agents
-- Narrow Waybar on the left (not eww: too heavy), like herdr's panel:
+- Narrow Waybar on the left (not eww: too heavy):
   `spaces`: each workspace → project folder + git branch of its
   focused terminal.
   `agents`: running agents (aura, claude, codex) with status
@@ -53,7 +52,6 @@ flat text panes, no decoration. Screenshot: tasks/ref/herdr.png.
   polling). Super+B hides/shows the sidebar.
 
 ## Done when
-In the VM: open 4 terminals in a 2x2 herdr-like grid using only the
+In the VM: open 4 terminals in a 2x2 grid using only the
 split keys, resize the top-left pane, create tab 2 with `+`, and the
-sidebar shows both spaces. Screenshot it (vm/vm-keys.py shot) and
-compare side by side with tasks/ref/herdr.png.
+sidebar shows both spaces. Screenshot it (vm/vm-keys.py shot).

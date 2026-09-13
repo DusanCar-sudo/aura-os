@@ -2,7 +2,7 @@
 
 Two changes landed after you started 001. Re-read AURA.md now.
 1. Dusan chose **sway** over Hyprland: native left/right/up/down
-   splits, tabbed containers and title bars fit the herdr look
+   splits, tabbed containers and title bars fit the Aura OS look
    (task 003), at about half the RAM.
 2. AURA.md has a "Speed and RAM budget": idle under 350 MB.
    Your 001 desktop idles at 736 MB.

@@ -1,4 +1,4 @@
-# Aura OS — sway, herdr-style layout, purplerain theme (task 003).
+# Aura OS — sway, purplerain theme (task 003).
 # Flat, dark, no decoration: one monospace font, square corners, 1px
 # borders, no blur/shadow/animation. Palette: themes/purplerain/.
 # Muscle memory from 001:
@@ -16,7 +16,7 @@ floating_modifier $mod normal
 tiling_drag enable
 tiling_drag_threshold 9
 
-# herdr look: monospace everywhere, 1px borders, square corners.
+# Aura OS look: monospace everywhere, 1px borders, square corners.
 font pango:JetBrainsMono Nerd Font 11
 # No window title bars: 1px border only. The focused title shows on
 # hover at the top-left of the bar (waybar sway/window). Tabbed and
@@ -38,7 +38,7 @@ client.focused_inactive #2a2a3a #0e0e14 #5c5f77 #2a2a3a
 client.unfocused        #2a2a3a #0e0e14 #5c5f77 #2a2a3a
 client.background       #0e0e14
 
-# No wallpaper: the theme background everywhere (herdr look).
+# No wallpaper: the theme background everywhere.
 output * bg #0e0e14 solid_color
 
 # Xwayland stays on but lazy (task 001b): it starts only when an X11

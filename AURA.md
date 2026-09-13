@@ -1,9 +1,9 @@
 # Aura Standing Rules
 
 ## What this repo is
-Aura OS: your own Omarchy-style system on Arch + sway. You
-build it and you operate it. Omarchy is inspiration, not a source
-to copy; write our own scripts and cite ideas in commit messages.
+Aura OS: finally your own OS on your own laptop, Arch + sway,
+running what the user needs. You build it and you operate it.
+Write our own scripts; never copy another distro's code.
 
 ## Where you run
 Develop in this repo on the host. Test ONLY inside the VM:

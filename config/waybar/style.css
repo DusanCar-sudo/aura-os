@@ -1,7 +1,7 @@
 /* Colors come from theme.css (aura-os-theme); default purplerain is shipped. */
 @import "theme.css";
 
-/* Aura OS — waybar, herdr-style bars (task 003).
+/* Aura OS — waybar, Aura OS bars (task 003).
  * Flat, dark, square. No blur/shadow/rounding. One font.
  * Two bars: window#waybar.top (tabs) and window#waybar.left (sidebar). */
 

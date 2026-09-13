@@ -1,6 +1,6 @@
 // Aura OS — one waybar process, two bars (RAM budget, task 003).
-//   top:  herdr tabs (1-9 + "+"), window title, clock
-//   left: spaces + agents — the herdr sidebar
+//   top:  desktop tabs (1-9 + "+"), window title, system items, clock
+//   left: spaces, RAM, recent, agents — the Aura sidebar
 // Updates are event-driven: aura-os-status watch pokes RTMIN+8 and the
 // label execs re-run. No interval anywhere — nothing polls.
 [
@@ -112,7 +112,7 @@
     },
     "sway/mode": { "format": " {} ", "tooltip": false },
     "sway/window": { "max-length": 60, "tooltip": false },
-    // Classic system items, plain text (herdr look). Click → a floating
+    // Classic system items, plain text. Click → a floating
     // TUI in aura-term (app_id aura-float, see sway config).
     "bluetooth": {
       "format": "bt {status}",

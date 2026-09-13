@@ -38,7 +38,7 @@ Rebind in `~/.config/aura-term/aura-term.ini`, `[key-bindings]` section
   done ✓ / needs input !) — for the aura-os-status sidebar, and tags its
   sway window `aura-pane-<pid>`. Needs-input also sends a desktop
   notification. See [pane-status.md](pane-status.md).
-- **herdr-style splits.** Ctrl+Alt+arrows open a new pane next to the
+- **Splits.** Ctrl+Alt+arrows open a new pane next to the
   current one in its working directory, using sway's native splits
   (`split h|v` + `exec aura-term`): every pane is a real sway window, so
   focus/resize/move keys, pane status and the sidebar all work on it.

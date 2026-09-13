@@ -14,7 +14,7 @@ enum aura_split_dir {
 };
 
 /*
- * herdr-style splits (Ctrl+Alt+arrows): open a new aura-term pane left /
+ * Splits (Ctrl+Alt+arrows): open a new aura-term pane left /
  * right / above / below this one, in this pane's working directory,
  * using sway's native splits (every pane stays a sway window, so pane
  * status and the sidebar see it). Outside sway: a plain new window.

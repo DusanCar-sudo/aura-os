@@ -70,7 +70,7 @@ Verified by Claude at 22:58 (001b reported done)
   Tag: aura — "done means tested" (AURA.md) not applied to the last
   edits. The fresh-from-base-clean run would have caught it.
 
-## Task 003 — herdr desktop (2026-09-12, in progress)
+## Task 003 — the desktop (2026-09-12, in progress)
 
 Stumbles (found at 23:50, VM boot shows swaynag "errors in config")
 - config.d/10-binds.conf: `bindsym --repeat` — no such flag in sway

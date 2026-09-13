@@ -60,7 +60,7 @@ echo "  reused:     $ESP (Ubuntu's EFI partition, not formatted)"
 echo "  user $NAME, host $HOST, time zone $ZONE, repo from $REPO"
 echo
 read -rp "  Type INSTALL to erase $ROOT and $BOOT and install Aura OS: " ok
-[[ $ok == INSTALL ]] || die "cancelled — nothing changed"
+[[ ${ok^^} == INSTALL ]] || die "cancelled — nothing changed"
 while :; do
     read -rsp "  Password for $NAME (and root): " PASS; echo
     read -rsp "  Again: " p2; echo
@@ -188,6 +188,14 @@ mkdir -p "$M/boot/EFI/Linux"
 T mkinitcpio -P
 rm -f "$M"/boot/initramfs-linux*.img
 T bootctl --esp-path=/efi --boot-path=/boot install
+# bootctl inside the nested chroot copies the files but its firmware
+# entry did not stick on the Lenovo (first real run): add it from the
+# host, first in BootOrder.
+if ! efibootmgr | grep -qi 'systemd-bootx64'; then
+    efibootmgr --create --disk "/dev/$(lsblk -no pkname "$ESP")" \
+        --part "$(cat "/sys/class/block/$(basename "$ESP")/partition")" \
+        --label "Aura OS" --loader '\EFI\systemd\systemd-bootx64.efi'
+fi
 mkdir -p "$M/efi/loader/entries"
 if [[ -f $M/efi/EFI/ubuntu/shimx64.efi ]]; then
     printf 'title   Ubuntu\nefi     /EFI/ubuntu/shimx64.efi\n' > "$M/efi/loader/entries/ubuntu.conf"

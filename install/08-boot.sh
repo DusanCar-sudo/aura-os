@@ -21,14 +21,32 @@ if ! cmp -s "$REPO/config/boot/os-release" "$osrel"; then
     echo "08-boot: installed $osrel"
 fi
 
+# Boot splash (tools/make-splash.py, variant c-mark-ados): the UKI shows
+# it while the kernel loads. UEFI wants a 24-bit BMP; the repo keeps the
+# small PNG and converts it here.
+splash=/usr/share/aura-os/splash.bmp
+splash_changed=0
+if [[ -f $REPO/assets/splash/aura-splash.png ]]; then
+    tmp="$(mktemp --suffix=.bmp)"
+    magick "$REPO/assets/splash/aura-splash.png" -type TrueColor -alpha off "BMP3:$tmp"
+    if ! cmp -s "$tmp" "$splash"; then
+        install -Dm644 "$tmp" "$splash"; splash_changed=1
+        echo "08-boot: installed $splash"
+    fi
+    rm -f "$tmp"
+fi
+opts="--osrelease $osrel"
+[[ -f $splash ]] && opts="--splash $splash $opts"
+
 preset=/etc/mkinitcpio.d/linux.preset
 want_uki=/boot/EFI/Linux/aura-os.efi
-if ! grep -q "^default_uki=\"$want_uki\"" "$preset" || grep -q 'splash-arch' "$preset"; then
+if ! grep -q "^default_uki=\"$want_uki\"" "$preset" || grep -q 'splash-arch' "$preset" \
+        || ! grep -qF "default_options=\"$opts\"" "$preset" || (( splash_changed )); then
     command -v aura-os-snapshot >/dev/null && aura-os-snapshot "08-boot: before Aura OS boot branding" || true
-    sed -i -E "s|^default_uki=.*|default_uki=\"$want_uki\"|;
-               s|^default_options=.*|default_options=\"--osrelease $osrel\"|;
-               s|^fallback_uki=.*|fallback_uki=\"/boot/EFI/Linux/aura-os-fallback.efi\"|;
-               s|^#?fallback_options=.*|fallback_options=\"-S autodetect --osrelease $osrel\"|" "$preset"
+    sed -i -E "s|^#?default_uki=.*|default_uki=\"$want_uki\"|;
+               s|^#?default_options=.*|default_options=\"$opts\"|;
+               s|^#?fallback_uki=.*|fallback_uki=\"/boot/EFI/Linux/aura-os-fallback.efi\"|;
+               s|^#?fallback_options=.*|fallback_options=\"-S autodetect $opts\"|" "$preset"
     mkinitcpio -p linux >/dev/null
     echo "08-boot: rebuilt $want_uki"
     rm -f /boot/EFI/Linux/arch-linux.efi /boot/EFI/Linux/arch-linux-fallback.efi

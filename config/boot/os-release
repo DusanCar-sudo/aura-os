@@ -1,0 +1,7 @@
+NAME="Aura OS"
+PRETTY_NAME="Aura OS"
+ID=auraos
+ID_LIKE=arch
+BUILD_ID=rolling
+ANSI_COLOR="38;2;139;124;246"
+LOGO=aura-os

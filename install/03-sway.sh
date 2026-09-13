@@ -20,7 +20,10 @@ if [[ ! -d $home ]]; then
 fi
 
 cfg="$home/.config"
-install -d -o "$user" -g "$user" "$cfg/sway/config.d" "$cfg/waybar"
+# install -d only gives the LAST level to the user: on a fresh home every
+# parent must be listed, or ~/.config ends up root's (first-boot test).
+install -d -o "$user" -g "$user" "$cfg" "$cfg/sway" "$cfg/sway/config.d" "$cfg/waybar" \
+    "$home/.local" "$home/.local/share"
 
 put() { # put <src> <dst> — install only when it differs, say so either way
     if cmp -s "$1" "$2" 2>/dev/null; then

@@ -171,7 +171,7 @@ t_zone() {
 }
 
 # ------------------------------------------------------------- install
-step() { printf '  %s•%s %s' "$A" "$R" "$1"; }
+step() { printf '  %s>%s %s' "$A" "$R" "$1"; }
 ok()   { printf '\r\e[2K  %s+%s %s\n' "$OK" "$R" "$1"; }
 fail() {
     printf '\r\e[2K  %sx%s %s\n\n' "$BAD" "$R" "$1"

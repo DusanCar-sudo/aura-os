@@ -17,7 +17,7 @@ clear
 printf '\n  %sAURA%s %sadOS%s   %sfirst start — setting up your desktop%s\n' "$B$F" "$R" "$B$A" "$R" "$D" "$R"
 printf '  %s----------------------------------------------%s\n\n' "$D" "$R"
 
-printf '  %s•%s waiting for the network' "$A" "$R"
+printf '  %s>%s waiting for the network' "$A" "$R"
 nm-online -q -t 90 && printf '\r\e[2K  %s+%s network\n' "$OK" "$R" \
     || printf '\r\e[2K  %sx%s no network — steps that download will fail\n' "$BAD" "$R"
 
@@ -34,7 +34,7 @@ declare -A what=(
 failed=0
 for s in "$repo"/install/0*.sh; do
     n=$(basename "$s" .sh)
-    printf '  %s•%s %s' "$A" "$R" "${what[$n]:-$n}"
+    printf '  %s>%s %s' "$A" "$R" "${what[$n]:-$n}"
     if AURA_USER="$user" AURA_FIRSTBOOT=1 bash "$s" >>"$log" 2>&1 </dev/null; then
         printf '\r\e[2K  %s+%s %s\n' "$OK" "$R" "${what[$n]:-$n}"
     else

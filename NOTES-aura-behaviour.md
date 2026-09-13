@@ -124,3 +124,9 @@ Stumbles (found at 23:50, VM boot shows swaynag "errors in config")
   env export to systemd (portals didn't know it was sway), wlr portal
   prefs, /dev/uinput uaccess, python-gobject/evdev, gst-plugins-base,
   imagemagick (PNG encode). Tag: aura (portability).
+- 08:3x Claude broke the sway config: inline comment after `gaps inner 0`
+  (sway has no end-of-line comments). The headless `sway -C` check had
+  silently not run since the VM reboot (its /tmp/chk runtime dir was
+  gone; grep for "Error on line" found nothing = looked like a pass).
+  Fix: tools/sway-check.sh fails loudly if the check itself can't run.
+  Lesson: a validator that can silently not run is worse than none.

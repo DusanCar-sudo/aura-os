@@ -23,7 +23,8 @@ font pango:JetBrainsMono Nerd Font 11
 # stacked containers still show their titles (sway draws those).
 default_border pixel 1
 default_floating_border pixel 1
-gaps inner 0   # no space between tiles: nothing shows through (wallpaper)
+# No space between tiles: nothing shows through (wallpaper).
+gaps inner 0
 gaps outer 0
 
 # Pane title drawn on the top border, left-aligned: ─ title ─

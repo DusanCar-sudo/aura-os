@@ -1,0 +1,347 @@
+#!/usr/bin/env bash
+# aura-install — the Aura adOS installer. Starts by itself on the stick's
+# first console. Arrows + Enter only; the keyboard is needed just for the
+# Wi-Fi password and your own password.
+#
+# It installs into partitions prepared for Aura, found by their labels:
+#   aura      (btrfs, the system)     AURABOOT (FAT32, /boot, XBOOTLDR)
+# plus the disk's existing EFI partition (reused, never formatted), so
+# Ubuntu / Windows next to it keep booting. Optional: DATA and bigdata
+# partitions get mounted, and the Aura OS repo is copied from DATA.
+#
+# The heavy part (desktop, aura-term, aura-code) runs by itself on the
+# first boot: aura-os-firstboot, then it restarts into the desktop.
+set -uo pipefail
+
+LOG=/tmp/aura-install.log
+: > "$LOG"
+A=$'\e[38;2;139;124;246m'; A2=$'\e[38;2;165;148;249m'; D=$'\e[38;2;127;132;156m'
+F=$'\e[38;2;230;232;242m'; OK=$'\e[38;2;131;230;160m'; BAD=$'\e[38;2;243;139;168m'
+Y=$'\e[38;2;249;226;175m'; R=$'\e[0m'; B=$'\e[1m'
+
+setfont ter-132b 2>/dev/null || setfont ter-128b 2>/dev/null || true
+trap 'tput cnorm 2>/dev/null' EXIT
+
+# ------------------------------------------------------------- screen
+header() {
+    clear
+    printf '\n  %sAURA%s %sadOS%s   %sagent driven operating system%s\n' "$B$F" "$R" "$B$A" "$R" "$D" "$R"
+    printf '  %s──────────────────────────────────────────────%s\n\n' "$D" "$R"
+}
+
+# menu <title> <item>... → PICK = index. Arrows, Enter; long lists scroll.
+menu() {
+    local title=$1; shift
+    local items=("$@") n=$# i=${MENU_START:-0} top=0 rows k k2 j
+    rows=$(( $(tput lines) - 9 )); (( rows < 5 )) && rows=5
+    tput civis
+    while :; do
+        (( i < top )) && top=$i
+        (( i >= top + rows )) && top=$(( i - rows + 1 ))
+        header
+        printf '  %s%s%s\n\n' "$F" "$title" "$R"
+        for (( j = top; j < n && j < top + rows; j++ )); do
+            if (( j == i )); then printf '  %s▸ %s%s\n' "$B$A" "${items[j]}" "$R"
+            else printf '    %s%s%s\n' "$F" "${items[j]}" "$R"; fi
+        done
+        (( n > rows )) && printf '    %s(%d of %d)%s\n' "$D" $(( i + 1 )) "$n" "$R"
+        printf '\n  %s↑ ↓  move     Enter  choose%s' "$D" "$R"
+        IFS= read -rsn1 k
+        if [[ $k == $'\e' ]]; then read -rsn2 -t 0.05 k2; k+=$k2; fi
+        case $k in
+            $'\e[A') (( i = (i - 1 + n) % n )) ;;
+            $'\e[B') (( i = (i + 1) % n )) ;;
+            $'\e[5') (( i = i - rows < 0 ? 0 : i - rows )); read -rsn1 -t 0.05 ;;
+            $'\e[6') (( i = i + rows >= n ? n - 1 : i + rows )); read -rsn1 -t 0.05 ;;
+            '') break ;;
+        esac
+    done
+    tput cnorm
+    PICK=$i
+    MENU_START=0
+}
+
+# ask <question> [default] [secret] → ANSWER
+ask() {
+    header
+    printf '  %s%s%s\n\n  %s›%s ' "$F" "$1" "$R" "$A" "$R"
+    if [[ ${3:-} == secret ]]; then IFS= read -rs ANSWER; echo
+    else IFS= read -r -e -i "${2:-}" ANSWER; fi
+}
+
+say() {  # say <color> <text> — a message, any key to go on
+    header
+    printf '  %s%s%s\n\n  %sEnter to continue%s' "$1" "$2" "$R" "$D" "$R"
+    read -rs _
+}
+
+online() { ping -c1 -W3 archlinux.org >/dev/null 2>&1; }
+
+# ------------------------------------------------------------- the disk
+find_parts() {
+    ROOT=$(blkid -L aura 2>/dev/null); BOOT=$(blkid -L AURABOOT 2>/dev/null)
+    DATA=$(blkid -L DATA 2>/dev/null); BIG=$(blkid -L bigdata 2>/dev/null)
+    ESP=""; DISK=""
+    [[ -n $ROOT ]] || return 1
+    DISK=/dev/$(lsblk -no pkname "$ROOT" | head -n1)
+    ESP=$(lsblk -lnpo NAME,PARTTYPE "$DISK" \
+        | awk 'tolower($2)=="c12a7328-f81f-11d2-ba4b-00a0c93ec93b"{print $1; exit}')
+    [[ -n $BOOT && -n $ESP ]]
+}
+
+# ------------------------------------------------------------- state
+NAME=dusan; PASS=""; ZONE=""; WIFI=""; WIFI_PSK=""
+HOST=aura
+
+guess_zone() {
+    ZONE=$(curl -fs --max-time 4 https://ipapi.co/timezone 2>/dev/null)
+    [[ $ZONE =~ ^[A-Za-z_]+/[A-Za-z_/+-]+$ && -f /usr/share/zoneinfo/$ZONE ]] || ZONE=UTC
+}
+
+# ------------------------------------------------------------- tiles
+t_wifi() {
+    local dev line names=() secs=() out
+    dev=$(iw dev 2>/dev/null | awk '$1=="Interface"{print $2; exit}')
+    [[ -n $dev ]] || { say "$Y" "No Wi-Fi card found. Plug in a network cable, then choose Wi-Fi again."; return; }
+    header; printf '  %slooking for networks…%s' "$D" "$R"
+    iwctl station "$dev" scan >/dev/null 2>&1; sleep 4
+    while IFS= read -r line; do
+        line=$(printf '%s' "$line" | sed 's/\x1b\[[0-9;]*m//g; s/^[ >]*//; s/ *$//')
+        [[ -z $line || $line == Network* || $line == Available* || $line == -* ]] && continue
+        out=$(printf '%s' "$line" | sed -E 's/ {2,}/\t/g')
+        names+=("$(cut -f1 <<<"$out")"); secs+=("$(cut -f2 <<<"$out")")
+    done < <(iwctl station "$dev" get-networks 2>/dev/null)
+    (( ${#names[@]} )) || { say "$Y" "No networks found. Move closer to the router and try again."; return; }
+    local shown=()
+    for j in "${!names[@]}"; do
+        shown+=("$(printf '%-30s %s' "${names[j]}" "$([[ ${secs[j]} == open ]] && echo open || echo '🔒')")")
+    done
+    menu "Choose your Wi-Fi" "${shown[@]}" "← back"
+    (( PICK == ${#names[@]} )) && return
+    WIFI=${names[PICK]}
+    if [[ ${secs[PICK]} != open ]]; then
+        ask "Password for $WIFI" "" secret; WIFI_PSK=$ANSWER
+        iwctl --passphrase "$WIFI_PSK" station "$dev" connect "$WIFI" >>"$LOG" 2>&1
+    else
+        WIFI_PSK=""; iwctl station "$dev" connect "$WIFI" >>"$LOG" 2>&1
+    fi
+    header; printf '  %sconnecting to %s…%s' "$D" "$WIFI" "$R"
+    for _ in 1 2 3 4 5 6 7 8; do online && break; sleep 2; done
+    if online; then [[ -z $ZONE || $ZONE == UTC ]] && guess_zone
+    else say "$BAD" "Could not connect to $WIFI — check the password and try again."; WIFI=""; fi
+}
+
+t_name() {
+    ask "Your name (for logging in, small letters)" "$NAME"
+    local n; n=$(printf '%s' "$ANSWER" | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9_-' | cut -c1-24)
+    [[ $n =~ ^[a-z_] ]] && NAME=$n || say "$Y" "A name has to start with a letter."
+}
+
+t_pass() {
+    local p1
+    ask "Choose a password for $NAME" "" secret; p1=$ANSWER
+    [[ -n $p1 ]] || return
+    ask "Type it again" "" secret
+    [[ $ANSWER == "$p1" ]] && PASS=$p1 || say "$BAD" "The two passwords were different — try again."
+}
+
+t_zone() {
+    local regions=() cities=() r
+    mapfile -t regions < <(find /usr/share/zoneinfo -mindepth 1 -maxdepth 1 -type d \
+        -regextype egrep -regex '.*/(Africa|America|Antarctica|Asia|Atlantic|Australia|Europe|Indian|Pacific)' -printf '%f\n' | sort)
+    local cur=${ZONE%%/*} i=0
+    for j in "${!regions[@]}"; do [[ ${regions[j]} == "$cur" ]] && i=$j; done
+    MENU_START=$i menu "Time zone — region" "${regions[@]}" "UTC" "← back"
+    (( PICK == ${#regions[@]} + 1 )) && return
+    (( PICK == ${#regions[@]} )) && { ZONE=UTC; return; }
+    r=${regions[PICK]}
+    mapfile -t cities < <(cd /usr/share/zoneinfo/"$r" && find . -type f | sed 's|^\./||' | sort)
+    i=0; for j in "${!cities[@]}"; do [[ $r/${cities[j]} == "$ZONE" ]] && i=$j; done
+    MENU_START=$i menu "Time zone — $r" "${cities[@]}" "← back"
+    (( PICK == ${#cities[@]} )) && return
+    ZONE=$r/${cities[PICK]}
+}
+
+# ------------------------------------------------------------- install
+step() { printf '  %s•%s %s' "$A" "$R" "$1"; }
+ok()   { printf '\r  %s✓%s %s\n' "$OK" "$R" "$1"; }
+fail() {
+    printf '\r  %s✗%s %s\n\n' "$BAD" "$R" "$1"
+    tail -n 12 "$LOG" | sed 's/^/    /'
+    printf '\n  %sThe full log is in %s. Enter to go back.%s' "$D" "$LOG" "$R"
+    read -rs _; return 1
+}
+run() { "$@" >>"$LOG" 2>&1; }
+
+install_all() {
+    local o=compress=zstd,noatime M=/mnt gpu=""
+    header
+    umount -R $M 2>/dev/null
+
+    step "formatting Aura's two partitions"
+    run mkfs.btrfs -f -L aura "$ROOT" && run mkfs.fat -F32 -n AURABOOT "$BOOT" || { fail "formatting"; return; }
+    ok "formatted $ROOT and $BOOT"
+
+    step "creating the system layout"
+    run mount "$ROOT" $M || { fail "mount"; return; }
+    for s in @ @home @log @pkg; do run btrfs subvolume create $M/$s; done
+    umount $M
+    run mount -o $o,subvol=@ "$ROOT" $M &&
+    run mount --mkdir -o $o,subvol=@home "$ROOT" $M/home &&
+    run mount --mkdir -o $o,subvol=@log "$ROOT" $M/var/log &&
+    run mount --mkdir -o $o,subvol=@pkg "$ROOT" $M/var/cache/pacman/pkg &&
+    run mount --mkdir "$BOOT" $M/boot &&
+    run mount --mkdir "$ESP" $M/efi || { fail "mounting"; return; }
+    ok "btrfs layout (@, @home, @log, @pkg), /boot, /efi"
+
+    lspci 2>/dev/null | grep -qiE 'vga.*(amd|ati)|display.*(amd|ati)' && gpu="vulkan-radeon libva-mesa-driver"
+    lspci 2>/dev/null | grep -qiE 'vga.*intel' && gpu="vulkan-intel intel-media-driver"
+    local ucode=""; grep -q AuthenticAMD /proc/cpuinfo && ucode=amd-ucode; grep -q GenuineIntel /proc/cpuinfo && ucode=intel-ucode
+
+    step "installing the base system (5–10 minutes)"
+    run pacstrap -K $M base linux linux-firmware $ucode btrfs-progs networkmanager sudo git vim \
+        openssh sof-firmware zram-generator man-db terminus-font mesa $gpu power-profiles-daemon \
+        || { fail "installing packages (is the internet on?)"; return; }
+    ok "base system"
+
+    step "setting up: time, language, user, network"
+    genfstab -U $M >> $M/etc/fstab
+    {
+        [[ -n $DATA ]] && echo "UUID=$(blkid -s UUID -o value "$DATA") /mnt/data    ext4 defaults,nofail 0 2"
+        [[ -n $BIG ]]  && echo "UUID=$(blkid -s UUID -o value "$BIG") /mnt/bigdata ext4 defaults,nofail 0 2"
+    } >> $M/etc/fstab
+    mkdir -p $M/mnt/data $M/mnt/bigdata
+    printf 'KEYMAP=us\nFONT=ter-124b\n' > $M/etc/vconsole.conf
+    echo "$HOST" > $M/etc/hostname
+    sed -i 's/^#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' $M/etc/locale.gen
+    echo 'LANG=en_US.UTF-8' > $M/etc/locale.conf
+    printf '[zram0]\nzram-size = ram / 2\ncompression-algorithm = zstd\n' > $M/etc/systemd/zram-generator.conf
+    echo '%wheel ALL=(ALL:ALL) ALL' > $M/etc/sudoers.d/wheel; chmod 440 $M/etc/sudoers.d/wheel
+    if [[ -n $WIFI ]]; then     # the same Wi-Fi works on first boot
+        local nm=$M/etc/NetworkManager/system-connections/aura-wifi.nmconnection
+        mkdir -p "${nm%/*}"
+        { printf '[connection]\nid=%s\ntype=wifi\n\n[wifi]\nssid=%s\nmode=infrastructure\n\n' "$WIFI" "$WIFI"
+          [[ -n $WIFI_PSK ]] && printf '[wifi-security]\nkey-mgmt=wpa-psk\npsk=%s\n\n' "$WIFI_PSK"
+          printf '[ipv4]\nmethod=auto\n\n[ipv6]\nmethod=auto\n'; } > "$nm"
+        chmod 600 "$nm"
+    fi
+    run arch-chroot $M sh -c "ln -sf /usr/share/zoneinfo/$ZONE /etc/localtime && hwclock --systohc; locale-gen" &&
+    run arch-chroot $M useradd -m -G wheel -s /bin/bash "$NAME" &&
+    printf '%s:%s\nroot:%s\n' "$NAME" "$PASS" "$PASS" | arch-chroot $M chpasswd &&
+    run arch-chroot $M systemctl enable NetworkManager || { fail "system settings"; return; }
+    ok "time zone $ZONE, user $NAME, network"
+
+    step "boot menu (keeps the other systems)"
+    echo "root=UUID=$(blkid -s UUID -o value "$ROOT") rootflags=subvol=@ rw quiet" > $M/etc/kernel/cmdline
+    sed -i -e 's/^default_image/#default_image/' -e 's/^fallback_image/#fallback_image/' \
+        -e 's|^#default_uki=.*|default_uki="/boot/EFI/Linux/arch-linux.efi"|' \
+        -e 's|^#fallback_uki=.*|fallback_uki="/boot/EFI/Linux/arch-linux-fallback.efi"|' \
+        $M/etc/mkinitcpio.d/linux.preset
+    mkdir -p $M/boot/EFI/Linux
+    run arch-chroot $M mkinitcpio -P && rm -f $M/boot/initramfs-linux*.img &&
+    run arch-chroot $M bootctl --esp-path=/efi --boot-path=/boot install || { fail "boot menu"; return; }
+    mkdir -p $M/efi/loader/entries
+    [[ -f $M/efi/EFI/ubuntu/shimx64.efi ]] && printf 'title   Ubuntu\nefi     /EFI/ubuntu/shimx64.efi\n' > $M/efi/loader/entries/ubuntu.conf
+    [[ -f $M/efi/EFI/ubuntu/shimx64.efi || ! -f $M/efi/EFI/ubuntu/grubx64.efi ]] || printf 'title   Ubuntu\nefi     /EFI/ubuntu/grubx64.efi\n' > $M/efi/loader/entries/ubuntu.conf
+    ok "boot menu: Aura adOS$( [[ -f $M/efi/loader/entries/ubuntu.conf ]] && echo ' + Ubuntu')"
+
+    step "copying Aura OS"
+    local src="" d
+    if [[ -n $DATA ]]; then
+        run mount --mkdir -o ro "$DATA" /run/aura-data && [[ -d /run/aura-data/aura-os ]] && src=/run/aura-data/aura-os
+    fi
+    [[ -z $src && -d /usr/share/aura-os-src ]] && src=/usr/share/aura-os-src
+    d=$M/home/$NAME/aura-os
+    if [[ -n $src ]]; then
+        run rsync -a --exclude 'vm/*.qcow2' --exclude 'vm/*.iso' --exclude 'vm/*.fd' \
+            --exclude 'term/build*' --exclude '.claude/' "$src/" "$d/"
+    else
+        run arch-chroot $M sudo -u "$NAME" git clone https://github.com/DusanCar-sudo/aura-os "/home/$NAME/aura-os"
+    fi
+    umount /run/aura-data 2>/dev/null
+    [[ -f $d/install/03-sway.sh ]] || { fail "copying Aura OS"; return; }
+    # shared memories (Claude + Aura) when the bigdata disk has them
+    local mem=/mnt/bigdata/moved-from-system/home-$NAME
+    if [[ -n $BIG ]]; then
+        install -d $M/home/$NAME/.claude/projects/-home-$NAME $M/home/$NAME/.aura
+        ln -sfn "$mem/.claude/projects/-home-$NAME/memory" $M/home/$NAME/.claude/projects/-home-$NAME/memory
+        ln -sfn "$mem/.aura/memory" $M/home/$NAME/.aura/memory
+    fi
+    run arch-chroot $M chown -R "$NAME:$NAME" "/home/$NAME"
+    ok "Aura OS copied to /home/$NAME/aura-os"
+
+    step "first-boot setup"
+    install -Dm755 "$d/bin/aura-os-firstboot" $M/usr/local/bin/aura-os-firstboot
+    printf 'AURA_USER=%s\n' "$NAME" > $M/etc/aura-os-firstboot.env
+    cat > $M/etc/systemd/system/aura-os-firstboot.service <<'UNIT'
+[Unit]
+Description=Aura adOS first boot — desktop, terminal, agents
+After=network-online.target
+Wants=network-online.target
+Before=getty@tty1.service
+ConditionPathExists=/etc/aura-os-firstboot.env
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/aura-os-firstboot.env
+ExecStart=/usr/local/bin/aura-os-firstboot
+StandardInput=tty
+StandardOutput=tty
+TTYPath=/dev/tty1
+TTYReset=yes
+TimeoutSec=0
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+    run arch-chroot $M systemctl enable aura-os-firstboot NetworkManager-wait-online || { fail "first-boot setup"; return; }
+    ok "first boot will finish the desktop by itself"
+
+    sync; umount -R $M 2>/dev/null
+    header
+    printf '  %s✓ Aura adOS is installed.%s\n\n' "$B$OK" "$R"
+    printf '  %sTake the USB stick out, then press Enter.%s\n' "$F" "$R"
+    printf '  %sThe first start sets up the desktop by itself (about 15 minutes),%s\n' "$D" "$R"
+    printf '  %sthen restarts once — log in as %s.%s' "$D" "$NAME" "$R"
+    read -rs _
+    reboot
+}
+
+# ------------------------------------------------------------- main
+if ! find_parts; then
+    say "$BAD" "No space prepared for Aura was found (partitions labelled 'aura' and 'AURABOOT').
+  Nothing was changed. Prepare them first, then start the stick again."
+    exec bash -l
+fi
+online && guess_zone
+[[ -z $ZONE ]] && ZONE=UTC
+
+while :; do
+    net="not connected"; online && net="online ✓${WIFI:+  ($WIFI)}"
+    rows=(
+        "$(printf '%-12s %s' 'Wi-Fi'     "$net")"
+        "$(printf '%-12s %s' 'Your name' "$NAME")"
+        "$(printf '%-12s %s' 'Password'  "$([[ -n $PASS ]] && echo 'set ✓' || echo 'choose one')")"
+        "$(printf '%-12s %s' 'Time zone' "$ZONE")"
+        "$(printf '%-12s %s' 'Where'     "$(lsblk -no SIZE "$ROOT" | tr -d ' ') prepared for Aura on $(basename "$DISK")  ✓")"
+        "▶  Install Aura adOS"
+        "   Turn off"
+    )
+    menu "Set these up, then Install." "${rows[@]}"
+    case $PICK in
+        0) t_wifi ;;
+        1) t_name ;;
+        2) t_pass ;;
+        3) t_zone ;;
+        4) say "$F" "Aura goes into the space prepared for it:
+    system  $ROOT  ($(lsblk -no SIZE "$ROOT" | tr -d ' '))
+    boot    $BOOT  ($(lsblk -no SIZE "$BOOT" | tr -d ' '))
+    menu    $ESP   (shared EFI, not formatted)
+  Everything else on the disk is left untouched." ;;
+        5)  if ! online; then say "$Y" "Connect to the internet first (Wi-Fi)."; continue; fi
+            if [[ -z $PASS ]]; then say "$Y" "Choose a password first."; continue; fi
+            menu "Install now? $ROOT and $BOOT will be erased. Nothing else changes." "Yes, install" "No, go back"
+            (( PICK == 0 )) && install_all ;;
+        6)  menu "Turn off the computer?" "Yes" "No"; (( PICK == 0 )) && poweroff ;;
+    esac
+done

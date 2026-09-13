@@ -109,7 +109,9 @@ if [[ -f /usr/lib/systemd/system/greetd.service ]]; then
         systemctl enable greetd
         echo "03-sway: enabled greetd"
     fi
-    if ! systemctl is-active --quiet greetd; then
+    # The first boot (aura-os-firstboot) owns tty1 until it reboots;
+    # greetd starts on that reboot instead.
+    if [[ -z ${AURA_FIRSTBOOT:-} ]] && ! systemctl is-active --quiet greetd; then
         systemctl start greetd
         echo "03-sway: started greetd — the session comes up on vt1"
     fi

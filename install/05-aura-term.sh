@@ -20,8 +20,15 @@ pacman -S --needed --noconfirm meson ninja gcc pkgconf tllist scdoc \
 bin=/usr/local/bin/aura-term
 if [[ ! -x $bin ]] || [[ -n $(find "$REPO/term" -newer "$bin" -name '*.[ch]' -print -quit) ]]; then
     echo "05-aura-term: building aura-term (PGO) — a few minutes"
-    sudo -u "$user" "$REPO/tools/aura-term-build.sh" pgo "$REPO/term" "$REPO/term/build-pgo"
-    ninja -C "$REPO/term/build-pgo" install >/dev/null
+    # PGO trains in a private headless sway; on a first boot with no user
+    # session that can fail — then a plain release build, never no terminal.
+    if sudo -u "$user" "$REPO/tools/aura-term-build.sh" pgo "$REPO/term" "$REPO/term/build-pgo"; then
+        ninja -C "$REPO/term/build-pgo" install >/dev/null
+    else
+        echo "05-aura-term: PGO build failed — building without PGO" >&2
+        sudo -u "$user" "$REPO/tools/aura-term-build.sh" dev "$REPO/term" "$REPO/term/build-dev"
+        ninja -C "$REPO/term/build-dev" install >/dev/null
+    fi
     echo "05-aura-term: installed $bin"
 else
     echo "05-aura-term: up to date: $bin"

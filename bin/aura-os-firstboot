@@ -13,6 +13,7 @@ log=/var/log/aura-os-firstboot.log
 A=$'\e[95m'; D=$'\e[90m'; F=$'\e[97m'; OK=$'\e[92m'; BAD=$'\e[91m'; R=$'\e[0m'; B=$'\e[1m'
 
 setfont ter-132b 2>/dev/null || true
+dmesg -n 1 2>/dev/null   # no kernel messages over the progress list
 clear
 printf '\n  %sAURA%s %sadOS%s   %sfirst start — setting up your desktop%s\n' "$B$F" "$R" "$B$A" "$R" "$D" "$R"
 printf '  %s----------------------------------------------%s\n\n' "$D" "$R"

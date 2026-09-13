@@ -20,6 +20,8 @@ A=$'\e[95m'; A2=$'\e[35m'; D=$'\e[90m'; F=$'\e[97m'; OK=$'\e[92m'
 BAD=$'\e[91m'; Y=$'\e[93m'; R=$'\e[0m'; B=$'\e[1m'
 
 setfont ter-132b 2>/dev/null || setfont ter-128b 2>/dev/null || true
+# kernel messages (e.g. amdgpu DMCUB spam) must not print over the tiles
+dmesg -n 1 2>/dev/null
 stty -echo 2>/dev/null
 trap 'tput cnorm 2>/dev/null; stty echo 2>/dev/null' EXIT
 
@@ -213,6 +215,19 @@ install_all() {
         || { fail "installing packages (is the internet on?)"; return; }
     ok "base system"
 
+    # linux-firmware-amdgpu 20260910-1 breaks the Radeon 680M (Rembrandt):
+    # DMCUB error flood, slow boot, glitches. Use 20260810-2 and hold it
+    # until Arch ships a fixed one (then drop IgnorePkg).
+    if lspci 2>/dev/null | grep -qiE '(vga|display).*(amd|ati)'; then
+        step "graphics firmware fix (AMD)"
+        run arch-chroot $M pacman -U --noconfirm \
+            https://archive.archlinux.org/packages/l/linux-firmware-amdgpu/linux-firmware-amdgpu-20260810-2-any.pkg.tar.zst \
+            && sed -i 's/^#\?IgnorePkg *=.*/IgnorePkg = linux-firmware-amdgpu/' $M/etc/pacman.conf \
+            && grep -q '^IgnorePkg = linux-firmware-amdgpu' $M/etc/pacman.conf \
+            && ok "graphics firmware 20260810-2 (the 20260910 one breaks this GPU)" \
+            || ok "graphics firmware fix skipped (download failed) - the screen may flicker"
+    fi
+
     step "setting up: time, language, user, network"
     genfstab -U $M >> $M/etc/fstab
     {
@@ -241,7 +256,7 @@ install_all() {
     ok "time zone $ZONE, user $NAME, network"
 
     step "boot menu (keeps the other systems)"
-    echo "root=UUID=$(blkid -s UUID -o value "$ROOT") rootflags=subvol=@ rw quiet" > $M/etc/kernel/cmdline
+    echo "root=UUID=$(blkid -s UUID -o value "$ROOT") rootflags=subvol=@ rw quiet loglevel=3" > $M/etc/kernel/cmdline
     sed -i -e 's/^default_image/#default_image/' -e 's/^fallback_image/#fallback_image/' \
         -e 's|^#default_uki=.*|default_uki="/boot/EFI/Linux/arch-linux.efi"|' \
         -e 's|^#fallback_uki=.*|fallback_uki="/boot/EFI/Linux/arch-linux-fallback.efi"|' \

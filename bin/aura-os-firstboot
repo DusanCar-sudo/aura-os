@@ -33,7 +33,14 @@ declare -A what=(
     [08-boot]="boot menu name and splash"
 )
 failed=0
-for s in "$repo"/install/0*.sh; do
+# AURA_FIRSTBOOT_STEPS (e.g. "02 05") limits the run to the steps an
+# earlier install could not finish (tools/install-from-ubuntu.sh).
+steps=("$repo"/install/0*.sh)
+if [[ -n ${AURA_FIRSTBOOT_STEPS:-} ]]; then
+    steps=()
+    for w in $AURA_FIRSTBOOT_STEPS; do steps+=("$repo"/install/"$w"*.sh); done
+fi
+for s in "${steps[@]}"; do
     n=$(basename "$s" .sh)
     printf '  %s>%s %s' "$A" "$R" "${what[$n]:-$n}"
     if AURA_USER="$user" AURA_FIRSTBOOT=1 bash "$s" >>"$log" 2>&1 </dev/null; then

@@ -17,7 +17,7 @@ have="$(npm ls -g --depth=0 --json 2>/dev/null | jq -r '.dependencies["aura-code
 if [[ $have == "$want" ]]; then
     echo "06-aura-code: up to date: aura-code $have"
 else
-    npm install -g --no-fund --no-audit "aura-code@$want" >/dev/null
+    npm install -g --no-fund --no-audit --allow-scripts=node-pty "aura-code@$want" >/dev/null
     echo "06-aura-code: installed aura-code $want (was: ${have:-none})"
 fi
 echo "06-aura-code: next, as the user: aura setup"

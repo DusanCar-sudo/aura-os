@@ -7,7 +7,9 @@
 import socket, sys, time
 from pathlib import Path
 
-SOCK = Path(__file__).with_name("monitor.sock")
+import os
+# AURA_VM_SOCK picks another VM (run-iso-test.sh uses isotest.sock)
+SOCK = Path(os.environ.get("AURA_VM_SOCK") or Path(__file__).with_name("monitor.sock"))
 NAMES = {" ": "spc", "-": "minus", "=": "equal", ".": "dot", ",": "comma",
          "/": "slash", ";": "semicolon", "'": "apostrophe", "[": "bracket_left",
          "]": "bracket_right", "\\": "backslash", "`": "grave_accent"}

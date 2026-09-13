@@ -4,21 +4,22 @@
 # (install/0*.sh), then disables itself and restarts into the login
 # screen. Nothing to type; a step that fails is shown and the rest go on.
 set -uo pipefail
+export LANG=en_US.UTF-8   # a system service starts without a locale
 
 user="${AURA_USER:?}"
 repo="/home/$user/aura-os"
 log=/var/log/aura-os-firstboot.log
-A=$'\e[38;2;139;124;246m'; D=$'\e[38;2;127;132;156m'; F=$'\e[38;2;230;232;242m'
-OK=$'\e[38;2;131;230;160m'; BAD=$'\e[38;2;243;139;168m'; R=$'\e[0m'; B=$'\e[1m'
+# the Linux console: 16 colors, a small font — basic ANSI and plain marks
+A=$'\e[95m'; D=$'\e[90m'; F=$'\e[97m'; OK=$'\e[92m'; BAD=$'\e[91m'; R=$'\e[0m'; B=$'\e[1m'
 
 setfont ter-132b 2>/dev/null || true
 clear
 printf '\n  %sAURA%s %sadOS%s   %sfirst start — setting up your desktop%s\n' "$B$F" "$R" "$B$A" "$R" "$D" "$R"
-printf '  %s──────────────────────────────────────────────%s\n\n' "$D" "$R"
+printf '  %s----------------------------------------------%s\n\n' "$D" "$R"
 
 printf '  %s•%s waiting for the network' "$A" "$R"
-nm-online -q -t 90 && printf '\r  %s✓%s network\n' "$OK" "$R" \
-    || printf '\r  %s✗%s no network — steps that download will fail\n' "$BAD" "$R"
+nm-online -q -t 90 && printf '\r\e[2K  %s+%s network\n' "$OK" "$R" \
+    || printf '\r\e[2K  %sx%s no network — steps that download will fail\n' "$BAD" "$R"
 
 declare -A what=(
     [01-packages]="desktop packages (sway, bar, sound, fonts)"
@@ -35,9 +36,9 @@ for s in "$repo"/install/0*.sh; do
     n=$(basename "$s" .sh)
     printf '  %s•%s %s' "$A" "$R" "${what[$n]:-$n}"
     if AURA_USER="$user" AURA_FIRSTBOOT=1 bash "$s" >>"$log" 2>&1 </dev/null; then
-        printf '\r  %s✓%s %s\n' "$OK" "$R" "${what[$n]:-$n}"
+        printf '\r\e[2K  %s+%s %s\n' "$OK" "$R" "${what[$n]:-$n}"
     else
-        printf '\r  %s✗%s %s  %s(see %s)%s\n' "$BAD" "$R" "${what[$n]:-$n}" "$D" "$log" "$R"
+        printf '\r\e[2K  %sx%s %s  %s(see %s)%s\n' "$BAD" "$R" "${what[$n]:-$n}" "$D" "$log" "$R"
         failed=$((failed + 1))
     fi
 done
@@ -46,7 +47,7 @@ rm -f /etc/aura-os-firstboot.env
 systemctl disable aura-os-firstboot >/dev/null 2>&1
 
 if (( failed == 0 )); then
-    printf '\n  %s✓ Done.%s %sRestarting into Aura adOS…%s\n' "$B$OK" "$R" "$D" "$R"
+    printf '\n  %s+ Done.%s %sRestarting into Aura adOS…%s\n' "$B$OK" "$R" "$D" "$R"
     sleep 5
 else
     printf '\n  %s%d step(s) had a problem.%s %sThe desktop may still work; open Aura and\n  ask her to read %s. Restarting in 30 s…%s\n' "$BAD" "$failed" "$R" "$D" "$log" "$R"

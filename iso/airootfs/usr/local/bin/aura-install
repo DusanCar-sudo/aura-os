@@ -15,9 +15,9 @@ set -uo pipefail
 
 LOG=/tmp/aura-install.log
 : > "$LOG"
-A=$'\e[38;2;139;124;246m'; A2=$'\e[38;2;165;148;249m'; D=$'\e[38;2;127;132;156m'
-F=$'\e[38;2;230;232;242m'; OK=$'\e[38;2;131;230;160m'; BAD=$'\e[38;2;243;139;168m'
-Y=$'\e[38;2;249;226;175m'; R=$'\e[0m'; B=$'\e[1m'
+# the Linux console: 16 colors, a small font — basic ANSI and plain marks
+A=$'\e[95m'; A2=$'\e[35m'; D=$'\e[90m'; F=$'\e[97m'; OK=$'\e[92m'
+BAD=$'\e[91m'; Y=$'\e[93m'; R=$'\e[0m'; B=$'\e[1m'
 
 setfont ter-132b 2>/dev/null || setfont ter-128b 2>/dev/null || true
 trap 'tput cnorm 2>/dev/null' EXIT
@@ -46,6 +46,7 @@ menu() {
         done
         (( n > rows )) && printf '    %s(%d of %d)%s\n' "$D" $(( i + 1 )) "$n" "$R"
         printf '\n  %s↑ ↓  move     Enter  choose%s' "$D" "$R"
+        (( n > rows )) && printf '     %sa-z  jump%s' "$D" "$R"
         IFS= read -rsn1 k
         if [[ $k == $'\e' ]]; then read -rsn2 -t 0.05 k2; k+=$k2; fi
         case $k in
@@ -54,6 +55,12 @@ menu() {
             $'\e[5') (( i = i - rows < 0 ? 0 : i - rows )); read -rsn1 -t 0.05 ;;
             $'\e[6') (( i = i + rows >= n ? n - 1 : i + rows )); read -rsn1 -t 0.05 ;;
             '') break ;;
+            [A-Za-z])  # jump to the next item starting with that letter
+                for (( j = 1; j <= n; j++ )); do
+                    local c=$(( (i + j) % n )) t="${items[(i + j) % n]}"
+                    t="${t#"${t%%[![:space:]]*}"}"
+                    [[ ${t:0:1} == [${k,,}${k^^}] ]] && { i=$c; break; }
+                done ;;
         esac
     done
     tput cnorm
@@ -94,7 +101,8 @@ NAME=dusan; PASS=""; ZONE=""; WIFI=""; WIFI_PSK=""
 HOST=aura
 
 guess_zone() {
-    ZONE=$(curl -fs --max-time 4 https://ipapi.co/timezone 2>/dev/null)
+    ZONE=$(curl -fs --max-time 4 'http://ip-api.com/line/?fields=timezone' 2>/dev/null \
+        || curl -fs --max-time 4 https://ipapi.co/timezone 2>/dev/null)
     [[ $ZONE =~ ^[A-Za-z_]+/[A-Za-z_/+-]+$ && -f /usr/share/zoneinfo/$ZONE ]] || ZONE=UTC
 }
 
@@ -114,7 +122,7 @@ t_wifi() {
     (( ${#names[@]} )) || { say "$Y" "No networks found. Move closer to the router and try again."; return; }
     local shown=()
     for j in "${!names[@]}"; do
-        shown+=("$(printf '%-30s %s' "${names[j]}" "$([[ ${secs[j]} == open ]] && echo open || echo '🔒')")")
+        shown+=("$(printf '%-30s %s' "${names[j]}" "$([[ ${secs[j]} == open ]] && echo open || echo locked)")")
     done
     menu "Choose your Wi-Fi" "${shown[@]}" "← back"
     (( PICK == ${#names[@]} )) && return
@@ -164,9 +172,9 @@ t_zone() {
 
 # ------------------------------------------------------------- install
 step() { printf '  %s•%s %s' "$A" "$R" "$1"; }
-ok()   { printf '\r  %s✓%s %s\n' "$OK" "$R" "$1"; }
+ok()   { printf '\r\e[2K  %s+%s %s\n' "$OK" "$R" "$1"; }
 fail() {
-    printf '\r  %s✗%s %s\n\n' "$BAD" "$R" "$1"
+    printf '\r\e[2K  %sx%s %s\n\n' "$BAD" "$R" "$1"
     tail -n 12 "$LOG" | sed 's/^/    /'
     printf '\n  %sThe full log is in %s. Enter to go back.%s' "$D" "$LOG" "$R"
     read -rs _; return 1
@@ -260,6 +268,12 @@ install_all() {
     fi
     umount /run/aura-data 2>/dev/null
     [[ -f $d/install/03-sway.sh ]] || { fail "copying Aura OS"; return; }
+    # The copy inside the ISO loses its executable bits (archiso sets 644
+    # on unlisted files): every script with a #! line gets +x back.
+    local f
+    while IFS= read -r -d '' f; do
+        [[ $(head -c2 "$f" 2>/dev/null) == '#!' ]] && chmod +x "$f"
+    done < <(find "$d" -type f -not -path '*/.git/*' -size -2M -print0)
     # shared memories (Claude + Aura) when the bigdata disk has them
     local mem=/mnt/bigdata/moved-from-system/home-$NAME
     if [[ -n $BIG ]]; then
@@ -299,7 +313,7 @@ UNIT
 
     sync; umount -R $M 2>/dev/null
     header
-    printf '  %s✓ Aura adOS is installed.%s\n\n' "$B$OK" "$R"
+    printf '  %sAura adOS is installed.%s\n\n' "$B$OK" "$R"
     printf '  %sTake the USB stick out, then press Enter.%s\n' "$F" "$R"
     printf '  %sThe first start sets up the desktop by itself (about 15 minutes),%s\n' "$D" "$R"
     printf '  %sthen restarts once — log in as %s.%s' "$D" "$NAME" "$R"
@@ -317,17 +331,17 @@ online && guess_zone
 [[ -z $ZONE ]] && ZONE=UTC
 
 while :; do
-    net="not connected"; online && net="online ✓${WIFI:+  ($WIFI)}"
+    net="not connected"; online && net="online${WIFI:+  ($WIFI)}"
     rows=(
         "$(printf '%-12s %s' 'Wi-Fi'     "$net")"
         "$(printf '%-12s %s' 'Your name' "$NAME")"
-        "$(printf '%-12s %s' 'Password'  "$([[ -n $PASS ]] && echo 'set ✓' || echo 'choose one')")"
+        "$(printf '%-12s %s' 'Password'  "$([[ -n $PASS ]] && echo 'set' || echo 'choose one')")"
         "$(printf '%-12s %s' 'Time zone' "$ZONE")"
-        "$(printf '%-12s %s' 'Where'     "$(lsblk -no SIZE "$ROOT" | tr -d ' ') prepared for Aura on $(basename "$DISK")  ✓")"
+        "$(printf '%-12s %s' 'Where'     "$(lsblk -no SIZE "$ROOT" | tr -d ' ') prepared for Aura on $(basename "$DISK")")"
         "▶  Install Aura adOS"
         "   Turn off"
     )
-    menu "Set these up, then Install." "${rows[@]}"
+    MENU_START=${last:-0} menu "Set these up, then Install." "${rows[@]}"; last=$PICK
     case $PICK in
         0) t_wifi ;;
         1) t_name ;;

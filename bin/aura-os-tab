@@ -4,6 +4,7 @@
 #   aura-os-tab label <n|plus>     waybar JSON for a tab (run by waybar)
 #   aura-os-tab new                create + switch to the next free tab
 #   aura-os-tab goto <n>           switch to tab n
+#   aura-os-tab send <n> [--follow] move the focused window to tab n
 #   aura-os-tab close              close the focused tab when it is empty
 #   aura-os-tab rename [n] [name]  rename; asks with fuzzel when unnamed
 #   aura-os-tab color <n> <color>  set a tab color (8 theme colors)
@@ -93,6 +94,17 @@ cmd_new() {
     swaymsg workspace number "$free" >/dev/null
     poke
     echo "tab $free"
+}
+
+cmd_send() {   # right-click on a tab: the focused window goes there
+    local n="${1:?usage: aura-os-tab send <n> [--follow]}"
+    [[ $n =~ ^[0-9]+$ ]] || { echo "aura-os-tab: send <n>" >&2; exit 2; }
+    if [[ ${2:-} == --follow ]]; then
+        swaymsg "move container to workspace number $n, workspace number $n" >/dev/null
+    else
+        swaymsg "move container to workspace number $n" >/dev/null
+    fi
+    poke
 }
 
 cmd_goto() {
@@ -207,6 +219,7 @@ case "${1:-}" in
     label)      cmd_label "${2:-}" ;;
     new)        cmd_new ;;
     goto)       cmd_goto "${2:-}" ;;
+    send)       cmd_send "${2:-}" "${3:-}" ;;
     close)      cmd_close ;;
     rename)     shift; cmd_rename "$@" ;;
     color)      cmd_color "${2:-}" "${3:-}" ;;

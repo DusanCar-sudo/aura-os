@@ -15,7 +15,7 @@
       "custom/sidebar",
       "custom/tab1", "custom/tab2", "custom/tab3", "custom/tab4",
       "custom/tab5", "custom/tab6", "custom/tab7", "custom/tab8",
-      "custom/tab9", "custom/tabplus", "sway/window"
+      "custom/tab9", "custom/tabplus", "sway/mode", "sway/window"
     ],
     "modules-center": [],
     "modules-right": ["bluetooth", "network", "wireplumber", "custom/clip", "clock"],
@@ -110,6 +110,7 @@
       "tooltip": false,
       "on-click": "aura-os-tab new"
     },
+    "sway/mode": { "format": " {} ", "tooltip": false },
     "sway/window": { "max-length": 60, "tooltip": false },
     // Classic system items, plain text (herdr look). Click → a floating
     // TUI in aura-term (app_id aura-float, see sway config).

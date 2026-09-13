@@ -103,3 +103,6 @@ window#waybar.left #memory.high { color: @red; }
 /* sidebar middle: last used anything */
 window#waybar.left #custom-recent { padding: 8px 10px; }
 window#waybar.left #custom-recent:hover { background: @bg_alt; }
+
+/* active sway mode (Super+R → resize) */
+window#waybar.top #mode { color: @bg; background: @accent; padding: 0 8px; }

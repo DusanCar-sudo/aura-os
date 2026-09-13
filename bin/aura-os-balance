@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# aura-os-balance — make every window in the focused split equal (Super+0).
+# sway has no "balance" command: set each sibling to 100/n percent along
+# the split's axis.
+set -euo pipefail
+tree="$(swaymsg -t get_tree)"
+read -r layout n ids < <(jq -r '
+    def parent_of_focused: .. | objects | select(any(.nodes[]?; .focused or any(.. | objects; .focused)));
+    [parent_of_focused] | last
+    | [.layout, (.nodes | length), (.nodes | map(.id) | join(","))] | @tsv' <<<"$tree" | tr '\t' ' ')
+[[ ${n:-0} -gt 1 ]] || exit 0
+case $layout in
+    splith) dim=width ;;
+    splitv) dim=height ;;
+    *) exit 0 ;;   # tabbed/stacked: nothing to balance
+esac
+pct=$((100 / n))
+for id in ${ids//,/ }; do swaymsg "[con_id=$id] resize set $dim $pct ppt" >/dev/null; done

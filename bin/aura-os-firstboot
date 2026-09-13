@@ -19,7 +19,11 @@ printf '\n  %sAURA%s %sadOS%s   %sfirst start — setting up your desktop%s\n' "
 printf '  %s----------------------------------------------%s\n\n' "$D" "$R"
 
 printf '  %s>%s waiting for the network' "$A" "$R"
-nm-online -q -t 90 && printf '\r\e[2K  %s+%s network\n' "$OK" "$R" \
+# nm-online alone returned before Wi-Fi had DNS on the laptop (snapper
+# download failed): wait until the mirror name resolves, up to 3 min.
+nm-online -q -t 90
+for _ in $(seq 90); do getent hosts geo.mirror.pkgbuild.com >/dev/null && break; sleep 2; done
+getent hosts geo.mirror.pkgbuild.com >/dev/null && printf '\r\e[2K  %s+%s network\n' "$OK" "$R" \
     || printf '\r\e[2K  %sx%s no network — steps that download will fail\n' "$BAD" "$R"
 
 declare -A what=(

@@ -44,7 +44,9 @@ if [[ -f /boot/EFI/Linux/zz-old-system.efi ]]; then
     echo "08-boot: old system image → Aura OS recovery entry"
 fi
 
-conf=/boot/loader/loader.conf
+# loader.conf lives on the ESP: /boot in the VM, /efi on a laptop that
+# shares its ESP (then /boot is a separate XBOOTLDR partition).
+conf="$(bootctl --print-esp-path 2>/dev/null || echo /boot)/loader/loader.conf"
 want=$'default aura-os.efi\ntimeout 3\nconsole-mode keep\neditor no'
 if [[ "$(cat "$conf" 2>/dev/null)" != "$want" ]]; then
     printf '%s\n' "$want" > "$conf"

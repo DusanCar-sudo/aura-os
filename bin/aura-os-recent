@@ -2,6 +2,7 @@
 # aura-os-recent — "last used anything" for the sidebar's middle section.
 #
 #   aura-os-recent label          waybar JSON: top N items (recent|frequent)
+#   aura-os-recent list [n]       plain kind<TAB>value lines (for aura-os-mcp)
 #   aura-os-recent pick           fuzzel list of all items → reopen the choice
 #   aura-os-recent mode [recent|frequent]   show or set the mode
 #   aura-os-recent watch          refresh the sidebar when a source changes
@@ -222,6 +223,7 @@ cmd_watch() {   # coalesce bursts (Firefox writes often) into one refresh
 
 case "${1:-}" in
     label)  cmd_label ;;
+    list)   { ranked || true; } | head -n "${2:-20}" ;;   # kind<TAB>value, for tools (aura-os-mcp)
     pick)   cmd_pick ;;
     mode)   cmd_mode "${2:-}" ;;
     watch)  cmd_watch ;;

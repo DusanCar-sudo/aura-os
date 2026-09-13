@@ -1,0 +1,273 @@
+#!/usr/bin/env bash
+# aura-os-mcp — Aura OS as MCP tools for any agent (Claude Code, Codex,
+# Aura, Zed, ...). MCP over stdio: one JSON-RPC message per line.
+#
+#   claude mcp add aura-os -- aura-os-mcp        (Claude Code)
+#   aura-os-mcp --list                           print the tools
+#
+# Phase 1 tiers:
+#   read        windows, desks, system status, agents, recent items
+#   reversible  focus / move / float windows, switch desks, open apps and
+#               URLs, tabs, theme, wallpaper, sidebar, notify
+# Not here on purpose: closing windows (unsaved work), reading the
+# clipboard (passwords), packages, snapshots, reboot — phase 2, behind a
+# user confirmation. There is no "run a command" tool: apps open only by
+# their .desktop id, URLs only if http(s).
+#
+# Every call is logged: ~/.local/state/aura-os/mcp.log
+# (time, agent from clientInfo, tool, arguments with secrets masked, ok/error).
+set -uo pipefail
+
+VERSION="0.1.0"
+PROTO_DEFAULT="2025-06-18"
+log="${XDG_STATE_HOME:-$HOME/.local/state}/aura-os/mcp.log"
+mkdir -p "$(dirname "$log")"
+agent="unknown"
+
+export SWAYSOCK="${SWAYSOCK:-$(ls "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"/sway-ipc.*.sock 2>/dev/null | head -n1)}"
+
+# ── tool catalogue ──────────────────────────────────────────────────────
+TOOLS='[
+ {"name":"windows_list","description":"All open windows: id, app, title, desk, focused, floating. Use the id with the window_* tools.",
+  "inputSchema":{"type":"object","properties":{}}},
+ {"name":"desks_list","description":"Desks (workspaces 1-9): number, name, tab color, windows mode, window count, which is focused.",
+  "inputSchema":{"type":"object","properties":{}}},
+ {"name":"system_status","description":"RAM used/total, swap, CPU load, root disk usage, uptime.",
+  "inputSchema":{"type":"object","properties":{}}},
+ {"name":"agents_status","description":"Coding agents on this machine (claude, codex, aura, hermes) with state and their last step, plus long-running terminal programs.",
+  "inputSchema":{"type":"object","properties":{}}},
+ {"name":"recent_items","description":"Recently or frequently used items: commands ($), folders (d), files (f), web addresses (@), apps (a).",
+  "inputSchema":{"type":"object","properties":{"limit":{"type":"integer","minimum":1,"maximum":100,"default":20}}}},
+ {"name":"window_focus","description":"Focus a window (switches to its desk).",
+  "inputSchema":{"type":"object","properties":{"id":{"type":"integer"}},"required":["id"]}},
+ {"name":"window_move_to_desk","description":"Move a window to desk 1-9; follow=true also switches there.",
+  "inputSchema":{"type":"object","properties":{"id":{"type":"integer"},"desk":{"type":"integer","minimum":1,"maximum":9},"follow":{"type":"boolean","default":false}},"required":["id","desk"]}},
+ {"name":"window_float","description":"Pop a window out of the tiles (floating=true) or back in (false).",
+  "inputSchema":{"type":"object","properties":{"id":{"type":"integer"},"floating":{"type":"boolean"}},"required":["id","floating"]}},
+ {"name":"desk_switch","description":"Show desk 1-9.",
+  "inputSchema":{"type":"object","properties":{"desk":{"type":"integer","minimum":1,"maximum":9}},"required":["desk"]}},
+ {"name":"app_open","description":"Open an installed app by its .desktop id (e.g. firefox, org.kde.dolphin, aura-term), optionally on a desk. Use apps_list for ids.",
+  "inputSchema":{"type":"object","properties":{"app":{"type":"string"},"desk":{"type":"integer","minimum":1,"maximum":9}},"required":["app"]}},
+ {"name":"apps_list","description":"Installed apps: .desktop id and name.",
+  "inputSchema":{"type":"object","properties":{}}},
+ {"name":"url_open","description":"Open an http(s) URL in the default browser.",
+  "inputSchema":{"type":"object","properties":{"url":{"type":"string"}},"required":["url"]}},
+ {"name":"tab_rename","description":"Rename the tab of desk 1-9 (shows as \"2 api\").",
+  "inputSchema":{"type":"object","properties":{"desk":{"type":"integer","minimum":1,"maximum":9},"name":{"type":"string","maxLength":24}},"required":["desk","name"]}},
+ {"name":"tab_color","description":"Color the tab of desk 1-9.",
+  "inputSchema":{"type":"object","properties":{"desk":{"type":"integer","minimum":1,"maximum":9},"color":{"type":"string","enum":["purple","blue","cyan","green","yellow","orange","red","gray"]}},"required":["desk","color"]}},
+ {"name":"theme_apply","description":"Apply a color theme to the whole desktop. Use theme_list for names.",
+  "inputSchema":{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}},
+ {"name":"theme_list","description":"Available themes and the current one.",
+  "inputSchema":{"type":"object","properties":{}}},
+ {"name":"wallpaper_set","description":"Set the wallpaper to an image file path, or \"solid\" for the theme color.",
+  "inputSchema":{"type":"object","properties":{"image":{"type":"string"}},"required":["image"]}},
+ {"name":"sidebar_toggle","description":"Hide or show the left sidebar.",
+  "inputSchema":{"type":"object","properties":{}}},
+ {"name":"notify","description":"Show the user a desktop notification.",
+  "inputSchema":{"type":"object","properties":{"title":{"type":"string","maxLength":80},"body":{"type":"string","maxLength":400}},"required":["title"]}}
+]'
+
+# ── helpers ─────────────────────────────────────────────────────────────
+mask() { sed -E 's/(sk|pk|ghp|gho|xox[abp])[-_][A-Za-z0-9_-]{8,}/***/g;
+                 s/((api[_-]?key|token|secret|password|passwd)["'"'"' ]*[:=]["'"'"' ]*)[^ "'"'"',}]+/\1***/Ig'; }
+
+audit() {   # audit <tool> <args-json> <ok|error>
+    printf '%s\t%s\t%s\t%s\t%s\n' "$(date -Is)" "$agent" "$1" "$(printf '%s' "$2" | mask | cut -c1-300)" "$3" >> "$log"
+}
+
+reply() { printf '%s\n' "$1"; }
+result() {   # result <id> <json-result>
+    reply "$(jq -cn --argjson id "$1" --argjson r "$2" '{jsonrpc:"2.0", id:$id, result:$r}')"
+}
+rpc_error() {   # rpc_error <id> <code> <message>
+    reply "$(jq -cn --argjson id "$1" --argjson c "$2" --arg m "$3" '{jsonrpc:"2.0", id:$id, error:{code:$c, message:$m}}')"
+}
+tool_text() {   # tool_text <id> <text> [error]
+    result "$1" "$(jq -cn --arg t "$2" --argjson e "${3:-false}" '{content:[{type:"text", text:$t}], isError:$e}')"
+}
+
+arg() { jq -r --arg k "$1" '.[$k] // empty' <<<"$args"; }
+int_arg() { local v; v="$(arg "$1")"; [[ $v =~ ^[0-9]+$ ]] && printf '%s' "$v"; }
+need_sway() { [[ -S ${SWAYSOCK:-} ]] || { echo "no sway session found"; return 1; }; }
+window_exists() { swaymsg -t get_tree | jq -e --argjson id "$1" 'any(..|objects; .id? == $id and .pid? != null)' >/dev/null; }
+
+desktop_file() {   # desktop_file <id> → path, if installed and visible
+    local d id="$1"
+    [[ $id =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+    for d in "${XDG_DATA_HOME:-$HOME/.local/share}" /usr/local/share /usr/share \
+             /var/lib/flatpak/exports/share "$HOME/.local/share/flatpak/exports/share"; do
+        [[ -f $d/applications/$id.desktop ]] && { printf '%s\n' "$d/applications/$id.desktop"; return 0; }
+    done
+    return 1
+}
+
+# ── tools: each prints its answer; non-zero exit = tool error ───────────
+t_windows_list() {
+    need_sway || return 1
+    swaymsg -t get_tree | jq -r '
+        def wins(ws): (.nodes[]?, .floating_nodes[]?) as $n
+            | if ($n.pid? != null) then {id:$n.id, app:($n.app_id // $n.window_properties.class // "?"),
+                   title:($n.name // ""), desk:ws, focused:$n.focused, floating:($n.type == "floating_con")}
+              else ($n | wins(ws)) end;
+        [.nodes[].nodes[] | select(.type == "workspace" and .num > 0) | . as $w | wins($w.num)]
+        | map("\(.id)\tdesk \(.desk)\t\(.app)\t\(if .floating then "floating" else "tiled" end)\(if .focused then "\tFOCUSED" else "" end)\t\(.title[0:80])")
+        | if length == 0 then "no windows" else join("\n") end'
+}
+
+t_desks_list() {
+    need_sway || return 1
+    local tabs; tabs="$(cat "${XDG_CONFIG_HOME:-$HOME/.config}/aura-os/tabs.json" 2>/dev/null || echo '{}')"
+    local wm; wm="$(cat "${XDG_RUNTIME_DIR:-/tmp}/aura-os/windows-desks" 2>/dev/null | jq -Rsc 'split("\n")|map(select(.!=""))')"
+    swaymsg -t get_tree | jq -r --argjson t "$tabs" --argjson wm "${wm:-[]}" '
+        [.nodes[].nodes[] | select(.type == "workspace" and .num > 0)
+         | {n:.num, name:(.name|sub("^[0-9]+ ?";"")), focused:(.focused or any(..|objects;.focused? == true)),
+            windows:([..|objects|select(.pid? != null)]|length)}]
+        | map(. as $d | ($d.n | tostring) as $k
+              | "desk \($d.n)\(if $d.name != "" then " \"\($d.name)\"" else "" end)\t\($d.windows) windows"
+              + (($t[$k].color // "") | if . != "" then "\tcolor " + . else "" end)
+              + (if ($wm | index($k)) != null then "\twindows-mode" else "" end)
+              + (if $d.focused then "\tFOCUSED" else "" end)) | join("\n")'
+}
+
+t_system_status() {
+    free -m | awk '/^Mem:/{printf "RAM %d/%d MB used (%d%%)\n", $3, $2, $3*100/$2} /^Swap:/{printf "swap %d/%d MB\n", $3, $2}'
+    printf 'load %s\n' "$(cut -d' ' -f1-3 /proc/loadavg)"
+    df -h / | awk 'NR==2{printf "disk / %s of %s used (%s)\n", $3, $2, $5}'
+    printf 'uptime %s\n' "$(uptime -p | sed 's/^up //')"
+}
+
+t_agents_status() {
+    local rt="${XDG_RUNTIME_DIR:-/tmp}/aura-os" out=""
+    compgen -G "$rt/agents/*.json" >/dev/null && out+="$(jq -rs 'sort_by(-.updated) | map("\(.agent)\t\(.state)\t\(.where)\t\(.step)") | join("\n")' "$rt"/agents/*.json)"
+    compgen -G "$rt/panes/*.json" >/dev/null && out+="${out:+$'\n'}$(jq -rs 'map(select(.state != "idle")) | map("program\t\(.state)\t\(.cwd // "")\t\(.cmd // .agent // "job") \(.last // "")") | join("\n")' "$rt"/panes/*.json)"
+    printf '%s\n' "${out:-no agents or long-running programs}"
+}
+
+t_recent_items() {
+    local n; n="$(int_arg limit)"; n="${n:-20}"; (( n > 100 )) && n=100
+    aura-os-recent list "$n" | awk -F'\t' '{print $1 " " $2}'
+}
+
+t_window_focus() {
+    need_sway || return 1
+    local id; id="$(int_arg id)" || true; [[ -n $id ]] && window_exists "$id" || { echo "no window with that id (see windows_list)"; return 1; }
+    swaymsg "[con_id=$id] focus" >/dev/null && echo "focused window $id"
+}
+
+t_window_move_to_desk() {
+    need_sway || return 1
+    local id desk follow; id="$(int_arg id)" || true; desk="$(int_arg desk)" || true; follow="$(arg follow)"
+    [[ -n $id ]] && window_exists "$id" || { echo "no window with that id"; return 1; }
+    [[ $desk =~ ^[1-9]$ ]] || { echo "desk must be 1-9"; return 1; }
+    swaymsg "[con_id=$id] move container to workspace number $desk" >/dev/null || return 1
+    [[ $follow == true ]] && swaymsg "workspace number $desk" >/dev/null
+    aura-os-status poke 2>/dev/null
+    echo "window $id → desk $desk$([[ $follow == true ]] && echo ' (followed)')"
+}
+
+t_window_float() {
+    need_sway || return 1
+    local id f; id="$(int_arg id)" || true; f="$(arg floating)"
+    [[ -n $id ]] && window_exists "$id" || { echo "no window with that id"; return 1; }
+    [[ $f == true || $f == false ]] || { echo "floating must be true or false"; return 1; }
+    swaymsg "[con_id=$id] floating $([[ $f == true ]] && echo enable || echo disable)" >/dev/null && echo "window $id floating=$f"
+}
+
+t_desk_switch() {
+    need_sway || return 1
+    local d; d="$(int_arg desk)" || true; [[ $d =~ ^[1-9]$ ]] || { echo "desk must be 1-9"; return 1; }
+    swaymsg "workspace number $d" >/dev/null && echo "showing desk $d"
+}
+
+t_apps_list() {
+    local d f
+    for d in "${XDG_DATA_HOME:-$HOME/.local/share}" /usr/local/share /usr/share; do
+        for f in "$d"/applications/*.desktop; do
+            [[ -f $f ]] || continue
+            grep -qE '^NoDisplay=true|^Hidden=true' "$f" && continue
+            printf '%s\t%s\n' "$(basename "$f" .desktop)" "$(sed -n 's/^Name=//p' "$f" | head -n1)"
+        done
+    done | sort -u -t$'\t' -k1,1
+}
+
+t_app_open() {
+    need_sway || return 1
+    local app desk f exec_line; app="$(arg app)"; desk="$(int_arg desk)" || true
+    f="$(desktop_file "$app")" || { echo "no installed app with id '$app' (see apps_list)"; return 1; }
+    grep -qE '^NoDisplay=true|^Hidden=true' "$f" && { echo "'$app' is not a user-facing app"; return 1; }
+    exec_line="$(sed -n '/^\[Desktop Entry\]/,/^\[/{s/^Exec=//p}' "$f" | head -n1 | sed -E 's/ ?%[fFuUdDnNickvm]//g')"
+    grep -q '^Terminal=true' "$f" && exec_line="aura-term -e $exec_line"
+    if [[ $desk =~ ^[1-9]$ ]]; then swaymsg "workspace number $desk" >/dev/null; fi
+    swaymsg exec "$exec_line" >/dev/null && echo "opened $app${desk:+ on desk $desk}"
+    aura-os-recent log a "$app" 2>/dev/null || true
+}
+
+t_url_open() {
+    local url; url="$(arg url)"
+    [[ $url =~ ^https?://[^[:space:]\"\'\`\$\;\|\&\<\>]+$ ]] || { echo "only plain http(s) URLs"; return 1; }
+    xdg-open "$url" >/dev/null 2>&1 & disown
+    echo "opened $url"
+}
+
+t_tab_rename() {
+    local d n; d="$(int_arg desk)" || true; n="$(arg name)"
+    [[ $d =~ ^[1-9]$ ]] || { echo "desk must be 1-9"; return 1; }
+    [[ -n $n ]] || { echo "name is empty"; return 1; }
+    aura-os-tab rename "$d" "$n"
+}
+
+t_tab_color() {
+    local d c; d="$(int_arg desk)" || true; c="$(arg color)"
+    [[ $d =~ ^[1-9]$ ]] || { echo "desk must be 1-9"; return 1; }
+    aura-os-tab color "$d" "$c"
+}
+
+t_theme_list() { aura-os-theme list; }
+t_theme_apply() {
+    local n; n="$(arg name)"; [[ $n =~ ^[a-z0-9-]+$ ]] || { echo "bad theme name"; return 1; }
+    aura-os-theme apply "$n"
+}
+
+t_wallpaper_set() {
+    local img; img="$(arg image)"
+    if [[ $img == solid ]]; then aura-os-wallpaper solid; else aura-os-wallpaper set "${img/#\~/$HOME}"; fi
+}
+
+t_sidebar_toggle() { aura-os-tab sidebar toggle; }
+
+t_notify() {
+    local t b; t="$(arg title)"; b="$(arg body)"
+    notify-send -a "${agent}" "$t" "$b" && echo "notified"
+}
+
+# ── JSON-RPC loop ───────────────────────────────────────────────────────
+if [[ ${1:-} == --list ]]; then jq -r '.[] | "\(.name)\t\(.description)"' <<<"$TOOLS"; exit 0; fi
+
+while IFS= read -r line; do
+    [[ -n ${line// } ]] || continue
+    method="$(jq -r '.method // empty' <<<"$line" 2>/dev/null)" || { rpc_error null -32700 "parse error"; continue; }
+    id="$(jq -c '.id // null' <<<"$line")"
+    case $method in
+        initialize)
+            agent="$(jq -r '.params.clientInfo.name // "unknown"' <<<"$line" | tr -cd 'A-Za-z0-9._ -' | cut -c1-40)"
+            proto="$(jq -r --arg d "$PROTO_DEFAULT" '.params.protocolVersion // $d' <<<"$line")"
+            audit initialize "{}" ok
+            result "$id" "$(jq -cn --arg p "$proto" --arg v "$VERSION" '{protocolVersion:$p,
+                capabilities:{tools:{listChanged:false}}, serverInfo:{name:"aura-os", version:$v},
+                instructions:"Tools to see and drive the Aura OS desktop: windows, desks, apps, theme. Read tools are free; every call is logged. There is no shell tool."}')" ;;
+        notifications/*) ;;                                  # no reply to notifications
+        ping) result "$id" '{}' ;;
+        tools/list) result "$id" "$(jq -c '{tools: .}' <<<"$TOOLS")" ;;
+        tools/call)
+            name="$(jq -r '.params.name // empty' <<<"$line")"
+            args="$(jq -c '.params.arguments // {}' <<<"$line")"
+            if ! jq -e --arg n "$name" 'any(.[]; .name == $n)' <<<"$TOOLS" >/dev/null; then
+                audit "$name" "$args" unknown-tool; rpc_error "$id" -32602 "unknown tool: $name"; continue
+            fi
+            if out="$("t_$name" 2>&1)"; then audit "$name" "$args" ok; tool_text "$id" "$out"
+            else audit "$name" "$args" error; tool_text "$id" "${out:-failed}" true; fi ;;
+        "") rpc_error "$id" -32600 "invalid request" ;;
+        *)  [[ $id != null ]] && rpc_error "$id" -32601 "method not found: $method" ;;
+    esac
+done

@@ -1,0 +1,5 @@
+# Capture without a picker: the output under the cursor (Aura computer
+# use, one monitor at a time). Browser screen sharing uses the same.
+[screencast]
+chooser_type=none
+max_fps=30

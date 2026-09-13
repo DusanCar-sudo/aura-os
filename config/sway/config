@@ -50,6 +50,10 @@ xwayland enable
 # one checks before starting. waybar runs both bars (top tabs + left
 # sidebar) in one process — see config/waybar/config.jsonc. The
 # watcher blocks on sway's event stream: event-driven, no polling.
+# Tell systemd/D-Bus which session this is: the XDG portals (screen
+# sharing, Aura computer use, file pickers) need it. Arch ships this in
+# /etc/sway/config.d, which our config doesn't include.
+exec dbus-update-activation-environment --systemd WAYLAND_DISPLAY DISPLAY SWAYSOCK XDG_CURRENT_DESKTOP=sway XDG_SESSION_TYPE=wayland
 exec pgrep -x waybar >/dev/null || waybar
 exec pgrep -x mako >/dev/null || mako
 exec pgrep -f '^bash /usr/local/bin/aura-os-status watch$' >/dev/null || aura-os-status watch

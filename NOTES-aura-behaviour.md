@@ -112,3 +112,15 @@ Stumbles (found at 23:50, VM boot shows swaynag "errors in config")
   Written by Aura in 003, kept by Claude. Third self-matching pgrep/pkill
   bug today (aura-term Claude's pkill -x foot, Claude's pkill over ssh
   twice). Rule: match exact command lines (^…$) or PIDs, never loose -f.
+
+## aura-code fix: computer use on sway (2026-09-13)
+- :compon failed on sway: aura_screen.py always opened a RemoteDesktop
+  portal session (needed on KDE to get a screen stream); wlroots has no
+  RemoteDesktop portal → "No such interface". Fix (aura-code
+  src/tools/screen/aura_screen.py, uncommitted there, tested in the VM):
+  use RemoteDesktop when the portal has it, else a plain ScreenCast
+  session — input already goes through Aura's own uinput device.
+  KDE path unchanged. Also needed on the OS side (install/07): session
+  env export to systemd (portals didn't know it was sway), wlr portal
+  prefs, /dev/uinput uaccess, python-gobject/evdev, gst-plugins-base,
+  imagemagick (PNG encode). Tag: aura (portability).

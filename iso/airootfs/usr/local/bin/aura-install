@@ -20,7 +20,8 @@ A=$'\e[95m'; A2=$'\e[35m'; D=$'\e[90m'; F=$'\e[97m'; OK=$'\e[92m'
 BAD=$'\e[91m'; Y=$'\e[93m'; R=$'\e[0m'; B=$'\e[1m'
 
 setfont ter-132b 2>/dev/null || setfont ter-128b 2>/dev/null || true
-trap 'tput cnorm 2>/dev/null' EXIT
+stty -echo 2>/dev/null
+trap 'tput cnorm 2>/dev/null; stty echo 2>/dev/null' EXIT
 
 # ------------------------------------------------------------- screen
 header() {
@@ -73,7 +74,7 @@ ask() {
     header
     printf '  %s%s%s\n\n  %s›%s ' "$F" "$1" "$R" "$A" "$R"
     if [[ ${3:-} == secret ]]; then IFS= read -rs ANSWER; echo
-    else IFS= read -r -e -i "${2:-}" ANSWER; fi
+    else stty echo; IFS= read -r -e -i "${2:-}" ANSWER; stty -echo; fi
 }
 
 say() {  # say <color> <text> — a message, any key to go on
@@ -354,7 +355,8 @@ while :; do
   Everything else on the disk is left untouched." ;;
         5)  if ! online; then say "$Y" "Connect to the internet first (Wi-Fi)."; continue; fi
             if [[ -z $PASS ]]; then say "$Y" "Choose a password first."; continue; fi
-            menu "Install now? $ROOT and $BOOT will be erased. Nothing else changes." "Yes, install" "No, go back"
+            # "No" is preselected: a stray Enter never starts an install
+            MENU_START=1 menu "Install now? $ROOT and $BOOT will be erased. Nothing else changes." "Yes, install" "No, go back"
             (( PICK == 0 )) && install_all ;;
         6)  menu "Turn off the computer?" "Yes" "No"; (( PICK == 0 )) && poweroff ;;
     esac

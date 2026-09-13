@@ -35,7 +35,8 @@ keep them. Notable groups:
 ## Names and marks
 
 "Based on Arch Linux" is allowed wording. Do not use the Arch Linux
-logo or imply Aura OS is an official Arch product. Omarchy was an
-inspiration only; no Omarchy code is included.
+logo or imply Aura OS is an official Arch product. Aura OS's design
+follows its own instincts and current trends; it includes no code from
+other distributions.
 
 *This file is a working checklist, not legal advice.*

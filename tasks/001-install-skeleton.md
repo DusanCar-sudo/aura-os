@@ -19,5 +19,5 @@ and a Super+A keybinding that opens an Aura prompt.
 
 ## Rules
 - Write code on the host, run it only in the VM over ssh -p 2222.
-- Look at how Omarchy structures install/ for ideas; write our own.
+- Follow your instincts and current trends for how install/ is structured; write our own.
 - Report at the end: what you tested in the VM, what you did not.

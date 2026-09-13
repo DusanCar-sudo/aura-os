@@ -3,7 +3,8 @@
 ## What this repo is
 Aura OS: finally your own OS on your own laptop, Arch + sway,
 running what the user needs. You build it and you operate it.
-Write our own scripts; never copy another distro's code.
+Follow instincts and trends; write our own scripts, never copy
+another distro's code.
 
 ## Where you run
 Develop in this repo on the host. Test ONLY inside the VM:

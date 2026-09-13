@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# aura-os-desk — per-desk layout mode (Super+Shift+V).
+#   aura-os-desk toggle      the focused desk: tiles ↔ free windows
+#   aura-os-desk windows     float every window on it (overlap, drag anywhere)
+#   aura-os-desk tiles       back to tiling
+#   aura-os-desk is-windows <n>   exit 0 if desk n is in windows mode
+# New windows opened on a windows-mode desk float too (applied by
+# aura-os-status watch on sway's window::new events). State is per
+# session: $XDG_RUNTIME_DIR/aura-os/windows-desks (one number per line).
+set -euo pipefail
+
+state="${XDG_RUNTIME_DIR:-/tmp}/aura-os/windows-desks"
+mkdir -p "$(dirname "$state")"; touch "$state"
+
+focused() { swaymsg -t get_workspaces | jq -r '.[] | select(.focused) | .num'; }
+notify() { notify-send -t 1500 "desk $1" "$2" 2>/dev/null || true; }
+
+to_windows() {
+    local n; n="$(focused)"
+    grep -qx "$n" "$state" || echo "$n" >> "$state"
+    swaymsg '[workspace=__focused__ tiling] floating enable' >/dev/null 2>&1 || true
+    notify "$n" "windows mode — Super+drag moves, Super+right-drag resizes"
+}
+to_tiles() {
+    local n; n="$(focused)"
+    sed -i "/^$n\$/d" "$state"
+    swaymsg '[workspace=__focused__ floating] floating disable' >/dev/null 2>&1 || true
+    notify "$n" "tiles"
+}
+
+case "${1:-toggle}" in
+    windows) to_windows ;;
+    tiles)   to_tiles ;;
+    toggle)  if grep -qx "$(focused)" "$state"; then to_tiles; else to_windows; fi ;;
+    is-windows) grep -qx "${2:?desk number}" "$state" ;;
+    *) sed -n '2,9p' "$0" >&2; exit 2 ;;
+esac
+aura-os-status poke 2>/dev/null || true

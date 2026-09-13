@@ -21,8 +21,11 @@ font pango:JetBrainsMono Nerd Font 11
 # No window title bars: 1px border only. The focused title shows on
 # hover at the top-left of the bar (waybar sway/window). Tabbed and
 # stacked containers still show their titles (sway draws those).
-default_border pixel 1
-default_floating_border pixel 1
+# 4px borders = a 4px grab zone for resizing by the edge. Inactive
+# borders are drawn in the background color (invisible), the active
+# one in the accent color (see client.* / aura-os-theme).
+default_border pixel 4
+default_floating_border pixel 4
 # No space between tiles: nothing shows through (wallpaper).
 gaps inner 0
 gaps outer 0
@@ -33,9 +36,9 @@ titlebar_padding 4
 for_window [title=".*"] title_format "─ %title ─"
 
 # purplerain palette (themes/purplerain/palette): active purple, inactive dim.
-client.focused          #8b7cf6 #0e0e14 #c8cad8 #8b7cf6
-client.focused_inactive #2a2a3a #0e0e14 #5c5f77 #2a2a3a
-client.unfocused        #2a2a3a #0e0e14 #5c5f77 #2a2a3a
+client.focused          #8b7cf6 #0e0e14 #c8cad8 #8b7cf6 #8b7cf6
+client.focused_inactive #0e0e14 #0e0e14 #5c5f77 #0e0e14 #0e0e14
+client.unfocused        #0e0e14 #0e0e14 #5c5f77 #0e0e14 #0e0e14
 client.background       #0e0e14
 
 # No wallpaper: the theme background everywhere.

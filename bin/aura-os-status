@@ -48,7 +48,16 @@ sync_names() {
 }
 
 cmd_watch() {
-    while IFS= read -r _event; do
+    local ev id n
+    while IFS= read -r ev; do
+        # a new window on a desk in windows mode floats (aura-os-desk)
+        if [[ $ev == *'"change": "new"'* || $ev == *'"change":"new"'* ]] && [[ -s ${XDG_RUNTIME_DIR:-/tmp}/aura-os/windows-desks ]]; then
+            id="$(jq -r '.container.id // empty' <<<"$ev" 2>/dev/null || true)"
+            n="$(swaymsg -t get_workspaces | jq -r '.[] | select(.focused) | .num')"
+            if [[ -n $id ]] && aura-os-desk is-windows "$n" 2>/dev/null; then
+                swaymsg "[con_id=$id] floating enable, move position center" >/dev/null 2>&1 || true
+            fi
+        fi
         sync_names
         poke
     done < <(swaymsg -t subscribe -m '["workspace", "window"]' 2>/dev/null)

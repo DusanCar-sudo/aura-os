@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+# aura-os-display — arrange screens: side by side or up/down, resolution,
+# scale, on/off. A small TUI (Super+P, Settings → display); runs in a
+# floating aura-term.
+#
+#   ←→↑↓   place the selected screen left/right/above/below the anchor
+#   Tab    select the next screen          r  resolution   s  scale
+#   o      turn the selected screen on/off (never the last one)
+#   Enter  save (per monitor model — comes back on replug)   q  quit
+#
+# Changes apply live with swaymsg. Saved to
+# ~/.config/sway/config.d/70-displays.conf, keyed by make/model/serial.
+set -euo pipefail
+
+if [[ ${1:-} != --here && -z ${AURA_DISPLAY_INNER:-} && ! -t 0 ]]; then
+    exec aura-term --app-id=aura-float -e env AURA_DISPLAY_INNER=1 "$0" --here
+fi
+
+export SWAYSOCK="${SWAYSOCK:-$(ls "${XDG_RUNTIME_DIR:-/tmp}"/sway-ipc.*.sock 2>/dev/null | head -n1)}"
+save_to="${XDG_CONFIG_HOME:-$HOME/.config}/sway/config.d/70-displays.conf"
+P=$'\e[38;2;139;124;246m'; D=$'\e[38;2;92;95;119m'; F=$'\e[38;2;200;202;216m'; R=$'\e[0m'; B=$'\e[1m'
+
+outs() { swaymsg -t get_outputs; }
+names() { outs | jq -r '.[].name'; }
+anchor() {   # the laptop panel if there is one, else the first screen
+    outs | jq -r '([.[] | select(.name | test("^(eDP|LVDS|DSI)"))][0].name) // .[0].name'
+}
+sel="$(outs | jq -r '[.[] | select(.name != "'"$(anchor)"'")][0].name // .[0].name')"
+msg=""
+
+draw() {
+    local cols rows
+    cols=$(( $(tput cols) - 4 )); rows=$(( $(tput lines) - 10 ))
+    (( cols > 100 )) && cols=100; (( rows > 22 )) && rows=22
+    printf '\e[H\e[2J  %sAura OS · displays%s\n\n' "$B$P" "$R"
+    outs | jq -r --arg sel "$sel" '.[] | [.name, .rect.x, .rect.y, .rect.width, .rect.height,
+            (if .name == $sel then 1 else 0 end), (if .active then 1 else 0 end),
+            "\(.current_mode.width // 0)x\(.current_mode.height // 0)", (.scale // 1)] | @tsv' \
+    | LC_ALL=C.UTF-8 awk -F'\t' -v C="$cols" -v Rr="$rows" -v P="$P" -v D="$D" -v F="$F" -v R="$R" '
+        { n++; nm[n]=$1; x[n]=$2; y[n]=$3; w[n]=$4; h[n]=$5; s[n]=$6; a[n]=$7; md[n]=$8; sc[n]=$9
+          if (!a[n]) { w[n]=1600; h[n]=900; x[n]=maxx+80; y[n]=0 }   # off screens drawn to the side
+          if (x[n]+w[n] > maxx) maxx = x[n]+w[n]; if (y[n]+h[n] > maxy) maxy = y[n]+h[n] }
+        END {
+          f = maxx / C; if (maxy / (Rr * 2) > f) f = maxy / (Rr * 2)   # cells are ~2:1
+          for (r = 0; r < Rr; r++) for (c = 0; c < C; c++) cv[r, c] = " "
+          for (i = 1; i <= n; i++) {
+            x0 = int(x[i]/f); x1 = int((x[i]+w[i])/f) - 1; y0 = int(y[i]/f/2); y1 = int((y[i]+h[i])/f/2) - 1
+            if (x1 >= C) x1 = C-1; if (y1 >= Rr) y1 = Rr-1
+            col = s[i] ? P : (a[i] ? F : D)
+            for (c = x0; c <= x1; c++) { cv[y0, c] = col "─"; cv[y1, c] = col "─" }
+            for (r = y0; r <= y1; r++) { cv[r, x0] = col "│"; cv[r, x1] = col "│" }
+            cv[y0, x0] = col "┌"; cv[y0, x1] = col "┐"; cv[y1, x0] = col "└"; cv[y1, x1] = col "┘"
+            l1 = (s[i] ? "▸ " : "") nm[i]; l2 = a[i] ? md[i] " ×" sc[i] : "off"
+            my = int((y0+y1)/2)
+            for (k = 1; k <= length(l1); k++) { c = int((x0+x1-length(l1))/2)+k; if (c > x0 && c < x1) cv[my-1 < y0+1 ? y0+1 : my-1, c] = col substr(l1, k, 1) }
+            for (k = 1; k <= length(l2); k++) { c = int((x0+x1-length(l2))/2)+k; if (c > x0 && c < x1) cv[my, c] = col substr(l2, k, 1) }
+          }
+          for (r = 0; r < Rr; r++) { line = "  "; for (c = 0; c < C; c++) line = line cv[r, c]; print line R }
+        }'
+    printf '\n  %s←→↑↓%s place  %sTab%s select  %sr%s resolution  %ss%s scale  %so%s on/off  %sEnter%s save  %sq%s quit\n' \
+        "$P" "$D" "$P" "$D" "$P" "$D" "$P" "$D" "$P" "$D" "$P" "$D" "$P" "$R"
+    [[ -n $msg ]] && printf '\n  %s%s%s\n' "$F" "$msg" "$R"
+    return 0
+}
+
+logical() {   # logical <name> → "w h" (mode / scale)
+    outs | jq -r --arg n "$1" '.[] | select(.name == $n) | .rect | "\(.width) \(.height)"'
+}
+
+place() {   # place <left|right|above|below>: selected next to the anchor
+    local a; a="$(anchor)"
+    [[ $sel == "$a" ]] && { msg="that's the anchor screen — Tab to another one"; return; }
+    read -r aw ah < <(logical "$a"); read -r sw sh < <(logical "$sel")
+    local ax=0 ay=0 sx sy
+    case $1 in
+        right) sx=$aw; sy=0 ;;
+        left)  sx=0; sy=0; ax=$sw ;;
+        below) sx=0; sy=$ah ;;
+        above) sx=0; sy=0; ay=$sh ;;
+    esac
+    swaymsg "output $a position $ax $ay, output $sel position $sx $sy" >/dev/null
+    msg="$sel is $1 of $a — Enter saves"
+}
+
+pick_mode() {
+    local m
+    m="$(outs | jq -r --arg n "$sel" '.[] | select(.name == $n) | [.modes[] | "\(.width)x\(.height)@\(.refresh/1000 | floor)Hz"] | unique | reverse | .[]' \
+        | fuzzel --dmenu --prompt "resolution $sel > " --lines 12)" || return 0
+    [[ -n $m ]] && swaymsg "output $sel mode ${m%Hz}Hz" >/dev/null && msg="$sel → $m"
+}
+
+pick_scale() {
+    local s
+    s="$(printf '1\n1.25\n1.5\n1.75\n2\n' | fuzzel --dmenu --prompt "scale $sel > " --lines 5)" || return 0
+    [[ $s =~ ^[0-9.]+$ ]] && swaymsg "output $sel scale $s" >/dev/null && msg="$sel scale $s"
+}
+
+toggle() {
+    local active; active="$(outs | jq -r --arg n "$sel" '.[] | select(.name == $n) | .active')"
+    if [[ $active == true ]]; then
+        [[ $(outs | jq '[.[] | select(.active)] | length') -le 1 ]] && { msg="can't turn off the last screen"; return; }
+        swaymsg "output $sel disable" >/dev/null; msg="$sel off"
+    else
+        swaymsg "output $sel enable" >/dev/null; msg="$sel on"
+    fi
+}
+
+save() {
+    mkdir -p "$(dirname "$save_to")"
+    { echo "# aura-os-display — saved $(date '+%F %H:%M'); keyed by monitor model"
+      outs | jq -r '.[] | "output \"\(.make) \(.model) \(.serial)\" " +
+          (if .active then "enable mode \(.current_mode.width)x\(.current_mode.height)\(if (.current_mode.refresh // 0) > 0 then "@\(.current_mode.refresh/1000)Hz" else "" end) position \(.rect.x) \(.rect.y) scale \(.scale)"
+           else "disable" end)'
+    } > "$save_to.tmp" && mv "$save_to.tmp" "$save_to"
+    msg="saved → ${save_to/#$HOME/\~}"
+}
+
+trap 'printf "\e[?25h"' EXIT
+printf '\e[?25l'
+while true; do
+    draw
+    IFS= read -rsn1 k || break
+    [[ $k == $'\e' ]] && { read -rsn2 -t 0.05 k2 || true; k+="$k2"; }
+    msg=""
+    case $k in
+        q|$'\e') break ;;
+        $'\e[C') place right ;;  $'\e[D') place left ;;
+        $'\e[A') place above ;;  $'\e[B') place below ;;
+        $'\t')   mapfile -t all < <(names); for i in "${!all[@]}"; do [[ ${all[i]} == "$sel" ]] && sel="${all[$(( (i + 1) % ${#all[@]} ))]}" && break; done ;;
+        r) pick_mode ;;  s) pick_scale ;;  o) toggle ;;
+        '') save ;;
+    esac
+done

@@ -13,7 +13,7 @@ hold()  { float sh -c "$1; printf '\n[any key]'; read -rsn1"; }
 items="sound       volume, outputs, microphones   (wiremix)
 wifi        networks, VPN, ethernet        (nmtui)
 bluetooth   pair and connect devices       (bluetoothctl)
-display     resolution and scale           (sway outputs)
+display     arrange screens, resolution, scale  (Super+P)
 keyboard    layouts us / sr latin / sr cyrillic
 theme       color combos: purplerain, tokyo-night, gruvbox, nord, mono, paper
 wallpaper   solid theme color or an image
@@ -37,7 +37,7 @@ case $pick in
     sound)     float wiremix ;;
     wifi)      float nmtui ;;
     bluetooth) float bluetoothctl ;;
-    display)   hold "swaymsg -t get_outputs | jq -r '.[] | \"\\(.name)  \\(.current_mode.width)x\\(.current_mode.height)  scale \\(.scale)\\n  modes: \" + ([.modes[] | \"\\(.width)x\\(.height)\"] | unique | join(\" \"))'; echo; echo 'change: swaymsg output <name> mode WxH  |  scale N'" ;;
+    display)   exec aura-os-display ;;
     keyboard)  hold "swaymsg -t get_inputs | jq -r '.[] | select(.type==\"keyboard\") | \"\\(.identifier): \\(.xkb_active_layout_name)\"' | sort -u; echo; echo 'switch: Alt+Shift   (layouts set in config/sway/config)'" ;;
     theme)     exec aura-os-theme pick ;;
     wallpaper) exec aura-os-wallpaper pick ;;

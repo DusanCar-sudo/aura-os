@@ -130,3 +130,11 @@ Stumbles (found at 23:50, VM boot shows swaynag "errors in config")
   gone; grep for "Error on line" found nothing = looked like a pass).
   Fix: tools/sway-check.sh fails loudly if the check itself can't run.
   Lesson: a validator that can silently not run is worse than none.
+- 10:1x :compon on sway failed after the first screenshot: "no frame
+  from the screen stream". wlroots' screencast only sends a frame on
+  screen damage; frame() waited 6×5 s for a new one on a static screen.
+  Fix (aura-code aura_screen.py, uncommitted there): drain to the newest
+  frame with a short wait, else reuse the last frame (= screen unchanged).
+  4 captures in a row now ~0.4 s each. Good: Aura herself fell back to
+  swaymsg for the window title and said plainly she couldn't verify
+  visually. Tag: aura (portability).

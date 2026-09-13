@@ -55,7 +55,7 @@ xwayland enable
 # sharing, Aura computer use, file pickers) need it. Arch ships this in
 # /etc/sway/config.d, which our config doesn't include.
 exec dbus-update-activation-environment --systemd WAYLAND_DISPLAY DISPLAY SWAYSOCK XDG_CURRENT_DESKTOP=sway XDG_SESSION_TYPE=wayland
-exec pgrep -x waybar >/dev/null || waybar
+exec pgrep -f '^bash /usr/local/bin/aura-os-bar$' >/dev/null || aura-os-bar
 exec pgrep -x mako >/dev/null || mako
 exec pgrep -f '^bash /usr/local/bin/aura-os-status watch$' >/dev/null || aura-os-status watch
 exec pgrep -f '^bash /usr/local/bin/aura-os-agents watch$' >/dev/null || aura-os-agents watch

@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# aura-os-bar — keep waybar (top bar + sidebar) alive.
+# waybar can exit at login when PipeWire/WirePlumber isn't ready yet, and
+# its stderr went nowhere. This restarts it (1 s; 10 s after 5 quick
+# exits in a row) and logs to the journal: journalctl --user -t waybar
+set -uo pipefail
+fast=0
+while true; do
+    start=$(date +%s)
+    waybar 2>&1 | systemd-cat -t waybar
+    rc=${PIPESTATUS[0]}
+    if (( $(date +%s) - start < 10 )); then fast=$((fast + 1)); else fast=0; fi
+    echo "waybar exited ($rc), restarting" | systemd-cat -t aura-os-bar -p warning
+    if (( fast >= 5 )); then sleep 10; fast=0; else sleep 1; fi
+done

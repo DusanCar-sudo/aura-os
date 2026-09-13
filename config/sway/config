@@ -65,14 +65,20 @@ exec pgrep -f '^bash /usr/local/bin/aura-os-agents watch$' >/dev/null || aura-os
 exec pgrep -f '^bash /usr/local/bin/aura-os-recent watch$' >/dev/null || aura-os-recent watch
 exec pgrep -f '^wl-paste --watch /usr/local/bin/aura-os-clip store$' >/dev/null || aura-os-clip watch
 
+# First login: the setup tiles (language, keyboard, time, wifi…) once.
+exec test -f ~/.config/aura-os/setup-done || aura-os-setup
+
 # Floating TUIs opened from the top bar (bt, wifi, vol, calendar).
 for_window [app_id="aura-float"] floating enable, resize set 960 600, move position center
 
-include ~/.config/sway/config.d/*
-
 # Keyboard: US, Serbian Latin, Serbian Cyrillic — Alt+Shift cycles.
+# aura-os-setup writes config.d/60-keyboard.conf, included below, so its
+# choice wins over this default.
 input type:keyboard {
     xkb_layout us,rs,rs
     xkb_variant ,latin,
     xkb_options grp:alt_shift_toggle
 }
+
+# Last on purpose: files in config.d override everything above.
+include ~/.config/sway/config.d/*

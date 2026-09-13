@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+# aura-os-setup — first-run setup as simple tiles, the same list as Super+D.
+# Simplicity is the mirror of intelligence: one list, pick a tile, choose,
+# back to the list. Every tile shows what is set now.
+#
+#   aura-os-setup           the tile list (first login opens it once)
+#   aura-os-setup <tile>    open one tile: language keyboard time wifi
+#                           name theme wallpaper
+#   aura-os-setup --status  print the current values, no UI
+#
+# Needs sudo for language/time/name; the password is asked as a tile too
+# (aura-os-askpass). Nothing here is required: "done" is always allowed.
+set -uo pipefail
+
+export SUDO_ASKPASS="$(command -v aura-os-askpass || echo "$(dirname "$0")/aura-os-askpass")"
+state_dir="${XDG_CONFIG_HOME:-$HOME/.config}/aura-os"
+kbd_conf="${XDG_CONFIG_HOME:-$HOME/.config}/sway/config.d/60-keyboard.conf"
+mkdir -p "$state_dir"
+
+menu() {  # menu <prompt> <lines> — fuzzel in the launcher's look
+    fuzzel --dmenu --prompt "$1 > " --lines "${2:-10}" --width 60
+}
+note() { notify-send -t 2500 "Aura OS setup" "$1" 2>/dev/null || true; }
+root() { sudo -A "$@"; }
+
+# ---------------------------------------------------------------- now
+cur_lang()  { localectl status 2>/dev/null | sed -n 's/.*LANG=\([^ ]*\).*/\1/p' | head -n1; }
+cur_kbd()   { [[ -f $kbd_conf ]] && sed -n 's/^ *# layouts: //p' "$kbd_conf" || echo "us + sr latin + sr cyrillic"; }
+cur_time()  { timedatectl show -p Timezone --value 2>/dev/null; }
+cur_wifi()  { nmcli -t -f ACTIVE,SSID dev wifi 2>/dev/null | sed -n 's/^yes://p' | head -n1; }
+cur_name()  { hostnamectl hostname 2>/dev/null || hostname; }
+cur_theme() { cat "$state_dir/theme" 2>/dev/null || echo purplerain; }
+cur_wall()  { local w; w="$(sed -n 's/^output \* bg "\(.*\)" fill/\1/p' "${XDG_CONFIG_HOME:-$HOME/.config}/sway/config.d/60-wallpaper.conf" 2>/dev/null)"
+              w="${w##*/}"; echo "${w:-theme color}"; }
+
+tile() {  # tile <name> <value> <hint> — one row of the list
+    local v="$2" mark="·"
+    [[ -n $v ]] && mark="✓" || v="$3"
+    printf '%-11s %-34s %s\n' "$1" "${v:0:34}" "$mark"
+}
+
+tiles() {
+    tile language  "$(cur_lang)"  "choose"
+    tile keyboard  "$(cur_kbd)"   "choose"
+    tile time      "$(cur_time)"  "choose"
+    tile wifi      "$(cur_wifi)"  "not connected"
+    tile name      "$(cur_name)"  "choose"
+    tile theme     "$(cur_theme)" ""
+    tile wallpaper "$(cur_wall)"  ""
+    printf '%-11s %s\n' done "finish — change any of this later in Super+,"
+}
+
+# ---------------------------------------------------------------- tiles
+do_language() {
+    local l
+    l="$( { printf '%s\n' "en_US.UTF-8   English (US)" "en_GB.UTF-8   English (UK)" \
+            "sr_RS.UTF-8@latin   Srpski (latinica)" "sr_RS.UTF-8   Српски (ћирилица)" \
+            "de_DE.UTF-8   Deutsch" "fr_FR.UTF-8   Français" "es_ES.UTF-8   Español" \
+            "it_IT.UTF-8   Italiano" "ru_RU.UTF-8   Русский"
+          sed -n 's/^\([^ ]*UTF-8\) UTF-8$/\1/p' /usr/share/i18n/SUPPORTED 2>/dev/null; } \
+          | awk '!seen[$1]++' | menu language 12)" || return 0
+    l="${l%% *}"; [[ -n $l ]] || return 0
+    local gen="${l%@*}"; gen="${gen} UTF-8"; [[ $l == *@* ]] && gen="${l%%.*}@${l#*@} UTF-8"
+    root sh -c "grep -qx '$gen' /etc/locale.gen || echo '$gen' >> /etc/locale.gen; locale-gen >/dev/null && localectl set-locale LANG=$l" \
+        && note "language → $l (applies at next login)" || note "language not changed"
+}
+
+do_keyboard() {
+    local k layout variant label
+    local -A map=(
+        ["us + sr latin + sr cyrillic"]="us,rs,rs|,latin,"
+        ["us"]="us|"                 ["us + sr latin"]="us,rs|,latin"
+        ["sr latin"]="rs|latin"      ["sr cyrillic"]="rs|"
+        ["us + vietnamese"]="us,vn|," ["de"]="de|" ["fr"]="fr|" ["es"]="es|"
+        ["it"]="it|"                 ["ru + us"]="ru,us|,"
+    )
+    label="$(printf '%s\n' "us + sr latin + sr cyrillic" "us" "us + sr latin" "sr latin" "sr cyrillic" \
+             "us + vietnamese" "de" "fr" "es" "it" "ru + us" | menu keyboard 11)" || return 0
+    k="${map[$label]:-}"; [[ -n $k ]] || return 0
+    layout="${k%%|*}"; variant="${k#*|}"
+    mkdir -p "$(dirname "$kbd_conf")"
+    printf '# aura-os-setup — keyboard (Alt+Shift switches)\n# layouts: %s\ninput type:keyboard {\n    xkb_layout %s\n    xkb_variant %s\n    xkb_options grp:alt_shift_toggle\n}\n' \
+        "$label" "$layout" "$variant" > "$kbd_conf"
+    swaymsg "input type:keyboard xkb_layout $layout" >/dev/null 2>&1
+    swaymsg "input type:keyboard xkb_variant '$variant'" >/dev/null 2>&1
+    note "keyboard → $label"
+}
+
+do_time() {
+    local z
+    z="$( { echo "$(cur_time)"; timedatectl list-timezones 2>/dev/null; } \
+          | awk 'NF && !seen[$0]++' | menu 'time zone' 12)" || return 0
+    [[ -n $z ]] || return 0
+    root sh -c "timedatectl set-timezone '$z' && timedatectl set-ntp true" \
+        && note "time zone → $z · clock syncs itself" || note "time zone not changed"
+}
+
+do_wifi() {
+    local line ssid sec pass
+    nmcli radio wifi on 2>/dev/null
+    nmcli dev wifi rescan 2>/dev/null; sleep 1
+    line="$(nmcli -t -f IN-USE,SIGNAL,SECURITY,SSID dev wifi list 2>/dev/null \
+        | awk -F: '$4!="" && !seen[$4]++ {printf "%-26s %3s%%  %s%s\n", $4, $2, ($3==""?"open":"🔒"), ($1=="*"?"  ✓":"")}' \
+        | menu wifi 12)" || return 0
+    ssid="$(printf '%s' "$line" | sed 's/ \{2,\}[0-9]\{1,3\}%.*//; s/ *$//')"
+    [[ -n $ssid ]] || return 0
+    if nmcli -t -f NAME con show | grep -qxF "$ssid"; then
+        nmcli con up id "$ssid" >/dev/null 2>&1 && { note "connected to $ssid"; return 0; }
+    fi
+    if [[ $line == *🔒* ]]; then
+        pass="$(fuzzel --dmenu --password --prompt "password for $ssid > " --lines 0 --width 50 </dev/null)" || return 0
+        nmcli dev wifi connect "$ssid" password "$pass" >/dev/null 2>&1
+    else
+        nmcli dev wifi connect "$ssid" >/dev/null 2>&1
+    fi && note "connected to $ssid" || note "could not connect to $ssid — check the password"
+}
+
+do_name() {
+    local n
+    n="$(printf '%s\n' "$(cur_name)" | menu 'computer name' 1)" || return 0
+    n="$(printf '%s' "$n" | tr -cd 'A-Za-z0-9-' | cut -c1-40)"
+    [[ -n $n ]] || return 0
+    root hostnamectl set-hostname "$n" && note "computer name → $n" || note "name not changed"
+}
+
+do_theme()     { aura-os-theme pick; }
+do_wallpaper() { aura-os-wallpaper pick; }
+
+run_tile() {
+    case $1 in
+        language) do_language ;; keyboard) do_keyboard ;; time) do_time ;;
+        wifi) do_wifi ;; name) do_name ;; theme) do_theme ;; wallpaper) do_wallpaper ;;
+        *) echo "aura-os-setup: unknown tile '$1'" >&2; return 2 ;;
+    esac
+}
+
+# ---------------------------------------------------------------- main
+case "${1:-}" in
+    --status) tiles | sed '$d'; exit 0 ;;
+    -h|--help) sed -n '2,13p' "$0"; exit 0 ;;
+    '') ;;
+    *) run_tile "$1"; exit ;;
+esac
+
+while :; do
+    pick="$(tiles | menu 'Aura OS setup' 8)" || break
+    pick="${pick%% *}"
+    [[ $pick == done || -z $pick ]] && break
+    run_tile "$pick"
+done
+touch "$state_dir/setup-done"

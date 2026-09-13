@@ -10,7 +10,8 @@ set -euo pipefail
 float() { exec aura-term --app-id=aura-float -e "$@"; }
 hold()  { float sh -c "$1; printf '\n[any key]'; read -rsn1"; }
 
-items="sound       volume, outputs, microphones   (wiremix)
+items="setup       language, keyboard, time, wifi, name  (tiles)
+sound       volume, outputs, microphones   (wiremix)
 wifi        networks, VPN, ethernet        (nmtui)
 bluetooth   pair and connect devices       (bluetoothctl)
 display     arrange screens, resolution, scale  (Super+P)
@@ -28,12 +29,13 @@ about       Aura OS version and repo"
 
 pick="${1:-}"
 if [[ -z $pick ]]; then
-    pick="$(printf '%s\n' "$items" | fuzzel --dmenu --prompt 'settings > ' --width 64 --lines 15)" || exit 0
+    pick="$(printf '%s\n' "$items" | fuzzel --dmenu --prompt 'settings > ' --width 64 --lines 16)" || exit 0
     pick="${pick%% *}"
 fi
 
 repo="${AURA_OS_REPO:-$HOME/aura-os}"
 case $pick in
+    setup)     exec aura-os-setup ;;
     sound)     float wiremix ;;
     wifi)      float nmtui ;;
     bluetooth) float bluetoothctl ;;

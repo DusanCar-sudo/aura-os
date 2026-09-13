@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# aura-os-askpass — sudo's password prompt as a fuzzel tile (SUDO_ASKPASS).
+# Used by aura-os-setup so every step stays in the same simple list.
+exec fuzzel --dmenu --password --prompt "${1:-password} > " --lines 0 --width 40 </dev/null

@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# aura-os-power — log out / reboot / shut down (Super+Escape, Settings).
+#   aura-os-power            pick with fuzzel
+#   aura-os-power reboot|poweroff|logout|firmware
+set -euo pipefail
+
+pick="${1:-}"
+if [[ -z $pick ]]; then
+    pick="$(printf '%s\n' "reboot      restart the computer" "poweroff    shut down" \
+                          "logout      back to the login screen" "firmware    reboot into UEFI setup" \
+            | fuzzel --dmenu --prompt 'power > ' --lines 4 --width 44)" || exit 0
+    pick="${pick%% *}"
+fi
+case $pick in
+    reboot)   exec systemctl reboot ;;
+    poweroff) exec systemctl poweroff ;;
+    logout)   exec swaymsg exit ;;
+    firmware) exec systemctl reboot --firmware-setup ;;
+    *) echo "aura-os-power: reboot|poweroff|logout|firmware" >&2; exit 2 ;;
+esac

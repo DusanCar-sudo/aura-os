@@ -209,8 +209,23 @@ install_all() {
     lspci 2>/dev/null | grep -qiE 'vga.*intel' && gpu="vulkan-intel intel-media-driver"
     local ucode=""; grep -q AuthenticAMD /proc/cpuinfo && ucode=amd-ucode; grep -q GenuineIntel /proc/cpuinfo && ucode=intel-ucode
 
+    # Firmware only for the chips this machine has (linux-firmware would
+    # pull every vendor, ~1 GB). Missing one later? aura-os-install it.
+    local fw=() ids
+    ids="$(lspci -n 2>/dev/null | awk '{print $3}'; lsusb 2>/dev/null | awk '{print $6}')"
+    grep -q '^1002:' <<<"$ids" && fw+=(linux-firmware-amdgpu linux-firmware-radeon)
+    grep -q AuthenticAMD /proc/cpuinfo && fw+=(linux-firmware-amd)
+    grep -q '^8086:' <<<"$ids" && fw+=(linux-firmware-intel)
+    grep -q '^10de:' <<<"$ids" && fw+=(linux-firmware-nvidia)
+    grep -qE '^(10ec|0bda):' <<<"$ids" && fw+=(linux-firmware-realtek)
+    grep -qE '^(14c3|0e8d):' <<<"$ids" && fw+=(linux-firmware-mediatek)
+    grep -qE '^(168c|17cb|0cf3):' <<<"$ids" && fw+=(linux-firmware-atheros)
+    grep -qE '^(14e4|0a5c):' <<<"$ids" && fw+=(linux-firmware-broadcom)
+    (( ${#fw[@]} )) || fw=(linux-firmware)       # unknown hardware: everything
+    printf 'firmware: %s\n' "${fw[*]}" >>"$LOG"
+
     step "installing the base system (5–10 minutes)"
-    run pacstrap -K $M base linux linux-firmware $ucode btrfs-progs networkmanager sudo git vim \
+    run pacstrap -K $M base linux "${fw[@]}" $ucode btrfs-progs networkmanager sudo git vim \
         openssh sof-firmware zram-generator man-db terminus-font mesa $gpu power-profiles-daemon \
         || { fail "installing packages (is the internet on?)"; return; }
     ok "base system"

@@ -50,6 +50,13 @@ if ! grep -qxF "$line2" "$home/.bashrc" 2>/dev/null; then
     echo "05-aura-term: sourced aura-os-recent.bash from $home/.bashrc"
 fi
 
+install -m 644 "$REPO/config/shell/aura-os-cnf.bash" "$share/aura-os-cnf.bash"
+line3=". $share/aura-os-cnf.bash"
+if ! grep -qxF "$line3" "$home/.bashrc" 2>/dev/null; then
+    printf '# Aura OS: unknown command -> which package has it, or ask Aura\n%s\n' "$line3" >> "$home/.bashrc"
+    echo "05-aura-term: sourced aura-os-cnf.bash from $home/.bashrc"
+fi
+
 line=". $share/aura-term.bash"
 if ! grep -qxF "$line" "$home/.bashrc" 2>/dev/null; then
     printf '\n# aura-term: command blocks, cwd/branch, Ask Aura (task 005)\n%s\n' "$line" >> "$home/.bashrc"

@@ -56,6 +56,7 @@ pacman -Syu --noconfirm
 
 before="$(pacman -Qq | LC_ALL=C sort)"
 pacman -S --needed --noconfirm "${packages[@]}"
+pacman -Fy >/dev/null   # files database: "command not found" names the package (aura-os-cnf.bash)
 after="$(pacman -Qq | LC_ALL=C sort)"
 
 added="$(LC_ALL=C comm -13 <(echo "$before") <(echo "$after") || true)"

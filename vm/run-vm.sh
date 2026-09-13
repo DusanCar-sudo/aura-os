@@ -12,7 +12,7 @@ CPUS="${AURA_VM_CPUS:-4}"
 [ -f OVMF_VARS.fd ] || cp /usr/share/OVMF/OVMF_VARS_4M.fd OVMF_VARS.fd
 
 args=(
-  -enable-kvm -machine q35 -cpu host -smp "$CPUS" -m "$RAM"
+  -enable-kvm -machine q35,vmport=off -cpu host -smp "$CPUS" -m "$RAM"
   -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd
   -drive if=pflash,format=raw,file=OVMF_VARS.fd
   -drive file=aura-os.qcow2,if=virtio,discard=unmap

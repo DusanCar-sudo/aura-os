@@ -101,6 +101,7 @@ find_parts() {
 
 # ------------------------------------------------------------- state
 NAME=dusan; PASS=""; ZONE=""; WIFI=""; WIFI_PSK=""
+KEY_NAME=""; KEY=""   # Aura's model provider key → ~/.aura/keys.json
 HOST=aura
 
 guess_zone() {
@@ -171,6 +172,17 @@ t_zone() {
     MENU_START=$i menu "Time zone — $r" "${cities[@]}" "← back"
     (( PICK == ${#cities[@]} )) && return
     ZONE=$r/${cities[PICK]}
+}
+
+t_key() {
+    local names=(OPENROUTER_API_KEY DEEPSEEK_API_KEY XIAOMI_API_KEY GROQ_API_KEY
+                 OPENAI_API_KEY GOOGLE_API_KEY ZHIPU_API_KEY MOONSHOT_API_KEY)
+    menu "Which service is your key for?" "${names[@]}" "← back"
+    (( PICK == ${#names[@]} )) && return
+    ask "Paste your ${names[PICK]} (hidden)" "" secret
+    [[ -n $ANSWER ]] || return
+    if [[ $ANSWER == *[\"\\[:space:]]* ]]; then say "$BAD" "That key has spaces or quotes — paste only the key."; return; fi
+    KEY_NAME=${names[PICK]}; KEY=$ANSWER
 }
 
 # ------------------------------------------------------------- install
@@ -312,6 +324,11 @@ install_all() {
         ln -sfn "$mem/.claude/projects/-home-$NAME/memory" $M/home/$NAME/.claude/projects/-home-$NAME/memory
         ln -sfn "$mem/.aura/memory" $M/home/$NAME/.aura/memory
     fi
+    if [[ -n $KEY ]]; then
+        install -d -m 700 $M/home/$NAME/.aura
+        printf '{\n  "%s": "%s"\n}\n' "$KEY_NAME" "$KEY" > $M/home/$NAME/.aura/keys.json
+        chmod 600 $M/home/$NAME/.aura/keys.json
+    fi
     run arch-chroot $M chown -R "$NAME:$NAME" "/home/$NAME"
     ok "Aura OS copied to /home/$NAME/aura-os"
 
@@ -368,6 +385,7 @@ while :; do
         "$(printf '%-12s %s' 'Your name' "$NAME")"
         "$(printf '%-12s %s' 'Password'  "$([[ -n $PASS ]] && echo 'set' || echo 'choose one')")"
         "$(printf '%-12s %s' 'Time zone' "$ZONE")"
+        "$(printf '%-12s %s' 'Aura key'  "$([[ -n $KEY ]] && echo "${KEY_NAME%_API_KEY} set" || echo 'add one (optional)')")"
         "$(printf '%-12s %s' 'Where'     "$(lsblk -no SIZE "$ROOT" | tr -d ' ') prepared for Aura on $(basename "$DISK")")"
         "▶  Install Aura adOS"
         "   Turn off"
@@ -378,16 +396,17 @@ while :; do
         1) t_name ;;
         2) t_pass ;;
         3) t_zone ;;
-        4) say "$F" "Aura goes into the space prepared for it:
+        4) t_key ;;
+        5) say "$F" "Aura goes into the space prepared for it:
     system  $ROOT  ($(lsblk -no SIZE "$ROOT" | tr -d ' '))
     boot    $BOOT  ($(lsblk -no SIZE "$BOOT" | tr -d ' '))
     menu    $ESP   (shared EFI, not formatted)
   Everything else on the disk is left untouched." ;;
-        5)  if ! online; then say "$Y" "Connect to the internet first (Wi-Fi)."; continue; fi
+        6)  if ! online; then say "$Y" "Connect to the internet first (Wi-Fi)."; continue; fi
             if [[ -z $PASS ]]; then say "$Y" "Choose a password first."; continue; fi
             # "No" is preselected: a stray Enter never starts an install
             MENU_START=1 menu "Install now? $ROOT and $BOOT will be erased. Nothing else changes." "Yes, install" "No, go back"
             (( PICK == 0 )) && install_all ;;
-        6)  menu "Turn off the computer?" "Yes" "No"; (( PICK == 0 )) && poweroff ;;
+        7)  menu "Turn off the computer?" "Yes" "No"; (( PICK == 0 )) && poweroff ;;
     esac
 done

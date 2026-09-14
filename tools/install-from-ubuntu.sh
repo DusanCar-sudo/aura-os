@@ -69,6 +69,25 @@ while :; do
 done
 unset p2
 
+# Aura's keys: the Ubuntu ones when there are any, else ask for one.
+host_aura="$(getent passwd "${SUDO_USER:-$NAME}" | cut -d: -f6)/.aura"
+KEY_FILES=(keys.json .env secrets google_token.json email.json)
+KEY_NAME="" KEY=""
+if [[ -f $host_aura/keys.json ]]; then
+    read -rp "  Copy Aura's keys from Ubuntu ($host_aura)? [Y/n] " k
+    [[ ${k,,} == n* ]] && KEY_FILES=()
+else
+    KEY_FILES=()
+fi
+if (( ${#KEY_FILES[@]} == 0 )); then
+    read -rp "  Aura key — service (e.g. OPENROUTER, DEEPSEEK, XIAOMI; Enter to skip): " k
+    if [[ -n $k ]]; then
+        KEY_NAME="${k^^}"; KEY_NAME="${KEY_NAME%_API_KEY}_API_KEY"
+        read -rsp "  Paste the $KEY_NAME (hidden): " KEY; echo
+        [[ $KEY != *[\"\\[:space:]]* ]] || die "the key has spaces or quotes"
+    fi
+fi
+
 # ------------------------------------------------------------- bootstrap
 step "Arch bootstrap tree"
 mkdir -p "$W"
@@ -188,6 +207,14 @@ mkdir -p "$M/boot/EFI/Linux"
 T mkinitcpio -P
 rm -f "$M"/boot/initramfs-linux*.img
 T bootctl --esp-path=/efi --boot-path=/boot install
+# bootctl inside the nested chroot copies the files but its firmware
+# entry did not stick on the Lenovo (first real run): add it from the
+# host, first in BootOrder.
+if ! efibootmgr | grep -qi 'systemd-bootx64'; then
+    efibootmgr --create --disk "/dev/$(lsblk -no pkname "$ESP")" \
+        --part "$(cat "/sys/class/block/$(basename "$ESP")/partition")" \
+        --label "Aura OS" --loader '\EFI\systemd\systemd-bootx64.efi'
+fi
 mkdir -p "$M/efi/loader/entries"
 if [[ -f $M/efi/EFI/ubuntu/shimx64.efi ]]; then
     printf 'title   Ubuntu\nefi     /EFI/ubuntu/shimx64.efi\n' > "$M/efi/loader/entries/ubuntu.conf"
@@ -204,6 +231,16 @@ mem=/mnt/bigdata/moved-from-system/home-$NAME
 install -d "$M/home/$NAME/.claude/projects/-home-$NAME" "$M/home/$NAME/.aura"
 ln -sfn "$mem/.claude/projects/-home-$NAME/memory" "$M/home/$NAME/.claude/projects/-home-$NAME/memory"
 ln -sfn "$mem/.aura/memory" "$M/home/$NAME/.aura/memory"
+ak=$M/home/$NAME/.aura
+for f in "${KEY_FILES[@]}"; do
+    [[ -e $host_aura/$f ]] && install -m 600 "$host_aura/$f" "$ak/$f"
+done
+(( ${#KEY_FILES[@]} )) && echo "keys: copied ${KEY_FILES[*]} from $host_aura"
+if [[ -n $KEY ]]; then
+    printf '{\n  "%s": "%s"\n}\n' "$KEY_NAME" "$KEY" > "$ak/keys.json"
+    chmod 600 "$ak/keys.json"; echo "keys: $KEY_NAME"
+fi
+unset KEY
 T chown -R "$NAME:$NAME" "/home/$NAME"
 
 # The desktop is built now, not on a first boot. 02-snapper can't see

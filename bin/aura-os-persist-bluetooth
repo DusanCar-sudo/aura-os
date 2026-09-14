@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# aura-os-persist-bluetooth — move /var/lib/bluetooth onto the @home
+# subvolume and bind-mount it back over itself, so paired devices
+# survive aura-os-reset (which only rolls back @, not @home — same
+# reason ~dusan's files already survive a reset).
+#
+# Idempotent: running it again with the bind mount already in place
+# and the fstab entry already present is a no-op.
+set -euo pipefail
+
+if [[ $EUID -ne 0 ]]; then
+    exec sudo -E "$(readlink -f "$0")" "$@"
+fi
+
+src=/var/lib/bluetooth
+store=/home/.aura-persist/bluetooth
+
+here="$(dirname "$(readlink -f "$0")")"
+snapshot="$here/aura-os-snapshot"
+[[ -x $snapshot ]] || snapshot="$(command -v aura-os-snapshot)"
+
+fstab_line="$store $src none bind 0 0"
+
+if mountpoint -q "$src" && grep -qF "$fstab_line" /etc/fstab; then
+    echo "aura-os-persist-bluetooth: up to date: $src already bind-mounted from $store"
+    exit 0
+fi
+
+if [[ -n ${snapshot:-} && -x $snapshot ]]; then
+    "$snapshot" "aura-os-persist-bluetooth: before moving $src to $store"
+else
+    echo "aura-os-persist-bluetooth: WARNING: aura-os-snapshot not found; continuing without a snapshot" >&2
+fi
+
+systemctl stop bluetooth
+
+install -d -m 700 -o root -g root "$(dirname "$store")"
+if [[ ! -d $store ]]; then
+    mkdir -m 700 "$store"
+    if [[ -d $src && -n $(ls -A "$src" 2>/dev/null) ]]; then
+        cp -a "$src/." "$store/"
+        echo "aura-os-persist-bluetooth: copied existing pairings from $src to $store"
+    fi
+fi
+chown -R root:root "$store"
+chmod 700 "$store"
+
+if ! mountpoint -q "$src"; then
+    mount --bind "$store" "$src"
+    echo "aura-os-persist-bluetooth: bind-mounted $store -> $src"
+fi
+
+if ! grep -qF "$fstab_line" /etc/fstab; then
+    printf '%s\n' "$fstab_line" >> /etc/fstab
+    echo "aura-os-persist-bluetooth: added fstab entry so it survives reboot"
+fi
+
+systemctl start bluetooth
+
+echo "aura-os-persist-bluetooth: done — bluetooth pairings now live on @home and survive aura-os-reset"

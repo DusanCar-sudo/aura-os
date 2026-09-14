@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# aura-os-profile — switch the power profile via power-profiles-daemon
+# (Settings → profile, or Super+Shift+P to cycle directly).
+#
+#   aura-os-profile             pick with fuzzel
+#   aura-os-profile cycle       cycle to the next profile (keybind)
+#   aura-os-profile performance|balanced|power-saver   set directly
+set -euo pipefail
+
+order=(performance balanced power-saver)
+
+cur() { powerprofilesctl get; }
+
+notify() { notify-send -a "Aura" -t 1500 "Power profile: $1" 2>/dev/null || true; }
+
+set_profile() {
+    powerprofilesctl set "$1"
+    notify "$1"
+}
+
+pick="${1:-}"
+case $pick in
+    cycle)
+        c="$(cur)"
+        n=${#order[@]}
+        next="${order[0]}"
+        for ((i = 0; i < n; i++)); do
+            if [[ ${order[i]} == "$c" ]]; then
+                next="${order[$(( (i + 1) % n ))]}"
+                break
+            fi
+        done
+        set_profile "$next"
+        ;;
+    performance|balanced|power-saver)
+        set_profile "$pick"
+        ;;
+    "")
+        c="$(cur)"
+        rows=()
+        for p in "${order[@]}"; do
+            mark="·"; [[ $p == "$c" ]] && mark="✓"
+            rows+=("$p    $mark")
+        done
+        sel="$(printf '%s\n' "${rows[@]}" | fuzzel --dmenu --prompt 'power profile > ' --lines "${#order[@]}" --width 44)" || exit 0
+        set_profile "${sel%% *}"
+        ;;
+    *)
+        echo "aura-os-profile: performance|balanced|power-saver|cycle" >&2
+        exit 2
+        ;;
+esac

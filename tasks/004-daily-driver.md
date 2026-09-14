@@ -59,6 +59,9 @@ Test in the VM only the normal stuff:
   video (software decode is fine in the VM).
 - Terminal system: foot, git, docker run hello-world, node, python
   (uv), clipboard copy/paste, screenshot key, a TUI mixer.
+- Audio: actual sound out of the speakers (not just the mixer UI
+  showing a live device) — play a short local file or `speaker-test`,
+  confirm it's audible. "Done" does not count without this.
 - Windows: 6+ windows on one workspace tiled/tabbed, a pop-up floats,
   Super+Tab jumps between them, one window moved to a second
   (headless) monitor.

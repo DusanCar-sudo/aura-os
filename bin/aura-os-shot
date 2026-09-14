@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# aura-os-shot — screenshots (task 004): saved to ~/Pictures/Screenshots
+# and put on the clipboard as an image (paste anywhere). mako confirms.
+#
+#   Print          whole screen
+#   Shift+Print    draw a rectangle (slurp crosshair)
+#   Ctrl+Print     the focused window (its geometry from sway's tree)
+set -euo pipefail
+
+dir="${XDG_PICTURES_DIR:-$HOME/Pictures}/Screenshots"
+mkdir -p "$dir"
+file="$dir/shot-$(date +%Y%m%d-%H%M%S).png"
+
+rect_of_focused() {   # "x,y WxH" — sway marks exactly one node focused
+    swaymsg -rt get_tree | jq -r '.. | select(.focused? == true) | .rect |
+        "\(.x),\(.y) \(.width)x\(.height)"'
+}
+
+case "${1:-full}" in
+    full)   grim "$file" ;;
+    region) rec="$(slurp)" || exit 0                 # Esc = cancel
+            grim -g "$rec" "$file" ;;
+    window) grim -g "$(rect_of_focused)" "$file" ;;
+    *) echo "usage: aura-os-shot [full|region|window]" >&2; exit 2 ;;
+esac
+
+# wl-copy stays alive to serve the image: detach its stdio or callers
+# that hold our pipes (sway exec, scripts) block until it exits.
+wl-copy < "$file" >/dev/null 2>&1
+notify-send -a "aura-os-shot" -u normal -i "$file" \
+    "Screenshot saved" "${file/#$HOME/\~} · copied to clipboard"

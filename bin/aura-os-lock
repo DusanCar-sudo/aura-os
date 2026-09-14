@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# aura-os-lock — lock the screen (Super+Shift+L, or before sleep).
+set -euo pipefail
+exec swaylock -f

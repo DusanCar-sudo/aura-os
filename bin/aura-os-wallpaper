@@ -41,13 +41,22 @@ cmd_solid() {
 }
 
 cmd_pick() {
-    local list choice
+    local list choice dir
+    # Only search dirs that exist: find exits 1 on a missing one and
+    # set -e would kill the picker before the menu even opens (no
+    # ~/Pictures on a fresh install). One unreadable dir must not kill
+    # the list either, hence the || true on the pipeline below.
+    local -a search=()
+    for dir in "$HOME/Pictures/Wallpapers" "$HOME/Pictures" "$HOME/Downloads" /usr/share/aura-os/wallpapers; do
+        [[ -d $dir ]] && search+=("$dir")
+    done
+    ((${#search[@]})) || { echo "aura-os-wallpaper: no wallpaper directories found" >&2; exit 2; }
     # By content, not by name: browsers happily save a JPEG as "exit".
-    list="$(find "$HOME/Pictures/Wallpapers" "$HOME/Pictures" "$HOME/Downloads" /usr/share/aura-os/wallpapers \
+    list="$(find "${search[@]}" \
               -maxdepth 2 -type f -size -60M -print0 2>/dev/null \
             | xargs -0 -r file --mime-type -F $'\t' -N -- \
             | awk -F'\t' '$2 ~ /^ *image\/(jpeg|png|webp|bmp|gif|tiff)$/ {print $1}' \
-            | sort -u | sed "s|^$HOME|~|")"
+            | sort -u | sed "s|^$HOME|~|")" || true
     choice="$(printf 'solid (theme color)\n%s\n' "$list" | sed '/^$/d' \
               | fuzzel --dmenu --prompt 'wallpaper > ' --width 80 --lines 15)" || exit 0
     case $choice in

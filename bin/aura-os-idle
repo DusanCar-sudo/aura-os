@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# aura-os-idle — the always-on-while-plugged-in power plan.
+#
+#   Screen blanks (DPMS off) after 60m idle, on battery or AC — the
+#   swayidle daemon itself lives as an `exec` line in
+#   config/sway/config.d/30-idle.conf and locks (aura-os-lock) before
+#   any sleep.
+#   Closing the lid while plugged in never suspends: no sleep, no
+#   shutdown, always on. On battery the lid still suspends as usual.
+#
+# Idempotent: run again any time to check/reapply. Snapshots before
+# the one system write it makes (the logind drop-in).
+set -euo pipefail
+
+if [[ $EUID -ne 0 ]]; then
+    exec sudo -E "$(readlink -f "$0")" "$@"
+fi
+
+here="$(dirname "$(readlink -f "$0")")"
+
+installer="$here/aura-os-install"
+[[ -x $installer ]] || installer="$(command -v aura-os-install)"
+"$installer" swayidle swaylock
+
+drop=/etc/systemd/logind.conf.d/30-aura-clamshell.conf
+want=$'[Login]\nHandleLidSwitchExternalPower=ignore\n'
+if [[ "$(cat "$drop" 2>/dev/null)" != "$want" ]]; then
+    snapshot="$here/aura-os-snapshot"
+    [[ -x $snapshot ]] || snapshot="$(command -v aura-os-snapshot)"
+    "$snapshot" "aura-os-idle: before clamshell (no-suspend-on-AC) drop-in"
+    install -d /etc/systemd/logind.conf.d
+    printf '%s' "$want" > "$drop"
+    systemctl restart systemd-logind
+    echo "aura-os-idle: wrote $drop — lid close on AC power no longer suspends"
+else
+    echo "aura-os-idle: up to date: $drop"
+fi

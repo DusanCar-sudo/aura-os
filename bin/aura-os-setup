@@ -79,8 +79,10 @@ do_keyboard() {
     k="${map[$label]:-}"; [[ -n $k ]] || return 0
     layout="${k%%|*}"; variant="${k#*|}"
     mkdir -p "$(dirname "$kbd_conf")"
-    printf '# aura-os-setup — keyboard (Alt+Shift switches)\n# layouts: %s\ninput type:keyboard {\n    xkb_layout %s\n    xkb_variant %s\n    xkb_options grp:alt_shift_toggle\n}\n' \
-        "$label" "$layout" "$variant" > "$kbd_conf"
+    # empty xkb_variant is a config error — only write the line when set
+    { printf '# aura-os-setup — keyboard (Alt+Shift switches)\n# layouts: %s\ninput type:keyboard {\n    xkb_layout %s\n' "$label" "$layout"
+      [[ -n $variant ]] && printf '    xkb_variant %s\n' "$variant"
+      printf '    xkb_options grp:alt_shift_toggle\n}\n'; } > "$kbd_conf"
     swaymsg "input type:keyboard xkb_layout $layout" >/dev/null 2>&1
     swaymsg "input type:keyboard xkb_variant '$variant'" >/dev/null 2>&1
     note "keyboard → $label"

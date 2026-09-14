@@ -37,6 +37,10 @@ put() { # put <src> <dst> — install only when it differs, say so either way
 put "$REPO/config/sway/config" "$cfg/sway/config"
 put "$REPO/config/sway/config.d/10-binds.conf" "$cfg/sway/config.d/10-binds.conf"
 put "$REPO/config/sway/config.d/05-aura-term.conf" "$cfg/sway/config.d/05-aura-term.conf"
+# voice (dic), aura-pulse, powerboard (install/09) — keybinds + launcher
+put "$REPO/config/sway/config.d/20-dusan-apps.conf" "$cfg/sway/config.d/20-dusan-apps.conf"
+put "$REPO/config/sway/config.d/20-mouse.conf" "$cfg/sway/config.d/20-mouse.conf"
+put "$REPO/config/sway/config.d/30-idle.conf" "$cfg/sway/config.d/30-idle.conf"
 put "$REPO/config/waybar/config.jsonc" "$cfg/waybar/config.jsonc"
 put "$REPO/config/waybar/style.css" "$cfg/waybar/style.css"
 install -d -o "$user" -g "$user" "$cfg/fuzzel" "$home/.local/share/applications"
@@ -57,6 +61,7 @@ if [[ ! -f $cfg/waybar/theme.css ]]; then
     chown "$user:$user" "$cfg/sway/config.d/60-wallpaper.conf"
     echo "03-sway: default wallpaper Aura adOS"
 fi
+# launcher entries (Aura Pulse; powerboard's comes from its cmake install)
 for f in "$REPO"/config/applications/*.desktop; do   # hide dependency clutter from the launcher
     put "$f" "$home/.local/share/applications/$(basename "$f")"
 done
@@ -95,6 +100,19 @@ if [[ "$(cat "$zram_conf" 2>/dev/null)" != "$want_zram" ]]; then
     echo "03-sway: wrote $zram_conf (zram0 (re)started)"
 else
     echo "03-sway: up to date: $zram_conf"
+fi
+
+# VM tunables for zram swap: kernel defaults assume slow disk swap, zram is
+# in-RAM (zstd, no seek penalty) so pages can go out earlier and come back
+# cheap. Deployed to /usr/lib so a future /etc drop-in can always override.
+sysctl_conf="$REPO/config/zram/sysctl.conf"
+sysctl_dst=/usr/lib/sysctl.d/70-aura-zram.conf
+if ! cmp -s "$sysctl_conf" "$sysctl_dst"; then
+    install -Dm644 "$sysctl_conf" "$sysctl_dst"
+    sysctl --system >/dev/null
+    echo "03-sway: installed $sysctl_dst (applied)"
+else
+    echo "03-sway: up to date: $sysctl_dst"
 fi
 
 # Display manager swap: stop and disable sddm first, then greetd; sway

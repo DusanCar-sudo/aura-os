@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Aura Pulse
+GenericName=System Cockpit
+Comment=System telemetry, AI clipboard vault and hardware benchmarks
+Exec=aura-pulse
+Terminal=false
+Categories=System;Monitor;
+Keywords=aura;pulse;telemetry;clipboard;benchmark;

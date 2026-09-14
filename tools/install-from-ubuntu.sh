@@ -60,7 +60,7 @@ echo "  reused:     $ESP (Ubuntu's EFI partition, not formatted)"
 echo "  user $NAME, host $HOST, time zone $ZONE, repo from $REPO"
 echo
 read -rp "  Type INSTALL to erase $ROOT and $BOOT and install Aura OS: " ok
-[[ $ok == INSTALL ]] || die "cancelled — nothing changed"
+[[ ${ok^^} == INSTALL ]] || die "cancelled — nothing changed"
 while :; do
     read -rsp "  Password for $NAME (and root): " PASS; echo
     read -rsp "  Again: " p2; echo

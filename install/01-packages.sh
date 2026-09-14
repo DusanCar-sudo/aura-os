@@ -18,12 +18,20 @@ packages=(
     fuzzel                   # launcher (Super+D)
     foot                     # terminal (Super+Return)
     swaybg                   # solid theme background (sway `output bg`), ~3 MB
+    swayidle swaylock        # idle policy: screen off after 60m, lock before sleep
     mako                     # notifications daemon (also serves Electron/Chrome)
     inotify-tools            # inotifywait: aura-os-agents follows agent logs
     figlet                   # big month title in aura-os-calendar
     sqlite3                  # read Firefox history for the sidebar's recent list
     cliphist wl-clipboard    # clipboard history, last 500 copies (top bar "clip")
+    grim slurp               # screenshots: capture + region select (Print key)
     wiremix                  # volume TUI (top bar "vol" click)
+    dolphin konsole          # file manager + its F4 embedded terminal (task 004)
+    breeze breeze-icons breeze-gtk   # Qt style, icons, GTK theme for dark mode
+    qt6-wayland              # Qt apps native on sway (dolphin, konsole)
+    pipewire-alsa            # ALSA PCM plugin: aplay/alsa apps route to pipewire
+    pipewire-pulse           # pulseaudio replacement socket: apps connect here
+    alsa-utils               # aplay/alsamixer/speaker-test for verification
     rtkit                    # realtime priority for pipewire: no crackling
     bluez bluez-utils        # bluetooth + bluetoothctl (top bar "bt")
     libnotify                # notify-send: mako's CLI; aura-term needs it for

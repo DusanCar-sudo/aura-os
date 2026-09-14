@@ -3,7 +3,8 @@
 #
 #   aura-os-theme list            themes available (* = current)
 #   aura-os-theme apply <name>    recolor sway, waybar, aura-term, fuzzel,
-#                                 and the sidebar labels
+#                                 KDE/Qt apps (dolphin), GTK apps, and the
+#                                 sidebar labels — whole system follows
 #   aura-os-theme pick            choose with fuzzel
 #   aura-os-theme current
 #
@@ -120,6 +121,62 @@ s/#f38ba8/$c_red/Ig
 s/#83e6a0/$c_green/Ig
 s/#f9e2af/$c_yellow/Ig
 EOF
+    # KDE/Qt apps (dolphin, konsole): BreezeDark as the base scheme,
+    # recolored to the palette. Missing keys keep BreezeDark's sane
+    # defaults, so a partial palette still yields a complete scheme.
+    if [[ -r /usr/share/color-schemes/BreezeDark.colors ]]; then
+        dir="${XDG_DATA_HOME:-$HOME/.local/share}/color-schemes"
+        mkdir -p "$dir"
+        rgb() { local h="${1#\#}"; echo "$((16#${h:0:2})),$((16#${h:2:2})),$((16#${h:4:2}))"; }
+        awk -v bg="$(rgb "$c_bg")" -v bgalt="$(rgb "$c_bg_alt")" \
+            -v fg="$(rgb "$c_fg")" -v fgb="$(rgb "$c_fg_bright")" \
+            -v dim="$(rgb "$c_dim")" -v acc="$(rgb "$c_accent")" \
+            -v accb="$(rgb "$c_accent_bright")" '
+            /^\[/ { sec=$0 }
+            /^BackgroundNormal=/   { $0="BackgroundNormal="   (sec=="[Colors:Selection]" ? acc : bg) }
+            /^BackgroundAlternate=/{ $0="BackgroundAlternate=" bgalt }
+            /^ForegroundNormal=/   { $0="ForegroundNormal="   (sec=="[Colors:Selection]" ? fgb : fg) }
+            /^ForegroundInactive=/ { $0="ForegroundInactive=" dim }
+            /^ForegroundActive=/   { $0="ForegroundActive="   acc }
+            /^ForegroundLink=/     { $0="ForegroundLink="     accb }
+            /^Name=Breeze Dark$/   { $0="Name=Aura" }
+            { print }' /usr/share/color-schemes/BreezeDark.colors > "$dir/Aura.colors"
+        # point KConfig at it (kdeglobals is INI; kwriteconfig6 edits it
+        # in place, manual fallback creates/patches the two keys)
+        if command -v kwriteconfig6 >/dev/null; then
+            kwriteconfig6 --file kdeglobals --group General --key ColorScheme Aura
+            kwriteconfig6 --file kdeglobals --group KDE --key widgetStyle Breeze
+        else
+            touch "$cfg/kdeglobals"
+            grep -q '^\[General\]' "$cfg/kdeglobals" 2>/dev/null || echo '[General]' >> "$cfg/kdeglobals"
+            sed -i '/^\[General\]/,/^\[/{s/^ColorScheme=.*/ColorScheme=Aura/;}' "$cfg/kdeglobals"
+            grep -q '^ColorScheme=' "$cfg/kdeglobals" || sed -i '/^\[General\]/a ColorScheme=Aura' "$cfg/kdeglobals"
+            grep -q '^\[KDE\]' "$cfg/kdeglobals" || echo '[KDE]' >> "$cfg/kdeglobals"
+            sed -i '/^\[KDE\]/,/^\[/{s/^widgetStyle=.*/widgetStyle=Breeze/;}' "$cfg/kdeglobals"
+            grep -q '^widgetStyle=' "$cfg/kdeglobals" || sed -i '/^\[KDE\]/a widgetStyle=Breeze' "$cfg/kdeglobals"
+        fi
+    fi
+
+    # GTK apps: Breeze-Dark follows the same visual language; libadwaita
+    # (GTK4) reads the portal color-scheme, set it directly when possible.
+    for v in gtk-3.0 gtk-4.0; do
+        mkdir -p "$cfg/$v"
+        if [[ -f $cfg/$v/settings.ini ]]; then
+            grep -vE '^gtk-(theme-name|application-prefer-dark-theme|icon-theme-name)=' "$cfg/$v/settings.ini" > "$cfg/$v/settings.ini.tmp"
+        else
+            : > "$cfg/$v/settings.ini.tmp"
+        fi
+        cat >> "$cfg/$v/settings.ini.tmp" <<EOF
+
+[Settings]
+gtk-theme-name=Breeze-Dark
+gtk-application-prefer-dark-theme=1
+gtk-icon-theme-name=breeze-dark
+EOF
+        mv "$cfg/$v/settings.ini.tmp" "$cfg/$v/settings.ini"
+    done
+    gsettings set org.gnome.desktop.interface color-scheme prefer-dark 2>/dev/null || true
+
     printf '%s\n' "$1" | put "$state"
 
     # live: sway colors + background, waybar CSS, sidebar labels.

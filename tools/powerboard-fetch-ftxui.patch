@@ -1,0 +1,21 @@
+# Aura OS: powerboard needs ftxui (a CMake CONFIG package), which Arch
+# does not package. This replaces find_package(ftxui) with a pinned
+# FetchContent (v7.0.3), so plain `cmake ..` configures and builds.
+# Applied by install/09-dusan-apps.sh; skipped once CMakeLists.txt
+# mentions FetchContent. Drop this file when powerboard vendors ftxui.
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -23,5 +23,12 @@
+ endif()
+ 
+-find_package(ftxui CONFIG REQUIRED)
++# Arch ships no ftxui package: fetch it, pinned.
++include(FetchContent)
++FetchContent_Declare(ftxui
++    GIT_REPOSITORY https://github.com/ArthurSonzogni/FTXUI
++    GIT_TAG        v7.0.3
++    GIT_SHALLOW    TRUE
++)
++FetchContent_MakeAvailable(ftxui)
+ 
+ add_executable(powerboard

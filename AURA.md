@@ -7,12 +7,14 @@ Follow instincts and trends; write our own scripts, never copy
 another distro's code.
 
 ## Where you run
-Develop in this repo on the host. Test ONLY inside the VM:
-ssh -i ~/.ssh/aura_vm_ed25519 -p 2222 dusan@localhost (sudo
-needs no password there; sync with rsync to ~/aura-os). Reset
-with snapper snapshot 1 "base-clean". Never run install steps, pacman,
-systemctl or config writes against the host machine. The host is
-Ubuntu, not Arch; if a command would touch it, stop and ask.
+This machine (hostname `aura`, Lenovo IdeaPad Slim 5 15ARP10)
+is the real Aura OS install, bare metal — no VM anymore (the
+old dev-VM at port 2222 is gone, don't reference it). It
+dual-boots an older Ubuntu, mounted rw at /mnt/oldlinux when
+Aura OS is booted — reference/transfer files only, never boot
+or modify it from scripts. No disposable test target left:
+every change here is live. Reset with snapper snapshot 1
+"base-clean" if it breaks.
 
 ## System changes
 Inside Aura OS every system change goes through a bin/aura-os-*
@@ -42,5 +44,5 @@ Never read, print or commit ~/.aura/*.env, tokens or keys. If a
 task needs one, reference the variable name only.
 
 ## Done means tested
-A change is done when it works in a fresh VM boot, not when the
-script exits 0. Say what you verified and what you did not.
+A change is done when it works after a real reboot, not when
+the script exits 0. Say what you verified and what you did not.

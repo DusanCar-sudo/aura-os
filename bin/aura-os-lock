@@ -1,7 +1,31 @@
 #!/usr/bin/env bash
 # aura-os-lock — lock the screen (Super+Shift+L, or before sleep).
-# The password is typed on the US layout: swaylock takes whatever keymap
-# is active when it starts, and with Alt+Shift layout switching the lock
+#
+# Password is typed on the US layout: swaylock takes whatever keymap is
+# active when it starts, and with Alt+Shift layout switching the lock
 # screen can open on sr latin/cyrillic — the password then never matches.
+#
+# Background: the current wallpaper, else the aura splash asset, else a
+# dark color (swaylock's default white is blinding in a dark room).
 set -euo pipefail
-XKB_DEFAULT_LAYOUT=us exec swaylock -f
+
+wall_conf="${XDG_CONFIG_HOME:-$HOME/.config}/sway/config.d/60-wallpaper.conf"
+splash="$HOME/aura-os/assets/splash/aura-splash.png"
+
+img=""
+img="$(sed -n 's/^output \* bg "\(.*\)" fill/\1/p' "$wall_conf" 2>/dev/null)"
+[[ -f ${img:-} ]] || img="$splash"
+[[ -f ${img:-} ]] || img=""
+
+lock_args=( -f --ignore-empty-password
+    --inside-color=00000088 --inside-clear-color=00000088
+    --line-color=00000000 --line-clear-color=00000000
+    --key-hl-color=917CF6 --bs-hl-color=B0413E
+    --ring-color=5C5F77 --ring-clear-color=B0413E
+    --text-color=E9EAF0 --indicator-idle-visible )
+
+if [[ -n $img ]]; then
+    exec swaylock "${lock_args[@]}" -i "$img" -s fill
+else
+    exec swaylock "${lock_args[@]}" --color=1A1B26
+fi

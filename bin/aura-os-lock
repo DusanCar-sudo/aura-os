@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
 # aura-os-lock — lock the screen (Super+Shift+L, or before sleep).
+# The password is typed on the US layout: swaylock takes whatever keymap
+# is active when it starts, and with Alt+Shift layout switching the lock
+# screen can open on sr latin/cyrillic — the password then never matches.
 set -euo pipefail
-exec swaylock -f
+XKB_DEFAULT_LAYOUT=us exec swaylock -f

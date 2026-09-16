@@ -41,27 +41,35 @@ chosen_model() { # the pinned one if it is still loaded, else the first
 }
 
 run_test() { # run_test <url> <model> -> writes the cache, echoes a summary
-    local url="$1" model="$2" t0 t1 body out ntok secs tps
+    # Streams the answer, like Aura Pulse's bench, so the two numbers that
+    # matter come apart: how long until the first token (prompt processing)
+    # and how fast tokens arrive after that (generation). Timing the whole
+    # request would blend them and understate generation speed.
+    local url="$1" model="$2" t0 first="" last="" n=0 line now ttft secs tps
     t0="$(date +%s.%N)"
-    body="$(curl -sf -m 120 "$url/v1/chat/completions" \
+    while IFS= read -r line; do
+        [ "$line" = 'data: [DONE]' ] && break
+        case "$line" in data:*) ;; *) continue ;; esac
+        # the role-only opening chunk has empty content; it isn't a token
+        jq -e '(.choices[0].delta.content // "") != ""' <<<"${line#data: }" >/dev/null 2>&1 || continue
+        now="$(date +%s.%N)"
+        [ -n "$first" ] || first="$now"
+        last="$now"; n=$((n + 1))
+    done < <(curl -sfN -m 120 "$url/v1/chat/completions" \
               -H 'Content-Type: application/json' \
               -d "$(jq -n --arg m "$model" --arg p "$PROMPT" --argjson n "$TOKENS" \
-                    '{model:$m, max_tokens:$n, stream:false,
-                      messages:[{role:"user",content:$p}]}')" 2>/dev/null)"
-    t1="$(date +%s.%N)"
-    [ -n "$body" ] || { echo "no answer"; return 1; }
+                    '{model:$m, max_tokens:$n, stream:true,
+                      messages:[{role:"user",content:$p}]}')" 2>/dev/null)
+    [ "$n" -gt 0 ] || { echo "no answer"; return 1; }
 
-    # completion_tokens is what we are timing; fall back to counting words.
-    ntok="$(jq -r '.usage.completion_tokens // empty' <<<"$body" 2>/dev/null)"
-    out="$(jq -r '.choices[0].message.content // empty' <<<"$body" 2>/dev/null)"
-    [ -n "$ntok" ] || ntok="$(wc -w <<<"$out")"
-    secs="$(awk -v a="$t0" -v b="$t1" 'BEGIN{printf "%.2f", b-a}')"
-    tps="$(awk -v n="$ntok" -v s="$secs" 'BEGIN{printf "%.1f", (s>0? n/s : 0)}')"
+    # One streamed chunk is one token on LM Studio, ollama and llama.cpp.
+    read -r ttft secs tps < <(awk -v a="$t0" -v f="$first" -v l="$last" -v n="$n" 'BEGIN{
+        g = l - f; printf "%.2f %.2f %.1f", f - a, l - a, (n > 1 && g > 0 ? (n - 1) / g : 0) }')
 
-    jq -n --arg m "$model" --arg tps "$tps" --arg secs "$secs" \
-          --arg ntok "$ntok" --arg when "$(date +%s)" \
-          '{model:$m, tps:$tps, secs:$secs, tokens:$ntok, when:($when|tonumber)}' > "$cache"
-    printf '%s\t%s\t%s\t%s' "$model" "$tps" "$secs" "$ntok"
+    jq -n --arg m "$model" --arg tps "$tps" --arg ttft "$ttft" --arg secs "$secs" \
+          --arg ntok "$n" --arg when "$(date +%s)" \
+          '{model:$m, tps:$tps, ttft:$ttft, secs:$secs, tokens:$ntok, when:($when|tonumber)}' > "$cache"
+    printf '%s\t%s\t%s\t%s\t%s' "$model" "$tps" "$secs" "$n" "$ttft"
 }
 
 case "${1:-run}" in
@@ -106,9 +114,10 @@ pick)
     echo
     printf 'measuring… '
     if out="$(run_test "$url" "$model")"; then
-        IFS=$'\t' read -r _ tps secs ntok <<<"$out"
+        IFS=$'\t' read -r _ tps secs ntok ttft <<<"$out"
         printf '\r                \r'
-        printf 'speed     %s tokens/sec\n' "$tps"
+        printf 'speed     %s tokens/sec  (generation)\n' "$tps"
+        printf 'waited    %ss for the first token\n' "$ttft"
         printf 'produced  %s tokens in %ss\n' "$ntok" "$secs"
         echo
         echo "Sidebar now shows this until it is an hour old."

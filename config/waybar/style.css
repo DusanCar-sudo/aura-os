@@ -115,3 +115,7 @@ window#waybar.left #custom-recent:hover { background: @bg_alt; }
 
 /* active sway mode (Super+R → resize) */
 window#waybar.top #mode { color: @bg; background: @accent; padding: 0 8px; }
+window#waybar.left #custom-settings { padding: 10px 10px; font-size: 15px; }
+window#waybar.left #custom-settings:hover { background: @bg_alt; }
+window#waybar.left #custom-procs { color: @muted; padding: 2px 10px 8px; }
+window#waybar.left #custom-procs:hover { background: @bg_alt; }

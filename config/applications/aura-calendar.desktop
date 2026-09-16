@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Calendar
+Comment=Month calendar you can draw on with a red pen
+Exec=$HOME/.local/bin/aura-calendar
+Icon=x-office-calendar
+Terminal=false
+Categories=Office;Calendar;

@@ -99,23 +99,31 @@ cpu_temp() { # AMD is k10temp, Intel coretemp; fall back to anything thermal
 }
 gpu_temp() { temp_of amdgpu; }
 
-# Real draw, not a guess: the battery reports it directly while discharging.
-# On AC most laptops report nothing, and RAPL is the only other honest
-# source. If neither exists, say so rather than invent a number.
+# power_w -> "<watts> <source>", or nothing.
+# Real draw first: the battery reports it directly while discharging. On AC
+# most laptops report nothing, so fall back to what the chip measures about
+# itself — Intel RAPL, or the AMD APU's package power (PPT) that amdgpu
+# exposes to every user. The chip is not the whole machine: screen, SSD,
+# Wi-Fi and board add a few watts, estimated by platform-watts (default 5,
+# ~/.config/aura-os/platform-watts to change) and marked with ≈.
+platform_w=5
+[ -r "${XDG_CONFIG_HOME:-$HOME/.config}/aura-os/platform-watts" ] &&
+    platform_w="$(cat "${XDG_CONFIG_HOME:-$HOME/.config}/aura-os/platform-watts")"
+
 power_w() {
-    local p f uv cv
+    local p f uv cv h
     for f in /sys/class/power_supply/BAT*/power_now; do
         [ -r "$f" ] && p="$(cat "$f")" && [ "${p:-0}" -gt 0 ] &&
-            { awk -v p="$p" 'BEGIN{printf "%.1f", p/1000000}'; return; }
+            { awk -v p="$p" 'BEGIN{printf "%.1f battery", p/1000000}'; return; }
     done
     # Some batteries only give current+voltage.
     for f in /sys/class/power_supply/BAT*; do
         [ -r "$f/current_now" ] && [ -r "$f/voltage_now" ] || continue
         cv="$(cat "$f/current_now")"; uv="$(cat "$f/voltage_now")"
         [ "${cv:-0}" -gt 0 ] &&
-            { awk -v c="$cv" -v v="$uv" 'BEGIN{printf "%.1f", (c/1000000)*(v/1000000)}'; return; }
+            { awk -v c="$cv" -v v="$uv" 'BEGIN{printf "%.1f battery", (c/1000000)*(v/1000000)}'; return; }
     done
-    # Intel RAPL: package energy counter, joules since boot.
+    # Intel RAPL: package energy counter, joules since boot (often root-only).
     local e="/sys/class/powercap/intel-rapl:0/energy_uj" prev now
     if [ -r "$e" ]; then
         now="$(cat "$e")"
@@ -124,10 +132,19 @@ power_w() {
             local dt=$(( $(date +%s) - pt ))
             printf '%s %s\n' "$now" "$(date +%s)" > "$state/rapl"
             [ "$dt" -gt 0 ] && [ "$now" -gt "$prev" ] &&
-                { awk -v d=$(( now - prev )) -v t="$dt" 'BEGIN{printf "%.1f", d/1000000/t}'; return; }
+                { awk -v d=$(( now - prev )) -v t="$dt" -v x="$platform_w" \
+                      'BEGIN{printf "%.1f chip", d/1000000/t + x}'; return; }
+        else
+            printf '%s %s\n' "$now" "$(date +%s)" > "$state/rapl"
         fi
-        printf '%s %s\n' "$now" "$(date +%s)" > "$state/rapl"
     fi
+    # AMD APU: package power in microwatts, CPU and GPU together.
+    for h in /sys/class/hwmon/hwmon*; do
+        [ "$(cat "$h/name" 2>/dev/null)" = amdgpu ] && [ -r "$h/power1_input" ] || continue
+        p="$(cat "$h/power1_input")"
+        [ "${p:-0}" -gt 0 ] &&
+            { awk -v p="$p" -v x="$platform_w" 'BEGIN{printf "%.1f chip", p/1000000 + x}'; return; }
+    done
     echo ""
 }
 
@@ -136,7 +153,7 @@ c_pct="$(cpu_pct)"
 read -r m_pct m_used m_total <<<"$(mem_read)"
 g_pct="$(gpu_pct)"
 c_t="$(cpu_temp)"; g_t="$(gpu_temp)"
-watts="$(power_w)"
+read -r watts wsrc <<<"$(power_w)"
 
 c_spark="$(spark cpu "$c_pct")"
 m_spark="$(spark mem "$m_pct")"
@@ -146,7 +163,8 @@ if [ -n "$watts" ]; then
     # Cost if it ran at this draw all day / all month.
     read -r day month <<<"$(awk -v w="$watts" -v p="$price_kwh" \
         'BEGIN{ k=w/1000; printf "%.2f %.2f", k*24*p, k*24*30*p }')"
-    power_line="$(printf '%sW   $%s/day   $%s/mo' "$watts" "$day" "$month")"
+    approx=""; [ "$wsrc" = chip ] && approx="≈"
+    power_line="$(printf 'pwr  %s%.0fW  $%s/day  $%s/mo' "$approx" "$watts" "$day" "$month")"
 else
     power_line="power  not reported on AC"
 fi
@@ -174,5 +192,10 @@ $power_line"
 text="$(printf '%s' "$lines" | esc | sed 's/$/\\n/' | tr -d '\n')"
 text="${text%\\n}"
 
-tip="electricity at \$$price_kwh/kWh (US average)"
+case "${wsrc:-}" in
+    battery) how="measured by the battery" ;;
+    chip)    how="chip power measured + ${platform_w}W estimated for screen, SSD, Wi-Fi" ;;
+    *)       how="no power sensor" ;;
+esac
+tip="$how · cost if it ran like this 24h a day · electricity at \$$price_kwh/kWh (US average, EIA 2025)"
 printf '{"text":"%s","tooltip":"%s","class":"sysgraph"}\n' "$text" "$tip"

@@ -1,0 +1,942 @@
+#!/usr/bin/env python3
+"""aura-edit — a small text editor that works like Notepad, in the terminal.
+
+The keys everyone already knows, a menu bar you can click, and the mouse for
+placing the cursor, selecting and scrolling. No modes, no config, no plugins.
+
+  Ctrl+N new      Ctrl+O open     Ctrl+S save     F12 save as    Ctrl+Q quit
+  Ctrl+Z undo     Ctrl+Y redo     Ctrl+X cut      Ctrl+C copy    Ctrl+V paste
+  Ctrl+A all      Ctrl+F find     F3 find next    Ctrl+H replace Ctrl+G go to line
+  Shift+arrows select    Ctrl+←/→ word    F10 or click the menu bar
+
+Usage: aura-edit [file]
+"""
+import curses
+import os
+import shutil
+import subprocess
+import sys
+import signal
+import time
+import unicodedata
+
+HERE = os.path.dirname(os.path.realpath(__file__))
+sys.path.insert(0, os.path.join(HERE, "..", "lib"))
+import aura_colors  # noqa: E402  (shared theme colors — see lib/aura_colors.py)
+
+TAB = 4
+
+# ── clipboard: the system one on Wayland, an internal one otherwise ──────────
+_clip = [""]
+
+
+def clip_set(text):
+    _clip[0] = text
+    if os.environ.get("WAYLAND_DISPLAY") and shutil.which("wl-copy"):
+        try:
+            subprocess.run(["wl-copy"], input=text.encode(), timeout=2,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except (OSError, subprocess.SubprocessError):
+            pass
+
+
+def clip_get():
+    if os.environ.get("WAYLAND_DISPLAY") and shutil.which("wl-paste"):
+        try:
+            r = subprocess.run(["wl-paste", "-n"], capture_output=True, timeout=2)
+            if r.returncode == 0:
+                return r.stdout.decode(errors="replace")
+        except (OSError, subprocess.SubprocessError):
+            pass
+    return _clip[0]
+
+
+def cw(ch):
+    """Display width of one character."""
+    if ch == "\t":
+        return TAB
+    if unicodedata.combining(ch):
+        return 0
+    return 2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1
+
+
+def col_of(line, idx):
+    """Screen column of character index idx (tabs expand to TAB)."""
+    c = 0
+    for ch in line[:idx]:
+        c += cw(ch)
+    return c
+
+
+def idx_at_col(line, col):
+    c = 0
+    for i, ch in enumerate(line):
+        w = cw(ch)
+        if c + w > col:
+            return i if col - c < (w + 1) // 2 or w == 1 else i + 1
+        c += w
+    return len(line)
+
+
+class Buffer:
+    def __init__(self, path=None):
+        self.path = path
+        self.lines = [""]
+        self.crlf = False
+        self.modified = False
+        self.undo, self.redo = [], []
+        self.last_kind = None
+        if path and os.path.exists(path):
+            self.load(path)
+
+    def load(self, path):
+        with open(path, "rb") as f:
+            data = f.read()
+        text = data.decode("utf-8", errors="replace")
+        self.crlf = "\r\n" in text
+        text = text.replace("\r\n", "\n")
+        self.lines = text.split("\n")
+        self.path = path
+        self.modified = False
+        self.undo, self.redo = [], []
+
+    def save(self, path=None):
+        path = path or self.path
+        nl = "\r\n" if self.crlf else "\n"
+        tmp = path + ".aura-edit.tmp"
+        with open(tmp, "w", encoding="utf-8", newline="") as f:
+            f.write(nl.join(self.lines))
+        if os.path.exists(path):
+            shutil.copymode(path, tmp)
+        os.replace(tmp, path)
+        self.path = path
+        self.modified = False
+        self.last_kind = None
+
+
+class Editor:
+    MENUS = [
+        ("File", [("New", "Ctrl+N", "new"), ("Open…", "Ctrl+O", "open"),
+                  ("Save", "Ctrl+S", "save"), ("Save as…", "F12", "saveas"),
+                  None, ("Quit", "Ctrl+Q", "quit")]),
+        ("Edit", [("Undo", "Ctrl+Z", "undo"), ("Redo", "Ctrl+Y", "redo"), None,
+                  ("Cut", "Ctrl+X", "cut"), ("Copy", "Ctrl+C", "copy"),
+                  ("Paste", "Ctrl+V", "paste"), ("Delete", "Del", "delete"), None,
+                  ("Select all", "Ctrl+A", "selall")]),
+        ("Search", [("Find…", "Ctrl+F", "find"), ("Find next", "F3", "findnext"),
+                    ("Replace…", "Ctrl+H", "replace"), ("Go to line…", "Ctrl+G", "goto")]),
+        ("View", [("Line numbers", "", "numbers")]),
+        ("Help", [("Keys", "F1", "help")]),
+    ]
+
+    def __init__(self, scr, path):
+        self.scr = scr
+        self.buf = Buffer(path)
+        self.cy = self.cx = 0          # cursor: line, char index
+        self.want_col = 0              # column to keep when moving vertically
+        self.anchor = None             # selection anchor (y, x) or None
+        self.top = self.left = 0       # scroll
+        self.numbers = True
+        self.status = ""
+        self.last_find = ""
+        self.dragging = False
+        self.menu_open = None          # index into MENUS while a menu is down
+        self.menu_sel = 0
+        self.menu_x = []
+        self.running = True
+
+    # ── geometry ────────────────────────────────────────────────────────
+    def size(self):
+        h, w = self.scr.getmaxyx()
+        return h, w
+
+    def gutter(self):
+        return len(str(len(self.buf.lines))) + 2 if self.numbers else 0
+
+    def text_h(self):
+        return max(1, self.size()[0] - 2)
+
+    def text_w(self):
+        return max(1, self.size()[1] - self.gutter())
+
+    # ── selection ───────────────────────────────────────────────────────
+    def sel_range(self):
+        if self.anchor is None or self.anchor == (self.cy, self.cx):
+            return None
+        a, b = self.anchor, (self.cy, self.cx)
+        return (a, b) if a <= b else (b, a)
+
+    def sel_text(self):
+        r = self.sel_range()
+        if not r:
+            return ""
+        (y1, x1), (y2, x2) = r
+        if y1 == y2:
+            return self.buf.lines[y1][x1:x2]
+        parts = [self.buf.lines[y1][x1:]] + self.buf.lines[y1 + 1:y2] + [self.buf.lines[y2][:x2]]
+        return "\n".join(parts)
+
+    # ── editing primitives (all edits go through these) ─────────────────
+    def snapshot(self, kind):
+        """Record undo state. Consecutive typing groups into one step."""
+        if kind == self.buf.last_kind and kind in ("type", "backspace"):
+            return
+        self.buf.undo.append((list(self.buf.lines), self.cy, self.cx))
+        if len(self.buf.undo) > 500:
+            self.buf.undo.pop(0)
+        self.buf.redo.clear()
+        self.buf.last_kind = kind
+
+    def delete_sel(self):
+        r = self.sel_range()
+        if not r:
+            return False
+        (y1, x1), (y2, x2) = r
+        L = self.buf.lines
+        L[y1:y2 + 1] = [L[y1][:x1] + L[y2][x2:]]
+        self.cy, self.cx = y1, x1
+        self.anchor = None
+        self.buf.modified = True
+        return True
+
+    def insert(self, text, kind="type"):
+        self.snapshot(kind)
+        self.delete_sel()
+        L = self.buf.lines
+        line = L[self.cy]
+        before, after = line[:self.cx], line[self.cx:]
+        parts = text.split("\n")
+        if len(parts) == 1:
+            L[self.cy] = before + text + after
+            self.cx += len(text)
+        else:
+            new = [before + parts[0]] + parts[1:-1] + [parts[-1] + after]
+            L[self.cy:self.cy + 1] = new
+            self.cy += len(parts) - 1
+            self.cx = len(parts[-1])
+        self.buf.modified = True
+        self.want_col = col_of(L[self.cy], self.cx)
+
+    def backspace(self):
+        if self.sel_range():
+            self.snapshot("cut")
+            self.delete_sel()
+            return
+        if self.cx == 0 and self.cy == 0:
+            return
+        self.snapshot("backspace")
+        L = self.buf.lines
+        if self.cx > 0:
+            L[self.cy] = L[self.cy][:self.cx - 1] + L[self.cy][self.cx:]
+            self.cx -= 1
+        else:
+            self.cx = len(L[self.cy - 1])
+            L[self.cy - 1] += L[self.cy]
+            del L[self.cy]
+            self.cy -= 1
+        self.buf.modified = True
+        self.want_col = col_of(L[self.cy], self.cx)
+
+    def delete(self):
+        if self.sel_range():
+            self.snapshot("cut")
+            self.delete_sel()
+            return
+        L = self.buf.lines
+        if self.cx < len(L[self.cy]):
+            self.snapshot("delete")
+            L[self.cy] = L[self.cy][:self.cx] + L[self.cy][self.cx + 1:]
+        elif self.cy + 1 < len(L):
+            self.snapshot("delete")
+            L[self.cy] += L[self.cy + 1]
+            del L[self.cy + 1]
+        else:
+            return
+        self.buf.modified = True
+
+    def do_undo(self, redo=False):
+        src, dst = (self.buf.redo, self.buf.undo) if redo else (self.buf.undo, self.buf.redo)
+        if not src:
+            self.status = "Nothing to " + ("redo" if redo else "undo")
+            return
+        dst.append((list(self.buf.lines), self.cy, self.cx))
+        self.buf.lines, self.cy, self.cx = src.pop()
+        self.anchor = None
+        self.buf.modified = True
+        self.buf.last_kind = None
+
+    # ── movement ────────────────────────────────────────────────────────
+    def move(self, dy=0, dx=0, select=False):
+        if select and self.anchor is None:
+            self.anchor = (self.cy, self.cx)
+        elif not select:
+            r = self.sel_range()
+            self.anchor = None
+            if r and (dx or dy) and not dy:
+                # plain ←/→ with a selection jumps to its edge, like Notepad
+                self.cy, self.cx = r[0] if dx < 0 else r[1]
+                self.want_col = col_of(self.buf.lines[self.cy], self.cx)
+                return
+        L = self.buf.lines
+        if dx:
+            self.cx += dx
+            if self.cx < 0:
+                if self.cy > 0:
+                    self.cy -= 1
+                    self.cx = len(L[self.cy])
+                else:
+                    self.cx = 0
+            elif self.cx > len(L[self.cy]):
+                if self.cy + 1 < len(L):
+                    self.cy += 1
+                    self.cx = 0
+                else:
+                    self.cx = len(L[self.cy])
+            self.want_col = col_of(L[self.cy], self.cx)
+        if dy:
+            self.cy = max(0, min(len(L) - 1, self.cy + dy))
+            self.cx = idx_at_col(L[self.cy], self.want_col)
+        self.buf.last_kind = None
+
+    def word_move(self, direction, select=False):
+        if select and self.anchor is None:
+            self.anchor = (self.cy, self.cx)
+        elif not select:
+            self.anchor = None
+        line = self.buf.lines[self.cy]
+        i = self.cx
+        if direction < 0:
+            if i == 0:
+                return self.move(dx=-1, select=select)
+            while i > 0 and not line[i - 1].isalnum():
+                i -= 1
+            while i > 0 and line[i - 1].isalnum():
+                i -= 1
+        else:
+            if i >= len(line):
+                return self.move(dx=1, select=select)
+            while i < len(line) and line[i].isalnum():
+                i += 1
+            while i < len(line) and not line[i].isalnum():
+                i += 1
+        self.cx = i
+        self.want_col = col_of(line, i)
+
+    def goto(self, y, x=0, select=False):
+        if select and self.anchor is None:
+            self.anchor = (self.cy, self.cx)
+        elif not select:
+            self.anchor = None
+        L = self.buf.lines
+        self.cy = max(0, min(len(L) - 1, y))
+        self.cx = max(0, min(len(L[self.cy]), x))
+        self.want_col = col_of(L[self.cy], self.cx)
+
+    def scroll_to_cursor(self):
+        th, tw = self.text_h(), self.text_w()
+        if self.cy < self.top:
+            self.top = self.cy
+        elif self.cy >= self.top + th:
+            self.top = self.cy - th + 1
+        c = col_of(self.buf.lines[self.cy], self.cx)
+        if c < self.left:
+            self.left = c
+        elif c >= self.left + tw - 1:
+            self.left = c - tw + 2
+
+    # ── prompts and dialogs, drawn on the status line ───────────────────
+    def prompt(self, label, preset=""):
+        """A centered box with one text field. Enter accepts, Esc cancels."""
+        text = preset
+        title = label.rstrip(": ")
+        curses.curs_set(1)
+        try:
+            while True:
+                h, w = self.size()
+                bw = max(30, min(w - 4, 70))
+                bx, by = (w - bw) // 2, max(1, h // 2 - 3)
+                field = bw - 4
+                box = curses.color_pair(3)
+                for i in range(5):
+                    self.scr.addstr(by + i, bx, " " * bw, box)
+                self.scr.addstr(by, bx + 2, f" {title} ", box | curses.A_BOLD)
+                shown = text[-(field - 1):]
+                self.scr.addstr(by + 2, bx + 2, shown.ljust(field)[:field], curses.color_pair(1))
+                self.scr.addstr(by + 4, bx + 2, "Enter = OK    Esc = cancel"[:field], box)
+                self.scr.move(by + 2, bx + 2 + min(len(shown), field - 1))
+                self.scr.refresh()
+                try:
+                    k = self.scr.get_wch()
+                except curses.error:
+                    continue
+                if k in ("\n", "\r", curses.KEY_ENTER):
+                    return text
+                if k == "\x1b" or k == "\x07":
+                    return None
+                if k in (curses.KEY_BACKSPACE, "\x7f", "\b"):
+                    text = text[:-1]
+                elif k == "\x15":                     # Ctrl+U clears the field
+                    text = ""
+                elif k == curses.KEY_MOUSE:
+                    try:
+                        curses.getmouse()
+                    except curses.error:
+                        pass
+                elif isinstance(k, str) and k.isprintable():
+                    text += k
+        finally:
+            self.draw()
+
+    def message(self, text):
+        """A box you have to acknowledge — for things that must not be missed."""
+        self.ask(text, [("OK", "ok")])
+
+    def ask(self, question, options):
+        """Clickable choice on the status line. options: [(label, key)] → key or None."""
+        while True:
+            h, w = self.size()
+            self.scr.attron(curses.color_pair(3))
+            self.scr.move(h - 1, 0)
+            self.scr.clrtoeol()
+            self.scr.addstr(h - 1, 0, (question + "  ")[:w - 1])
+            x = len(question) + 2
+            spans = []
+            for label, key in options:
+                btn = f"[ {label} ]"
+                if x + len(btn) < w:
+                    self.scr.addstr(h - 1, x, btn, curses.color_pair(4) | curses.A_BOLD)
+                    spans.append((x, x + len(btn), key))
+                x += len(btn) + 1
+            self.scr.attroff(curses.color_pair(3))
+            self.scr.refresh()
+            try:
+                k = self.scr.get_wch()
+            except curses.error:
+                continue
+            if k == "\x1b":
+                return None
+            if k == curses.KEY_MOUSE:
+                try:
+                    _, mx, my, _, b = curses.getmouse()
+                except curses.error:
+                    continue
+                if my == h - 1 and b & (curses.BUTTON1_CLICKED | curses.BUTTON1_PRESSED | curses.BUTTON1_RELEASED):
+                    for x1, x2, key in spans:
+                        if x1 <= mx < x2:
+                            return key
+                continue
+            if isinstance(k, str):
+                for label, key in options:
+                    if k.lower() == label[0].lower():
+                        return key
+
+    # ── commands ────────────────────────────────────────────────────────
+    def confirm_discard(self):
+        if not self.buf.modified:
+            return True
+        name = os.path.basename(self.buf.path) if self.buf.path else "Untitled"
+        a = self.ask(f"Save changes to {name}?", [("Save", "s"), ("Don't save", "d"), ("Cancel", "c")])
+        if a == "s":
+            return self.cmd_save()
+        return a == "d"
+
+    def default_save_path(self):
+        base = os.getcwd()
+        docs = os.path.expanduser("~/Documents")
+        if base == os.path.expanduser("~") and os.path.isdir(docs):
+            base = docs
+        return os.path.join(base, "untitled.txt")
+
+    def cmd_save(self, as_new=False):
+        path = self.buf.path
+        if as_new or not path:
+            path = self.prompt("Save as", path or self.default_save_path())
+            if not path:
+                self.status = "Not saved"
+                return False
+            path = os.path.expanduser(path.strip())
+            if path.endswith("/") or os.path.isdir(path):
+                path = os.path.join(path, "untitled.txt")
+            if path != self.buf.path and os.path.exists(path):
+                if self.ask(f"{os.path.basename(path)} exists.", [("Replace", "r"), ("Cancel", "c")]) != "r":
+                    self.status = "Not saved"
+                    return False
+        try:
+            self.buf.save(path)
+        except OSError as e:
+            self.message(f"Could not save {path}: {e.strerror or e}")
+            self.status = "Not saved"
+            return False
+        self.status = f"Saved {path}"
+        return True
+
+    def run(self, action):
+        if action == "new":
+            if self.confirm_discard():
+                self.buf = Buffer()
+                self.goto(0)
+        elif action == "open":
+            if self.confirm_discard():
+                p = self.prompt("Open: ", os.getcwd() + "/")
+                if p:
+                    p = os.path.expanduser(p)
+                    try:
+                        self.buf = Buffer(p)
+                        self.goto(0)
+                        self.top = self.left = 0
+                        self.status = p if os.path.exists(p) else f"New file: {p}"
+                    except OSError as e:
+                        self.status = f"Could not open: {e.strerror}"
+        elif action == "save":
+            self.cmd_save()
+        elif action == "saveas":
+            self.cmd_save(as_new=True)
+        elif action == "quit":
+            if self.confirm_discard():
+                self.running = False
+        elif action == "undo":
+            self.do_undo()
+        elif action == "redo":
+            self.do_undo(redo=True)
+        elif action in ("cut", "copy"):
+            t = self.sel_text()
+            if not t:
+                # Notepad-style convenience: nothing selected → the whole line
+                t = self.buf.lines[self.cy] + "\n"
+                if action == "cut":
+                    self.snapshot("cut")
+                    L = self.buf.lines
+                    if len(L) > 1:
+                        del L[self.cy]
+                        self.cy = min(self.cy, len(L) - 1)
+                    else:
+                        L[0] = ""
+                    self.cx = 0
+                    self.buf.modified = True
+                clip_set(t)
+            else:
+                clip_set(t)
+                if action == "cut":
+                    self.snapshot("cut")
+                    self.delete_sel()
+        elif action == "paste":
+            t = clip_get().replace("\r\n", "\n")
+            if t:
+                self.insert(t, kind="paste")
+        elif action == "delete":
+            self.delete()
+        elif action == "selall":
+            self.anchor = (0, 0)
+            self.cy = len(self.buf.lines) - 1
+            self.cx = len(self.buf.lines[-1])
+        elif action == "find":
+            q = self.prompt("Find: ", self.sel_text() if "\n" not in self.sel_text() else self.last_find)
+            if q:
+                self.last_find = q
+                self.find_next()
+        elif action == "findnext":
+            if self.last_find:
+                self.find_next()
+            else:
+                self.run("find")
+        elif action == "replace":
+            self.replace()
+        elif action == "goto":
+            n = self.prompt("Go to line: ")
+            if n and n.strip().isdigit():
+                self.goto(int(n) - 1)
+        elif action == "numbers":
+            self.numbers = not self.numbers
+        elif action == "help":
+            self.status = "Ctrl+S save · Ctrl+Z undo · Ctrl+F find · Ctrl+H replace · Shift+arrows select · F10 menu · Ctrl+Q quit"
+
+    def find_next(self):
+        q = self.last_find.lower()
+        L = self.buf.lines
+        n = len(L)
+        start_x = self.cx
+        for step in range(n + 1):
+            y = (self.cy + step) % n
+            x0 = start_x if step == 0 else 0
+            i = L[y].lower().find(q, x0)
+            if i >= 0 and not (step == 0 and self.anchor == (y, i)):
+                self.anchor = (y, i)
+                self.cy, self.cx = y, i + len(q)
+                self.status = ""
+                return True
+            if step == 0 and i >= 0:
+                j = L[y].lower().find(q, i + 1)
+                if j >= 0:
+                    self.anchor, self.cy, self.cx = (y, j), y, j + len(q)
+                    return True
+        self.status = f'"{self.last_find}" not found'
+        return False
+
+    def replace(self):
+        q = self.prompt("Replace: ", self.last_find)
+        if not q:
+            return
+        r = self.prompt(f'Replace "{q}" with: ')
+        if r is None:
+            return
+        self.last_find = q
+        a = self.ask("Replace", [("All", "a"), ("One by one", "o"), ("Cancel", "c")])
+        if a == "a":
+            self.snapshot("replace")
+            count = 0
+            for i, line in enumerate(self.buf.lines):
+                if q in line:
+                    count += line.count(q)
+                    self.buf.lines[i] = line.replace(q, r)
+            if count:
+                self.buf.modified = True
+            self.anchor = None
+            self.goto(self.cy, self.cx)
+            self.status = f"Replaced {count}"
+        elif a == "o":
+            while self.find_next():
+                self.scroll_to_cursor()
+                self.draw()
+                b = self.ask("Replace this one?", [("Yes", "y"), ("No", "n"), ("Stop", "s")])
+                if b == "y":
+                    self.insert(r, kind="replace")
+                elif b != "n":
+                    break
+
+    # ── mouse ───────────────────────────────────────────────────────────
+    def pos_from_mouse(self, mx, my):
+        y = self.top + my - 1
+        y = max(0, min(len(self.buf.lines) - 1, y))
+        col = max(0, mx - self.gutter()) + self.left
+        return y, idx_at_col(self.buf.lines[y], col)
+
+    def on_mouse(self):
+        try:
+            _, mx, my, _, b = curses.getmouse()
+        except curses.error:
+            return
+        h, w = self.size()
+        if b & curses.BUTTON4_PRESSED:
+            self.top = max(0, self.top - 3)
+            return
+        if b & getattr(curses, "BUTTON5_PRESSED", 0x200000):
+            self.top = max(0, min(len(self.buf.lines) - 1, self.top + 3))
+            return
+
+        if self.menu_open is not None:
+            self.menu_click(mx, my, b)
+            return
+        pressed = b & (curses.BUTTON1_PRESSED | curses.BUTTON1_CLICKED | curses.BUTTON1_DOUBLE_CLICKED)
+        if my == 0 and pressed:
+            for i, (x1, x2) in enumerate(self.menu_x):
+                if x1 <= mx < x2:
+                    self.menu_open, self.menu_sel = i, 0
+            return
+        if 1 <= my < h - 1:
+            y, x = self.pos_from_mouse(mx, my)
+            shift = b & curses.BUTTON_SHIFT
+            if b & curses.BUTTON1_DOUBLE_CLICKED:
+                line = self.buf.lines[y]
+                s = e = x
+                while s > 0 and line[s - 1].isalnum():
+                    s -= 1
+                while e < len(line) and line[e].isalnum():
+                    e += 1
+                self.anchor, self.cy, self.cx = (y, s), y, e
+                self.dragging = False
+            elif b & curses.BUTTON1_PRESSED:
+                self.goto(y, x, select=bool(shift))
+                if not shift:
+                    self.anchor = (y, x)
+                self.dragging = True
+            elif b & curses.BUTTON1_RELEASED:
+                if self.dragging:
+                    self.cy, self.cx = y, x
+                    self.want_col = col_of(self.buf.lines[y], x)
+                self.dragging = False
+            elif b & curses.BUTTON1_CLICKED:
+                self.goto(y, x, select=bool(shift))
+            elif self.dragging:            # motion with the button held
+                self.cy, self.cx = y, x
+                self.want_col = col_of(self.buf.lines[y], x)
+            elif b & curses.BUTTON3_PRESSED or b & curses.BUTTON3_CLICKED:
+                self.menu_open, self.menu_sel = 1, 0   # right-click → Edit menu
+
+    def menu_items(self):
+        return self.MENUS[self.menu_open][1]
+
+    def menu_box(self):
+        items = self.menu_items()
+        x = self.menu_x[self.menu_open][0]
+        width = max(len(i[0]) + len(i[1]) + 6 for i in items if i)
+        return x, width, items
+
+    def menu_click(self, mx, my, b):
+        clickish = b & (curses.BUTTON1_PRESSED | curses.BUTTON1_CLICKED | curses.BUTTON1_RELEASED)
+        if not clickish:
+            return
+        if my == 0:
+            for i, (x1, x2) in enumerate(self.menu_x):
+                if x1 <= mx < x2:
+                    if b & curses.BUTTON1_RELEASED:
+                        return
+                    self.menu_open = None if self.menu_open == i else i
+                    self.menu_sel = 0
+                    return
+        x, width, items = self.menu_box()
+        if x <= mx < x + width and 1 <= my <= len(items):
+            it = items[my - 1]
+            if it and not (b & curses.BUTTON1_PRESSED):
+                self.menu_open = None
+                self.run(it[2])
+            return
+        if not (b & curses.BUTTON1_RELEASED):
+            self.menu_open = None
+
+    def menu_key(self, k):
+        items = self.menu_items()
+        if k in (curses.KEY_DOWN, curses.KEY_UP):
+            d = 1 if k == curses.KEY_DOWN else -1
+            for _ in range(len(items)):
+                self.menu_sel = (self.menu_sel + d) % len(items)
+                if items[self.menu_sel]:
+                    break
+        elif k in (curses.KEY_LEFT, curses.KEY_RIGHT):
+            d = 1 if k == curses.KEY_RIGHT else -1
+            self.menu_open = (self.menu_open + d) % len(self.MENUS)
+            self.menu_sel = 0
+        elif k in ("\n", "\r", curses.KEY_ENTER):
+            it = items[self.menu_sel]
+            self.menu_open = None
+            if it:
+                self.run(it[2])
+        elif k in ("\x1b", curses.KEY_F10):
+            self.menu_open = None
+
+    # ── drawing ─────────────────────────────────────────────────────────
+    def draw(self):
+        scr = self.scr
+        h, w = self.size()
+        scr.erase()
+        g = self.gutter()
+        tw = self.text_w()
+        sel = self.sel_range()
+
+        # menu bar
+        scr.attron(curses.color_pair(3))
+        scr.addstr(0, 0, " " * (w - 1))
+        x = 1
+        self.menu_x = []
+        for i, (name, _) in enumerate(self.MENUS):
+            label = f" {name} "
+            attr = curses.color_pair(4) | curses.A_BOLD if i == self.menu_open else curses.color_pair(3)
+            if x + len(label) < w:
+                scr.addstr(0, x, label, attr)
+            self.menu_x.append((x, x + len(label)))
+            x += len(label) + 1
+        title = (os.path.basename(self.buf.path) if self.buf.path else "Untitled") + (" •" if self.buf.modified else "")
+        if x + len(title) + 2 < w:
+            scr.addstr(0, w - len(title) - 2, title, curses.color_pair(3) | curses.A_BOLD)
+        scr.attroff(curses.color_pair(3))
+
+        # text
+        for row in range(self.text_h()):
+            y = self.top + row
+            sy = row + 1
+            if y >= len(self.buf.lines):
+                break
+            if self.numbers:
+                scr.addstr(sy, 0, str(y + 1).rjust(g - 1)[:g], curses.color_pair(2))
+            line = self.buf.lines[y]
+            col = 0
+            for i, ch in enumerate(line):
+                wch = cw(ch)
+                if col + wch <= self.left:
+                    col += wch
+                    continue
+                sx = g + col - self.left
+                if sx + wch > w - 1 or col - self.left >= tw:
+                    break
+                selected = sel and sel[0] <= (y, i) < sel[1]
+                attr = curses.color_pair(5) if selected else curses.color_pair(1)
+                glyph = " " * wch if ch == "\t" else ch
+                try:
+                    scr.addstr(sy, sx, glyph, attr)
+                except curses.error:
+                    pass
+                col += wch
+            # a selected line break shows as one highlighted cell
+            if sel and sel[0] <= (y, len(line)) < sel[1]:
+                sx = g + col - self.left
+                if 0 <= sx - g < tw and sx < w - 1:
+                    scr.addstr(sy, sx, " ", curses.color_pair(5))
+
+        # status bar
+        L = self.buf.lines
+        right = f"Ln {self.cy + 1}, Col {col_of(L[self.cy], self.cx) + 1}   {'CRLF' if self.buf.crlf else 'LF'}   UTF-8 "
+        left = " " + (self.status or ("F10 menu · Ctrl+S save · Ctrl+Q quit"))
+        bar = left[:max(0, w - len(right) - 1)].ljust(max(0, w - len(right) - 1)) + right
+        scr.addstr(h - 1, 0, bar[:w - 1], curses.color_pair(3))
+
+        # open menu, drawn last so it sits on top
+        if self.menu_open is not None:
+            x, width, items = self.menu_box()
+            x = min(x, max(0, w - width - 1))
+            for i, it in enumerate(items):
+                if 1 + i >= h - 1:
+                    break
+                if it is None:
+                    text, attr = "─" * width, curses.color_pair(6)
+                else:
+                    text = f" {it[0]}".ljust(width - len(it[1]) - 1) + it[1] + " "
+                    attr = curses.color_pair(4) | curses.A_BOLD if i == self.menu_sel else curses.color_pair(6)
+                scr.addstr(1 + i, x, text[:width], attr)
+
+        # cursor
+        cy = self.cy - self.top + 1
+        cx = g + col_of(L[self.cy], self.cx) - self.left
+        if self.menu_open is None and 1 <= cy < h - 1 and g <= cx < w:
+            curses.curs_set(1)
+            scr.move(cy, cx)
+        else:
+            curses.curs_set(0)
+        scr.refresh()
+
+    # ── main loop ───────────────────────────────────────────────────────
+    def loop(self):
+        CTRL = {"\x0e": "new", "\x0f": "open", "\x13": "save", "\x11": "quit",
+                "\x1a": "undo", "\x19": "redo", "\x18": "cut", "\x03": "copy",
+                "\x16": "paste", "\x01": "selall", "\x06": "find", "\x08": "replace",
+                "\x07": "goto"}
+        while self.running:
+            self.scroll_to_cursor()
+            self.draw()
+            try:
+                k = self.scr.get_wch()
+            except curses.error:
+                continue
+            except KeyboardInterrupt:
+                k = "\x03"
+            if k == curses.KEY_MOUSE:
+                self.on_mouse()
+                continue
+            if k == curses.KEY_RESIZE:
+                continue
+            self.status = ""
+            if self.menu_open is not None:
+                self.menu_key(k)
+                continue
+            name = curses.keyname(k).decode() if isinstance(k, int) else ""
+            if isinstance(k, str) and k in CTRL:
+                self.run(CTRL[k])
+            elif k == curses.KEY_F10:
+                self.menu_open, self.menu_sel = 0, 0
+            elif k == curses.KEY_F1:
+                self.run("help")
+            elif k == curses.KEY_F3:
+                self.run("findnext")
+            elif k == curses.KEY_F12:
+                self.run("saveas")
+            elif k in ("\n", "\r", curses.KEY_ENTER):
+                indent = len(self.buf.lines[self.cy]) - len(self.buf.lines[self.cy].lstrip(" \t"))
+                self.insert("\n" + self.buf.lines[self.cy][:min(indent, self.cx)], kind="newline")
+            elif k in (curses.KEY_BACKSPACE, "\x7f", "\b"):
+                self.backspace()
+            elif k == curses.KEY_DC:
+                self.delete()
+            elif k == "\t":
+                self.insert("\t", kind="type")
+            elif k == curses.KEY_LEFT:
+                self.move(dx=-1)
+            elif k == curses.KEY_RIGHT:
+                self.move(dx=1)
+            elif k == curses.KEY_UP:
+                self.move(dy=-1)
+            elif k == curses.KEY_DOWN:
+                self.move(dy=1)
+            elif k == curses.KEY_SLEFT:
+                self.move(dx=-1, select=True)
+            elif k == curses.KEY_SRIGHT:
+                self.move(dx=1, select=True)
+            elif k == curses.KEY_SR:
+                self.move(dy=-1, select=True)
+            elif k == curses.KEY_SF:
+                self.move(dy=1, select=True)
+            elif name.startswith("kLFT5"):
+                self.word_move(-1)
+            elif name.startswith("kRIT5"):
+                self.word_move(1)
+            elif name.startswith("kLFT6"):
+                self.word_move(-1, select=True)
+            elif name.startswith("kRIT6"):
+                self.word_move(1, select=True)
+            elif k in (curses.KEY_HOME, curses.KEY_SHOME):
+                self.goto(self.cy, 0, select=k == curses.KEY_SHOME)
+            elif k in (curses.KEY_END, curses.KEY_SEND):
+                self.goto(self.cy, len(self.buf.lines[self.cy]), select=k == curses.KEY_SEND)
+            elif name.startswith("kHOM5"):
+                self.goto(0, 0)
+            elif name.startswith("kEND5"):
+                self.goto(len(self.buf.lines) - 1, len(self.buf.lines[-1]))
+            elif k in (curses.KEY_PPAGE, curses.KEY_NPAGE):
+                d = self.text_h() * (-1 if k == curses.KEY_PPAGE else 1)
+                self.top = max(0, self.top + d)
+                self.move(dy=d)
+            elif k == "\x1b":
+                self.anchor = None
+            elif isinstance(k, str) and (k.isprintable() or ord(k) > 127):
+                self.insert(k, kind="type" if not k.isspace() else "space")
+
+
+RECOVER_DIR = os.path.join(os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state")),
+                           "aura-edit", "recovered")
+
+
+def install_rescue(editor):
+    """If the window is closed with unsaved text, keep it instead of losing it."""
+    def rescue(signum, frame):
+        buf = editor.buf
+        if buf.modified:
+            try:
+                os.makedirs(RECOVER_DIR, exist_ok=True)
+                name = os.path.basename(buf.path) if buf.path else "untitled.txt"
+                out = os.path.join(RECOVER_DIR, time.strftime("%Y%m%d-%H%M%S-") + name)
+                with open(out, "w", encoding="utf-8") as f:
+                    f.write("\n".join(buf.lines))
+                if shutil.which("notify-send"):
+                    subprocess.Popen(["notify-send", "-a", "Text Editor",
+                                      "Unsaved text kept", out])
+            except OSError:
+                pass
+        os._exit(1)
+    for sig in (signal.SIGHUP, signal.SIGTERM):
+        signal.signal(sig, rescue)
+
+
+def main(scr, path):
+    curses.raw()                      # Ctrl+S / Ctrl+Q / Ctrl+Z reach the editor
+    curses.use_default_colors()
+    curses.set_escdelay(25)
+    scr.keypad(True)
+    # Pair numbers stay 1-6 (text, line numbers, bars, active menu, selection,
+    # menu body) — but the colors now come from the active Aura theme.
+    aura_colors.setup(curses, order=("text", "dim", "bar", "current", "bar", "body"))
+    aura_colors.paint_base(scr, curses)
+    curses.mousemask(curses.ALL_MOUSE_EVENTS | curses.REPORT_MOUSE_POSITION)
+    curses.mouseinterval(0)
+    print("\033[?1002h", end="", flush=True)   # report drags while a button is held
+    try:
+        ed = Editor(scr, path)
+        install_rescue(ed)
+        ed.loop()
+    finally:
+        print("\033[?1002l", end="", flush=True)
+
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] in ("-h", "--help"):
+        print(__doc__)
+        sys.exit(0)
+    path = os.path.abspath(os.path.expanduser(sys.argv[1])) if len(sys.argv) > 1 else None
+    os.environ.setdefault("ESCDELAY", "25")
+    curses.wrapper(main, path)

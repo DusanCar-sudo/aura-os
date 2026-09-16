@@ -1,0 +1,786 @@
+#!/usr/bin/env python3
+"""aura-files — the file manager: clickable icons, in the terminal.
+
+Folders and files as icons drawn in text, like a desktop file manager.
+Everything is clickable: click to select, double-click to open, wheel to
+scroll, and the toolbar, places, view and sort buttons all respond to the
+mouse. The keyboard works too.
+
+  arrows  move      Enter  open         Backspace  up a folder    Alt+←/→ back/forward
+  Space   select    Ctrl+A select all   Ctrl+C copy    Ctrl+X cut    Ctrl+V paste
+  F2 rename    Del delete    Ctrl+Shift+N / F7 new folder    F5 refresh
+  v  icons ↔ list    s  sort by …    r  reverse order    .  hidden files    /  filter
+  q  quit
+
+Text files open in aura-edit; everything else opens with its default app.
+
+Usage: aura-files [folder]
+"""
+import curses
+import os
+import shutil
+import stat
+import subprocess
+import sys
+import time
+
+HERE = os.path.dirname(os.path.realpath(__file__))
+sys.path.insert(0, os.path.join(HERE, "..", "lib"))
+import aura_colors  # noqa: E402  (shared theme colors — see lib/aura_colors.py)
+EDITOR = os.path.join(HERE, "aura-edit")
+
+# ── icons, drawn in text: 3 rows × 8 columns each ────────────────────────────
+ICONS = {
+    "folder": ["╭──╮    ", "│  ╰───╮", "╰──────╯"],
+    "text":   ["┌────┐  ", "│ ≡≡ │  ", "└────┘  "],
+    "code":   ["┌────┐  ", "│ </>│  ", "└────┘  "],
+    "image":  ["┌────┐  ", "│ ▲☼ │  ", "└────┘  "],
+    "audio":  ["┌────┐  ", "│ ♫  │  ", "└────┘  "],
+    "video":  ["┌────┐  ", "│ ▶  │  ", "└────┘  "],
+    "archive": ["┌────┐  ", "│ ▥▥ │  ", "└────┘  "],
+    "pdf":    ["┌────┐  ", "│ PDF│  ", "└────┘  "],
+    "exec":   ["┌────┐  ", "│ ⚙  │  ", "└────┘  "],
+    "file":   ["┌───╮   ", "│   │   ", "└───┘   "],
+    "up":     ["  ╱╲    ", " ╱  ╲   ", "  ││    "],
+}
+ICON_W = 8
+EXT = {
+    "text": "txt md rst log csv tsv ini cfg conf toml yaml yml json xml",
+    "code": "py sh bash zsh js ts tsx jsx c h cpp hpp rs go java kt rb php lua html css scss sql",
+    "image": "png jpg jpeg gif webp svg bmp ico tiff avif heic",
+    "audio": "mp3 flac wav ogg opus m4a aac",
+    "video": "mp4 mkv webm mov avi m4v",
+    "archive": "zip tar gz tgz bz2 xz zst 7z rar deb rpm iso",
+    "pdf": "pdf",
+}
+EXT_KIND = {e: k for k, v in EXT.items() for e in v.split()}
+KIND_COLOR = {"folder": 2, "text": 1, "code": 5, "image": 7, "audio": 7, "video": 7,
+              "archive": 5, "pdf": 7, "exec": 8, "file": 6, "up": 6}
+SORTS = [("name", "Name"), ("date", "Date"), ("size", "Size"), ("type", "Type")]
+PLACES = [("Home", "~"), ("Documents", "~/Documents"), ("Downloads", "~/Downloads"),
+          ("Pictures", "~/Pictures"), ("Music", "~/Music"), ("Videos", "~/Videos"),
+          ("data", "/mnt/data"), ("bigdata", "/mnt/bigdata"), ("Root", "/")]
+SIDEBAR_W = 14
+
+
+def human(n):
+    for unit in ("B", "K", "M", "G", "T"):
+        if n < 1024 or unit == "T":
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024
+
+
+def is_text(path):
+    try:
+        with open(path, "rb") as f:
+            chunk = f.read(4096)
+    except OSError:
+        return False
+    if b"\0" in chunk:
+        return False
+    try:
+        chunk.decode("utf-8")
+        return True
+    except UnicodeDecodeError as e:
+        return e.start > len(chunk) - 4
+
+
+class Entry:
+    __slots__ = ("name", "is_dir", "size", "mtime", "kind", "ext")
+
+    def __init__(self, folder, name):
+        self.name = name
+        p = os.path.join(folder, name)
+        try:
+            st = os.stat(p)
+            self.is_dir = stat.S_ISDIR(st.st_mode)
+            self.size, self.mtime = st.st_size, st.st_mtime
+            executable = bool(st.st_mode & stat.S_IXUSR) and not self.is_dir
+        except OSError:
+            self.is_dir, self.size, self.mtime, executable = False, 0, 0, False
+        self.ext = os.path.splitext(name)[1][1:].lower() if not self.is_dir else ""
+        if name == "..":
+            self.kind = "up"
+        elif self.is_dir:
+            self.kind = "folder"
+        else:
+            self.kind = EXT_KIND.get(self.ext) or ("exec" if executable else "file")
+
+
+class Files:
+    TOOLBAR = [("←", "back"), ("→", "forward"), ("↑", "up"), (None, None),
+               ("New folder", "mkdir"), ("Copy", "copy"), ("Cut", "cut"), ("Paste", "paste"),
+               ("Rename", "rename"), ("Delete", "delete"), (None, None),
+               ("VIEW", "view"), ("SORT", "sort")]
+
+    def __init__(self, scr, path):
+        self.scr = scr
+        self.path = os.path.abspath(path)
+        self.history, self.future = [], []
+        self.entries = []
+        self.cur = 0
+        self.top = 0                  # first visible row (grid rows or list rows)
+        self.selected = set()
+        self.view = "icons"
+        self.sort, self.reverse = "name", False
+        self.hidden = False
+        self.filter = ""
+        self.clipboard = ([], None)   # (paths, "copy"|"cut")
+        self.status = ""
+        self.error = ""
+        self.running = True
+        self.hits = []                # (y, x1, x2, action) clickable regions
+        self.tiles = []               # (y, x, h, w, index)
+        self.last_click = (0.0, -1)
+        self.popup = None             # ("sort", items) while a dropdown is open
+        self.load()
+
+    # ── folder ──────────────────────────────────────────────────────────
+    def load(self, keep=None):
+        self.error = ""
+        try:
+            names = os.listdir(self.path)
+        except OSError as e:
+            names, self.error = [], (e.strerror or str(e))
+        es = [Entry(self.path, n) for n in names
+              if (self.hidden or not n.startswith("."))
+              and (not self.filter or self.filter.lower() in n.lower())]
+        key = {"name": lambda e: e.name.lower(),
+               "date": lambda e: e.mtime,
+               "size": lambda e: e.size,
+               "type": lambda e: (e.kind, e.ext, e.name.lower())}[self.sort]
+        es.sort(key=key, reverse=self.reverse)
+        es.sort(key=lambda e: not e.is_dir)          # folders first, stable
+        if os.path.dirname(self.path) != self.path:
+            es.insert(0, Entry(self.path, ".."))
+        self.entries = es
+        self.selected &= {e.name for e in es}
+        if keep:
+            for i, e in enumerate(es):
+                if e.name == keep:
+                    self.cur = i
+        self.cur = max(0, min(self.cur, len(es) - 1))
+
+    def go(self, path, remember=True, keep=None):
+        path = os.path.normpath(os.path.expanduser(path))
+        if not os.path.isdir(path):
+            self.status = f"No such folder: {path}"
+            return
+        if not os.access(path, os.R_OK | os.X_OK):
+            self.status = f"Can't open {path}: permission denied"
+            return
+        if remember and path != self.path:
+            self.history.append(self.path)
+            self.future.clear()
+        self.path, self.cur, self.top, self.filter = path, 0, 0, ""
+        self.selected.clear()
+        self.load(keep=keep)
+
+    def current(self):
+        return self.entries[self.cur] if self.entries else None
+
+    def targets(self):
+        if self.selected:
+            return [e.name for e in self.entries if e.name in self.selected]
+        e = self.current()
+        return [e.name] if e and e.name != ".." else []
+
+    # ── dialogs ─────────────────────────────────────────────────────────
+    def prompt(self, title, preset=""):
+        text = preset
+        curses.curs_set(1)
+        try:
+            while True:
+                h, w = self.scr.getmaxyx()
+                bw = max(30, min(w - 4, 60))
+                bx, by = (w - bw) // 2, max(1, h // 2 - 3)
+                field = bw - 4
+                box = curses.color_pair(3)
+                for i in range(5):
+                    self.scr.addstr(by + i, bx, " " * bw, box)
+                self.scr.addstr(by, bx + 2, f" {title} ", box | curses.A_BOLD)
+                shown = text[-(field - 1):]
+                self.scr.addstr(by + 2, bx + 2, shown.ljust(field)[:field], curses.color_pair(1))
+                self.scr.addstr(by + 4, bx + 2, "Enter = OK    Esc = cancel"[:field], box)
+                self.scr.move(by + 2, bx + 2 + min(len(shown), field - 1))
+                self.scr.refresh()
+                try:
+                    k = self.scr.get_wch()
+                except curses.error:
+                    continue
+                if k in ("\n", "\r", curses.KEY_ENTER):
+                    return text
+                if k == "\x1b":
+                    return None
+                if k in (curses.KEY_BACKSPACE, "\x7f", "\b"):
+                    text = text[:-1]
+                elif k == "\x15":
+                    text = ""
+                elif k == curses.KEY_MOUSE:
+                    try:
+                        curses.getmouse()
+                    except curses.error:
+                        pass
+                elif isinstance(k, str) and k.isprintable():
+                    text += k
+        finally:
+            curses.curs_set(0)
+
+    def ask(self, question, options):
+        """A centered box with clickable buttons → chosen key, or None."""
+        while True:
+            h, w = self.scr.getmaxyx()
+            btns = "  ".join(f"[ {l} ]" for l, _ in options)
+            bw = max(len(question), len(btns)) + 6
+            bw = min(bw, w - 2)
+            bx, by = (w - bw) // 2, max(1, h // 2 - 3)
+            box = curses.color_pair(3)
+            for i in range(5):
+                self.scr.addstr(by + i, bx, " " * bw, box)
+            self.scr.addstr(by + 1, bx + 3, question[:bw - 6], box | curses.A_BOLD)
+            x = bx + 3
+            spans = []
+            for label, key in options:
+                b = f"[ {label} ]"
+                if x + len(b) <= bx + bw:
+                    self.scr.addstr(by + 3, x, b, curses.color_pair(4) | curses.A_BOLD)
+                    spans.append((x, x + len(b), key))
+                x += len(b) + 2
+            self.scr.refresh()
+            try:
+                k = self.scr.get_wch()
+            except curses.error:
+                continue
+            if k == "\x1b":
+                return None
+            if k == curses.KEY_MOUSE:
+                try:
+                    _, mx, my, _, b = curses.getmouse()
+                except curses.error:
+                    continue
+                if my == by + 3 and b & (curses.BUTTON1_PRESSED | curses.BUTTON1_CLICKED):
+                    for x1, x2, key in spans:
+                        if x1 <= mx < x2:
+                            return key
+                continue
+            if isinstance(k, str):
+                for label, key in options:
+                    if k.lower() == label[0].lower():
+                        return key
+
+    # ── actions ─────────────────────────────────────────────────────────
+    def run_outside(self, argv):
+        curses.def_prog_mode()
+        curses.endwin()
+        print("\033[?1002l", end="", flush=True)
+        try:
+            subprocess.call(argv)
+        except OSError as e:
+            self.status = f"Could not run {argv[0]}: {e.strerror}"
+        finally:
+            print("\033[?1002h", end="", flush=True)
+            curses.reset_prog_mode()
+            self.scr.refresh()
+            self.load(keep=self.current().name if self.current() else None)
+
+    def open_entry(self, e=None):
+        e = e or self.current()
+        if not e:
+            return
+        if e.name == "..":
+            return self.act("up")
+        full = os.path.join(self.path, e.name)
+        if e.is_dir:
+            return self.go(full)
+        if is_text(full):
+            self.run_outside([EDITOR, full])
+        elif shutil.which("xdg-open"):
+            subprocess.Popen(["xdg-open", full], stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, start_new_session=True)
+            self.status = f"Opening {e.name}…"
+        else:
+            self.status = "No app to open this file"
+
+    def paste(self):
+        paths, mode = self.clipboard
+        if not paths:
+            self.status = "Nothing to paste — Copy or Cut first"
+            return
+        done = 0
+        for src in paths:
+            name = os.path.basename(src)
+            dst = os.path.join(self.path, name)
+            if os.path.abspath(src) == os.path.abspath(dst):
+                if mode == "cut":
+                    continue
+                base, ext = os.path.splitext(name)
+                n = 2
+                while os.path.exists(dst):
+                    dst = os.path.join(self.path, f"{base} ({n}){ext}")
+                    n += 1
+            elif os.path.exists(dst):
+                a = self.ask(f"{name} already exists here.", [("Replace", "r"), ("Skip", "s"), ("Cancel", "c")])
+                if a in (None, "c"):
+                    break
+                if a == "s":
+                    continue
+                if os.path.isdir(dst) and not os.path.islink(dst):
+                    shutil.rmtree(dst)
+                else:
+                    os.remove(dst)
+            if os.path.isdir(src) and os.path.abspath(self.path).startswith(os.path.abspath(src) + os.sep):
+                self.status = f"Can't put {name} inside itself"
+                continue
+            self.status = f"{'Moving' if mode == 'cut' else 'Copying'} {name}…"
+            self.draw()
+            try:
+                if mode == "cut":
+                    shutil.move(src, dst)
+                elif os.path.isdir(src) and not os.path.islink(src):
+                    shutil.copytree(src, dst, symlinks=True)
+                else:
+                    shutil.copy2(src, dst, follow_symlinks=False)
+                done += 1
+            except OSError as e:
+                self.status = f"{name}: {e.strerror or e}"
+                self.load()
+                return
+        if mode == "cut":
+            self.clipboard = ([], None)
+        self.load()
+        self.status = f"{'Moved' if mode == 'cut' else 'Pasted'} {done} item{'s' * (done != 1)}"
+
+    def act(self, action):
+        e = self.current()
+        if action == "back":
+            if self.history:
+                self.future.append(self.path)
+                self.go(self.history.pop(), remember=False)
+        elif action == "forward":
+            if self.future:
+                self.history.append(self.path)
+                self.go(self.future.pop(), remember=False)
+        elif action == "up":
+            if os.path.dirname(self.path) != self.path:
+                self.go(os.path.dirname(self.path), keep=os.path.basename(self.path))
+        elif action in ("copy", "cut"):
+            names = self.targets()
+            if names:
+                self.clipboard = ([os.path.join(self.path, n) for n in names], action)
+                what = names[0] if len(names) == 1 else f"{len(names)} items"
+                self.status = f"{'Copied' if action == 'copy' else 'Cut'} {what} — open a folder and Paste"
+        elif action == "paste":
+            self.paste()
+        elif action == "mkdir":
+            n = self.prompt("New folder", "New folder")
+            if n:
+                try:
+                    os.makedirs(os.path.join(self.path, n))
+                    self.load(keep=n)
+                except OSError as err:
+                    self.status = f"Could not create: {err.strerror}"
+        elif action == "rename":
+            if e and e.name != "..":
+                n = self.prompt("Rename", e.name)
+                if n and n != e.name:
+                    if os.path.exists(os.path.join(self.path, n)):
+                        self.status = f"{n} already exists"
+                    else:
+                        try:
+                            os.rename(os.path.join(self.path, e.name), os.path.join(self.path, n))
+                            self.load(keep=n)
+                        except OSError as err:
+                            self.status = f"Could not rename: {err.strerror}"
+        elif action == "delete":
+            names = self.targets()
+            if names:
+                what = names[0] if len(names) == 1 else f"{len(names)} items"
+                if self.ask(f"Delete {what} permanently?", [("Delete", "y"), ("Cancel", "n")]) == "y":
+                    for n in names:
+                        p = os.path.join(self.path, n)
+                        try:
+                            if os.path.isdir(p) and not os.path.islink(p):
+                                shutil.rmtree(p)
+                            else:
+                                os.remove(p)
+                        except OSError as err:
+                            self.status = f"{n}: {err.strerror or err}"
+                            break
+                    else:
+                        self.status = f"Deleted {what}"
+                    self.selected.clear()
+                    self.load()
+        elif action == "view":
+            self.view = "list" if self.view == "icons" else "icons"
+            self.top = 0
+        elif action == "sort":
+            self.popup = "sort"
+        elif action.startswith("sort:"):
+            key = action[5:]
+            if key == "reverse":
+                self.reverse = not self.reverse
+            else:
+                self.sort = key
+            self.popup = None
+            keep = e.name if e else None
+            self.load(keep=keep)
+        elif action.startswith("place:"):
+            self.go(action[6:])
+        elif action == "quit":
+            self.running = False
+
+    # ── layout helpers ──────────────────────────────────────────────────
+    def area(self):
+        """The file area: top, left, height, width."""
+        h, w = self.scr.getmaxyx()
+        return 3, SIDEBAR_W + 1, h - 5, w - SIDEBAR_W - 2
+
+    def grid_dims(self):
+        _, _, ah, aw = self.area()
+        tile_w = 14
+        cols = max(1, aw // tile_w)
+        return cols, tile_w, 5, max(1, ah // 5)       # cols, tile w, tile h, visible rows
+
+    def keep_visible(self):
+        if self.view == "icons":
+            cols, _, _, rows = self.grid_dims()
+            r = self.cur // cols
+        else:
+            rows = self.area()[2] - 1
+            r = self.cur
+        if r < self.top:
+            self.top = r
+        elif r >= self.top + rows:
+            self.top = r - rows + 1
+
+    # ── drawing ─────────────────────────────────────────────────────────
+    def put(self, y, x, text, attr=0, action=None):
+        h, w = self.scr.getmaxyx()
+        if y < 0 or y >= h or x >= w - 1:
+            return x
+        text = text[:max(0, w - 1 - x)]
+        try:
+            self.scr.addstr(y, x, text, attr)
+        except curses.error:
+            pass
+        if action:
+            self.hits.append((y, x, x + len(text), action))
+        return x + len(text)
+
+    def draw(self):
+        scr = self.scr
+        scr.erase()
+        self.hits, self.tiles = [], []
+        h, w = scr.getmaxyx()
+        if h < 12 or w < 50:
+            self.put(0, 0, "window too small")
+            scr.refresh()
+            return
+        bar = curses.color_pair(3)
+        btn = curses.color_pair(3) | curses.A_BOLD
+
+        # toolbar
+        self.put(0, 0, " " * (w - 1), bar)
+        x = 1
+        for label, action in self.TOOLBAR:
+            if label is None:
+                x = self.put(0, x, " │ ", bar)
+                continue
+            if action == "view":
+                label = "▦ Icons" if self.view == "icons" else "☰ List"
+            elif action == "sort":
+                label = f"⇅ {dict(SORTS)[self.sort]} {'↓' if self.reverse else '↑'}"
+            dim = (action == "back" and not self.history) or (action == "forward" and not self.future) \
+                or (action == "paste" and not self.clipboard[0])
+            x = self.put(0, x, f" {label} ", curses.color_pair(3) if dim else btn, action)
+            x += 1
+        # path bar
+        shown = self.path.replace(os.path.expanduser("~"), "~", 1)
+        if self.filter:
+            shown += f"    filter: {self.filter}   (Esc clears)"
+        self.put(1, 1, " " + shown[-(w - 4):], curses.color_pair(2) | curses.A_BOLD)
+        self.put(2, 0, "─" * (w - 1), curses.color_pair(6))
+
+        # places sidebar
+        y = 3
+        for label, target in PLACES:
+            p = os.path.expanduser(target)
+            if not os.path.isdir(p):
+                continue
+            here = os.path.normpath(p) == self.path
+            attr = (curses.color_pair(4) | curses.A_BOLD) if here else curses.color_pair(2)
+            self.put(y, 0, f" {label}".ljust(SIDEBAR_W)[:SIDEBAR_W], attr, "place:" + p)
+            y += 1
+            if y >= h - 3:
+                break
+        for yy in range(3, h - 2):
+            self.put(yy, SIDEBAR_W, "│", curses.color_pair(6))
+
+        if self.error:
+            self.put(4, SIDEBAR_W + 3, self.error, curses.color_pair(7))
+        self.keep_visible()
+        if self.view == "icons":
+            self.draw_icons()
+        else:
+            self.draw_list()
+
+        # status line
+        self.put(h - 2, 0, "─" * (w - 1), curses.color_pair(6))
+        e = self.current()
+        info = self.status
+        if not info:
+            n_items = len(self.entries) - (1 if self.entries and self.entries[0].name == ".." else 0)
+            info = f"{n_items} items"
+            if self.selected:
+                size = sum(x.size for x in self.entries if x.name in self.selected and not x.is_dir)
+                info += f"   ·   {len(self.selected)} selected ({human(size)})"
+            elif e and e.name != "..":
+                when = time.strftime("%d %b %Y %H:%M", time.localtime(e.mtime)) if e.mtime else ""
+                info += f"   ·   {e.name}   {'folder' if e.is_dir else human(e.size)}   {when}"
+        self.put(h - 1, 1, info, curses.color_pair(6))
+
+        if self.popup == "sort":
+            self.draw_sort_popup()
+        scr.refresh()
+
+    def draw_icons(self):
+        top, left, ah, aw = self.area()
+        cols, tw, th, rows = self.grid_dims()
+        for i, e in enumerate(self.entries):
+            r, c = divmod(i, cols)
+            if r < self.top or r >= self.top + rows:
+                continue
+            y = top + (r - self.top) * th
+            x = left + c * tw
+            chosen = i == self.cur
+            picked = e.name in self.selected
+            color = curses.color_pair(KIND_COLOR.get(e.kind, 1))
+            if chosen:
+                color = curses.color_pair(7) | curses.A_BOLD     # the icon lights up
+            elif picked:
+                color = curses.color_pair(5) | curses.A_BOLD
+            pad = (tw - ICON_W) // 2
+            for k, row in enumerate(ICONS[e.kind]):
+                self.put(y + k, x + pad, row.rstrip(), color)
+            name = e.name if e.name != ".." else "up"
+            label = name if len(name) <= tw - 1 else name[:tw - 2] + "…"
+            label = f" {label} " if chosen else label
+            lattr = curses.color_pair(4) | curses.A_BOLD if chosen else \
+                (curses.color_pair(5) | curses.A_BOLD if picked else curses.color_pair(1))
+            self.put(y + 3, x + (tw - len(label)) // 2, label, lattr)
+            if picked:
+                self.put(y, x + 1, "✓", curses.color_pair(5) | curses.A_BOLD)
+            self.tiles.append((y, x, th, tw, i))
+
+    def draw_list(self):
+        top, left, ah, aw = self.area()
+        head = curses.color_pair(6) | curses.A_BOLD
+        name_w = max(10, aw - 36)
+        x = left + 1
+        for key, label, width in (("name", "Name", name_w + 3), ("date", "Modified", 19),
+                                  ("size", "Size", 10), ("type", "Type", 6)):
+            arrow = (" ↓" if self.reverse else " ↑") if self.sort == key else ""
+            self.put(top, x, (label + arrow).ljust(width)[:width], head, "sort:" + key if self.sort != key else "sort:reverse")
+            x += width
+        rows = ah - 1
+        for i, e in enumerate(self.entries[self.top:self.top + rows]):
+            idx = self.top + i
+            y = top + 1 + i
+            chosen, picked = idx == self.cur, e.name in self.selected
+            attr = curses.color_pair(4) | curses.A_BOLD if chosen else \
+                (curses.color_pair(5) | curses.A_BOLD if picked else curses.color_pair(KIND_COLOR.get(e.kind, 1)))
+            mark = "✓ " if picked else "  "
+            glyph = {"folder": "▸", "up": "↑"}.get(e.kind, "·")
+            name = (e.name if e.name != ".." else "up") + ("/" if e.is_dir and e.name != ".." else "")
+            when = time.strftime("%Y-%m-%d %H:%M", time.localtime(e.mtime)) if e.mtime and e.name != ".." else ""
+            size = "" if e.is_dir else human(e.size)
+            typ = "folder" if e.kind == "folder" else (e.ext or e.kind if e.kind != "up" else "")
+            line = f"{mark}{glyph} {name[:name_w].ljust(name_w)} {when:<19}{size:>9}  {typ[:6]}"
+            self.put(y, left, line.ljust(aw)[:aw], attr)
+            self.tiles.append((y, left, 1, aw, idx))
+
+    def draw_sort_popup(self):
+        x0 = next((x1 for (y, x1, x2, a) in self.hits if a == "sort"), 40)
+        items = [(f"{'●' if self.sort == k else '○'} {label}", "sort:" + k) for k, label in SORTS]
+        items.append((f"{'☑' if self.reverse else '☐'} Reverse order", "sort:reverse"))
+        width = 20
+        for i, (label, action) in enumerate(items):
+            self.put(1 + i, x0, f" {label}".ljust(width), curses.color_pair(3) | curses.A_BOLD, action)
+
+    # ── input ───────────────────────────────────────────────────────────
+    def on_mouse(self):
+        try:
+            _, mx, my, _, b = curses.getmouse()
+        except curses.error:
+            return
+        if b & curses.BUTTON4_PRESSED:
+            self.top = max(0, self.top - 1)
+            self.cur = max(0, self.cur - (self.grid_dims()[0] if self.view == "icons" else 3))
+            return
+        if b & getattr(curses, "BUTTON5_PRESSED", 0x200000):
+            self.cur = min(len(self.entries) - 1, self.cur + (self.grid_dims()[0] if self.view == "icons" else 3))
+            return
+        press = b & (curses.BUTTON1_PRESSED | curses.BUTTON1_CLICKED)
+        right = b & (curses.BUTTON3_PRESSED | curses.BUTTON3_CLICKED)
+        if not (press or right):
+            return
+        for y, x1, x2, action in reversed(self.hits):      # popups are drawn last
+            if y == my and x1 <= mx < x2:
+                if self.popup and not action.startswith("sort:"):
+                    self.popup = None
+                self.act(action)
+                return
+        if self.popup:
+            self.popup = None
+            return
+        for y, x, th, tw, idx in self.tiles:
+            if y <= my < y + th and x <= mx < x + tw:
+                if right or b & curses.BUTTON_CTRL:
+                    name = self.entries[idx].name
+                    if name != "..":
+                        self.selected ^= {name}
+                    self.cur = idx
+                    return
+                now = time.monotonic()
+                t, last = self.last_click
+                self.cur = idx
+                if last == idx and now - t < 0.45:
+                    self.last_click = (0.0, -1)
+                    self.open_entry(self.entries[idx])
+                else:
+                    self.last_click = (now, idx)
+                    if not b & curses.BUTTON_SHIFT:
+                        self.selected.clear()
+                return
+        self.selected.clear()                                # click on empty space
+
+    def on_key(self, k):
+        n = len(self.entries)
+        cols = self.grid_dims()[0] if self.view == "icons" else 1
+        name = curses.keyname(k).decode() if isinstance(k, int) else ""
+        if self.popup:
+            self.popup = None
+            if k == "\x1b":
+                return
+        if k == curses.KEY_LEFT:
+            if self.view == "icons":
+                self.cur = max(0, self.cur - 1)
+            else:
+                self.act("up")
+        elif k == curses.KEY_RIGHT:
+            if self.view == "icons":
+                self.cur = min(n - 1, self.cur + 1)
+            else:
+                self.open_entry()
+        elif k == curses.KEY_UP:
+            self.cur = max(0, self.cur - cols)
+        elif k == curses.KEY_DOWN:
+            self.cur = min(n - 1, self.cur + cols)
+        elif k == curses.KEY_PPAGE:
+            self.cur = max(0, self.cur - cols * 5)
+        elif k == curses.KEY_NPAGE:
+            self.cur = min(n - 1, self.cur + cols * 5)
+        elif k == curses.KEY_HOME:
+            self.cur = 0
+        elif k == curses.KEY_END:
+            self.cur = n - 1
+        elif k in ("\n", "\r", curses.KEY_ENTER):
+            self.open_entry()
+        elif k in (curses.KEY_BACKSPACE, "\x7f", "\b"):
+            self.act("up")
+        elif name.startswith("kLFT3"):
+            self.act("back")
+        elif name.startswith("kRIT3"):
+            self.act("forward")
+        elif k == " ":
+            e = self.current()
+            if e and e.name != "..":
+                self.selected ^= {e.name}
+            self.cur = min(n - 1, self.cur + 1)
+        elif k == "\x01":
+            self.selected = {e.name for e in self.entries if e.name != ".."}
+        elif k == "\x03":
+            self.act("copy")
+        elif k == "\x18":
+            self.act("cut")
+        elif k == "\x16":
+            self.act("paste")
+        elif k in (curses.KEY_F2,):
+            self.act("rename")
+        elif k in (curses.KEY_DC,):
+            self.act("delete")
+        elif k in (curses.KEY_F7, "\x0e"):
+            self.act("mkdir")
+        elif k == curses.KEY_F5:
+            self.load()
+            self.status = "Refreshed"
+        elif k == "v":
+            self.act("view")
+        elif k == "s":
+            i = [s for s, _ in SORTS].index(self.sort)
+            self.act("sort:" + SORTS[(i + 1) % len(SORTS)][0])
+            self.status = f"Sorted by {dict(SORTS)[self.sort].lower()}"
+        elif k == "r":
+            self.act("sort:reverse")
+        elif k == ".":
+            self.hidden = not self.hidden
+            self.load()
+        elif k == "/":
+            f = self.prompt("Filter", self.filter)
+            if f is not None:
+                self.filter, self.cur, self.top = f, 0, 0
+                self.load()
+        elif k == "\x1b":
+            self.selected.clear()
+            if self.filter:
+                self.filter = ""
+                self.load()
+        elif k in ("q", curses.KEY_F10):
+            self.running = False
+
+    def loop(self):
+        while self.running:
+            self.draw()
+            try:
+                k = self.scr.get_wch()
+            except curses.error:
+                continue
+            except KeyboardInterrupt:
+                break
+            if k == curses.KEY_RESIZE:
+                continue
+            self.status = ""
+            if k == curses.KEY_MOUSE:
+                self.on_mouse()
+            else:
+                self.on_key(k)
+
+
+def main(scr, path):
+    curses.raw()
+    curses.use_default_colors()
+    curses.set_escdelay(25)
+    curses.curs_set(0)
+    scr.keypad(True)
+    # Pair numbers stay 1-8 (text, folders, toolbar, current, selected, dim,
+    # media, executables) — but the colors now come from the active Aura theme.
+    aura_colors.setup(curses)
+    aura_colors.paint_base(scr, curses)
+    curses.mousemask(curses.ALL_MOUSE_EVENTS | curses.REPORT_MOUSE_POSITION)
+    curses.mouseinterval(0)
+    print("\033[?1002h", end="", flush=True)
+    try:
+        Files(scr, path).loop()
+    finally:
+        print("\033[?1002l", end="", flush=True)
+
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] in ("-h", "--help"):
+        print(__doc__)
+        sys.exit(0)
+    start = os.path.expanduser(sys.argv[1]) if len(sys.argv) > 1 else os.getcwd()
+    if not os.path.isdir(start):
+        start = os.path.dirname(os.path.abspath(start)) or os.getcwd()
+    os.environ.setdefault("ESCDELAY", "25")
+    curses.wrapper(main, start)

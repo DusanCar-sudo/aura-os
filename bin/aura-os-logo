@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+# aura-os-logo — the splash screen's logo, drawn in block characters for the
+# top of the sidebar: the striped "A", the sun behind it fading from the
+# theme accent to its magenta, and "aura adOS" under it.
+#
+#   aura-os-logo          one waybar JSON reading (what the bar calls)
+#   aura-os-logo plain    the logo in the terminal, true-colour
+#   aura-os-logo header   the terminal header: logo, motto, copyright, repo
+#
+# Colours come from the active theme (~/.config/waybar/theme.css, written by
+# aura-os-theme), so the logo follows a theme switch. So does the vertical
+# tagline image in the sidebar: when the accent changes, this redraws
+# assets/left-watermark.png in the new colours and reloads waybar once.
+set -uo pipefail
+
+theme="${XDG_CONFIG_HOME:-$HOME/.config}/waybar/theme.css"
+tok() { sed -n "s/^@define-color $1 \(#[0-9a-fA-F]\{6\}\);/\1/p" "$theme" 2>/dev/null | head -1; }
+accent="$(tok accent)";   accent="${accent:-#00e5d0}"
+magenta="$(tok red)";     magenta="${magenta:-#ff6ac7}"
+bright="$(tok fg_bright)"; bright="${bright:-#d9fffc}"
+muted="$(tok muted)";     muted="${muted:-#a7a9ac}"
+dim="$(tok dim)";         dim="${dim:-#565b61}"
+
+# mix <#a> <#b> <0..1> -> the colour between them
+mix() {
+    awk -v a="${1#\#}" -v b="${2#\#}" -v t="$3" 'function h(s){return index("0123456789abcdef",tolower(s))-1}
+      function c(s,i){return h(substr(s,i,1))*16+h(substr(s,i+1,1))}
+      BEGIN{printf "#%02x%02x%02x", c(a,1)+(c(b,1)-c(a,1))*t, c(a,3)+(c(b,3)-c(a,3))*t, c(a,5)+(c(b,5)-c(a,5))*t}'
+}
+
+# Each row: the stripes, the A, and the sun, on a fixed grid (5|14|7).
+rows=(
+  "|     |     ▄▄▄▄     | ▗▄▄▄▖ "
+  "|     |    ▟████▙    |▟█████▙"
+  "|     |   ▟██▘▝██▙   |███████"
+  "| ━━━━|  ▟██▘  ▝██▙  |▜█████▛"
+  "|━━━━ | ▟██▘━━━━▝██▙ | ▝▀▀▀▘ "
+  "|━━━  |▟██▘      ▝██▙|       "
+)
+sun_rows=4
+
+esc() { sed -e 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'; }
+
+render() { # render <pango|ansi>
+    local mode=$1 i stripes letter sun col line
+    for i in "${!rows[@]}"; do
+        IFS='|' read -r _ stripes letter sun <<<"${rows[$i]}"
+        col="$(mix "$accent" "$magenta" "$(awk -v i="$i" -v n="$sun_rows" 'BEGIN{t = (n>1? i/(n-1) : 0); printf "%.2f", (t>1? 1 : t)}')")"
+        if [ "$mode" = pango ]; then
+            line="<span color='$accent'>$(printf '%s' "$stripes" | esc)</span>"
+            line+="<span color='$bright'>$(printf '%s' "$letter" | esc)</span>"
+            line+="<span color='$col'>$(printf '%s' "$sun" | esc)</span>"
+        else
+            line="$(ansi "$accent")$stripes$(ansi "$bright")$letter$(ansi "$col")$sun"$'\e[0m'
+        fi
+        printf '%s\n' "$line"
+    done
+    if [ "$mode" = pango ]; then
+        printf '%s\n' "<span color='$bright'><b>   aura ad</b></span><span color='$accent'><b>OS</b></span>"
+        printf '%s' "<span color='$dim'>   agent-driven os</span>"
+    else
+        printf '%s\n' "$(ansi "$bright")   aura ad$(ansi "$accent")OS"$'\e[0m'
+        printf '%s\n' "$(ansi "$dim")   agent-driven os"$'\e[0m'
+    fi
+}
+
+ansi() { local h="${1#\#}"; printf '\e[1;38;2;%d;%d;%dm' "0x${h:0:2}" "0x${h:2:2}" "0x${h:4:2}"; }
+
+# The header aura-term prints when a window opens: the logo on the left and,
+# beside it, what any program shows in its about box. The copyright line
+# matches LICENSE — Aura OS is proprietary, so it says so rather than MIT.
+header() {
+    local R=$'\e[0m' D; D="$(ansi "$dim")"
+    local -a logo info
+    mapfile -t logo < <(render ansi | head -n ${#rows[@]})
+    info=(
+        "$(ansi "$bright")aura ad$(ansi "$accent")OS$R  ${D}Agent-Driven OS$R"
+        "$(ansi "$muted")Intelligence is in simplicity.$R"
+        ""
+        "${D}© 2026 Dusan Milosavljevic · All rights reserved$R"
+        "${D}github.com/DusanCar-sudo/aura-os$R"
+        "${D}Super+Space settings · Alt+X dictate · Ctrl+Shift+↑↓ jump$R"
+    )
+    local i cols="${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}"
+    printf '\n'
+    for i in "${!logo[@]}"; do
+        if [ "$cols" -ge 90 ]; then
+            printf '  %s   %s\n' "${logo[$i]}" "${info[$i]:-}"
+        else
+            printf '  %s\n' "${logo[$i]}"
+        fi
+    done
+    if [ "$cols" -lt 90 ]; then
+        printf '  %s\n' "${info[0]}" "${info[1]}" "${info[3]}" "${info[4]}"
+    fi
+    printf '\n'
+}
+
+# ── the vertical tagline image, in the theme's colours ──────────────────────
+tagline() {
+    local out="${XDG_CONFIG_HOME:-$HOME/.config}/waybar/assets/left-watermark.png"
+    local stamp="${XDG_CACHE_HOME:-$HOME/.cache}/aura-os-logo.stamp"
+    local want="$accent $muted v1"
+    [ "$(cat "$stamp" 2>/dev/null)" = "$want" ] && [ -f "$out" ] && return
+    command -v magick >/dev/null || return
+    local font=/usr/share/fonts/TTF/JetBrainsMonoNerdFont-Bold.ttf
+    [ -r "$font" ] || return
+    local P=20 K=3 base adv x0=4 rx cx w t='Aura adOS   Intelligence is in simplicity'
+    base="$(magick -background none -font "$font" -pointsize $P label:AAAAAAAAAA -format %w info:)" || return
+    # monospace: every glyph advances the same, so positions are arithmetic.
+    read -r adv rx cx w <<<"$(awk -v b="$base" -v k=$K -v x0=$x0 -v n=${#t} 'BEGIN{
+        adv = b/10 + k
+        printf "%.2f %.1f %.1f %d", adv, x0 + 2*adv, x0 + 38*adv - k, x0*2 + n*adv }')"
+    # the underline runs from the r of "Aura" to the last c of "simplicity"
+    mkdir -p "$(dirname "$out")" "$(dirname "$stamp")"
+    magick -size "${w}x34" xc:none -font "$font" -pointsize $P -kerning $K -gravity northwest \
+        -fill "$accent" -annotate "+${x0}+2" 'Aura adOS' \
+        -fill "$muted" -annotate "+$(awk -v a="$adv" -v x=$x0 'BEGIN{printf "%d", x+12*a}')+2" 'Intelligence is in simplicity' \
+        -fill "$accent" -draw "rectangle $rx,29 $cx,30" \
+        -rotate -90 +repage "png:$out.new" && mv "$out.new" "$out" || return
+    printf '%s' "$want" > "$stamp"
+    # waybar only rereads a background image on reload
+    pkill -USR2 -x -u "$(id -u)" waybar 2>/dev/null || true
+}
+
+case "${1:-}" in
+    plain)  render ansi ;;
+    header) header ;;
+    *)
+        text="$(render pango | sed 's/"/\\"/g' | sed 's/$/\\n/' | tr -d '\n')"
+        printf '{"text":"%s","tooltip":false,"class":"logo"}\n' "${text%\\n}"
+        tagline
+        ;;
+esac

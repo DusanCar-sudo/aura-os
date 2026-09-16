@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# aura-os-procs — what is running, and end what you pick.
+#
+# The heaviest processes first (by memory, or CPU if you switch), one row
+# each. Pick one → "End" asks it to close (SIGTERM, it can save); if it is
+# still there after that, "Force kill" (SIGKILL) is offered. Only your own
+# processes can be ended without a password.
+#
+#   aura-os-procs          the list, by memory
+#   aura-os-procs cpu      the list, by CPU
+set -uo pipefail
+. "$(dirname "$(readlink -f "$0")")/aura-os-menu"
+
+sort_by="${1:-mem}"
+
+rows() {
+    local key=-%mem; [ "$sort_by" = cpu ] && key=-%cpu
+    # pid, cpu%, rss in MB, user, name — names cut so rows stay one column.
+    ps -eo pid=,pcpu=,rss=,user=,comm= --sort="$key" | head -n 40 |
+        awk -v me="$(id -un)" '{
+            mb = $3 / 1024
+            size = (mb >= 1024) ? sprintf("%5.1fG", mb/1024) : sprintf("%5.0fM", mb)
+            owner = ($4 == me) ? "" : "  (" $4 ")"
+            printf "%-7s %5.1f%%  %s   %s%s\n", $1, $2, size, $5, owner
+        }'
+}
+
+while :; do
+    other=cpu; [ "$sort_by" = cpu ] && other=memory
+    pick="$( { echo "↕  Sort by $other"; rule; rows; } | menu "processes by $sort_by")" || exit 0
+    case "$pick" in
+        "") exit 0 ;;
+        "↕  Sort by"*) [ "$sort_by" = cpu ] && sort_by=mem || sort_by=cpu; continue ;;
+        "──"*) continue ;;
+    esac
+
+    pid="${pick%% *}"
+    name="$(ps -o comm= -p "$pid" 2>/dev/null)"
+    [ -n "$name" ] || { notify "Processes" "It already ended"; continue; }
+
+    act="$(printf '✕  End %s\n←  Back\n' "$name" | menu "$name ($pid)")" || continue
+    case "$act" in "✕  End"*) ;; *) continue ;; esac
+
+    if ! kill -TERM "$pid" 2>/dev/null; then
+        notify "Processes" "Can't end $name — it belongs to another user"
+        continue
+    fi
+    # Give it up to 3 s to close cleanly.
+    for _ in 1 2 3 4 5 6; do kill -0 "$pid" 2>/dev/null || break; sleep 0.5; done
+    if kill -0 "$pid" 2>/dev/null; then
+        act="$(printf '⚠  Force kill %s (unsaved work is lost)\n←  Back\n' "$name" | menu "$name did not close")" || continue
+        case "$act" in "⚠  Force kill"*) kill -KILL "$pid" 2>/dev/null && notify "Processes" "Killed $name" ;; esac
+    else
+        notify "Processes" "Ended $name"
+    fi
+done

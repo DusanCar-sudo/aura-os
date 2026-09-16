@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Text Editor
+GenericName=Text editor
+Comment=Notepad-style editor in the terminal
+Exec=aura-term --app-id=aura-edit -e $HOME/.local/bin/aura-edit %f
+Icon=accessories-text-editor
+Terminal=false
+Categories=Utility;TextEditor;
+MimeType=text/plain;

@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# aura-os-popup — a floating TUI that behaves like a menu popup.
+# Waybar click opens it; it STAYS open while the mouse moves away
+# (sway: focus_follows_mouse no, hovering no longer steals focus), and
+# it closes the moment focus leaves it — i.e. you clicked somewhere
+# else. Watching focus is event-driven (swaymsg subscribe): nothing
+# polls while a popup is open, and nothing runs while none is.
+set -euo pipefail
+
+export SWAYSOCK="${SWAYSOCK:-$(ls "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"/sway-ipc.*.sock 2>/dev/null | head -n1)}"
+if [[ -z ${SWAYSOCK:-} ]]; then
+    exec aura-term --app-id=aura-float -e "$@"   # no sway: just a terminal
+fi
+
+aura-term --app-id=aura-float -e "$@" &
+term=$!
+
+(
+    # focus watcher: remember having the popup focused; any later focus
+    # event naming another window is a click outside → close. The first
+    # second is grace (the popup window may not exist yet).
+    seen=0
+    start=$SECONDS
+    swaymsg -t subscribe -m '["window"]' 2>/dev/null |
+    jq --unbuffered -r 'select(.change == "focus") | .container.app_id // ""' |
+    while read -r app; do
+        if [[ $app == aura-float ]]; then
+            seen=1
+        elif (( seen )) || (( SECONDS - start > 1 )); then
+            kill "$term" 2>/dev/null || true
+            exit
+        fi
+    done
+) &
+watcher=$!
+
+wait "$term" || true
+kill "$watcher" 2>/dev/null || true

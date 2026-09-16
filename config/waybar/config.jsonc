@@ -168,12 +168,21 @@
     "width": 300,
     "spacing": 0,
     "on-sigusr1": "toggle",
-    "modules-left": ["custom/spaces", "custom/sysgraph"],
+    "modules-left": ["custom/spaces", "custom/sysgraph", "custom/procs"],
     "modules-center": ["custom/recent"],
-    "modules-right": ["custom/agents", "custom/llm"],
+    "modules-right": ["custom/agents", "custom/llm", "custom/settings"],
     // The system block: cpu, ram, gpu, temperatures, and what the
     // machine costs to run. The only polled module in the bar — none of
     // these have a change event — one /proc + /sys read every 3 s.
+    // Under the graphs: the running processes, pick one to end it.
+    "custom/procs": {
+      "format": "\u25b8 processes  (end one)",
+      "align": 0,
+      "justify": "left",
+      "tooltip": false,
+      "on-click": "$HOME/.local/bin/aura-os-procs",
+      "on-click-right": "$HOME/.local/bin/aura-os-procs cpu"
+    },
     "custom/sysgraph": {
       "exec": "aura-os-sysgraph",
       "return-type": "json",
@@ -204,6 +213,14 @@
     },
     // The local model, under the agent list. Reads a cache — measuring
     // costs tokens, so only a click does that.
+    // Settings cog, bottom of the sidebar: opens the settings hub.
+    "custom/settings": {
+      "format": "\u2699  settings",
+      "align": 0,
+      "justify": "left",
+      "tooltip": false,
+      "on-click": "$HOME/.local/bin/aura-menu"
+    },
     "custom/llm": {
       "exec": "aura-os-llmtest status",
       "return-type": "json",

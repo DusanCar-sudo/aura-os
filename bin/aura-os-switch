@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# aura-os-switch — go to any open window from one list (Shift+Tab).
+#
+# sway's own focus is directional, which is fine inside one desk and
+# useless across nine. This is the flat view of everything open.
+#
+# Ordered by desk, not most-recently-used: sway's IPC has no global focus
+# timestamp, and the only way to get true MRU is a daemon subscribed to
+# window events — which this OS does not spend RAM on. Desk order is
+# stable, which for picking from a list beats a clever order that moves
+# under you. The window you are in is marked ▸.
+set -uo pipefail
+. "$(dirname "$(readlink -f "$0")")/aura-os-menu"
+
+command -v swaymsg >/dev/null && command -v jq >/dev/null || exit 0
+
+rows="$(swaymsg -t get_tree 2>/dev/null | jq -r '
+    [ .. | objects | select(.type == "workspace") ][]
+    | . as $ws
+    | [ $ws | recurse(.nodes[]?, .floating_nodes[]?)
+        | select(.name != null and (.nodes | length) == 0 and .type != "workspace") ]
+    | .[]
+    | "\($ws.name)\t\(.id)\t\(.focused)\t\(.app_id // .window_properties.class // "")\t\(.name)"
+')"
+[ -n "$rows" ] || exit 0
+
+# Build the display rows once, keep the id alongside, pick, map back.
+table="$(while IFS=$'\t' read -r ws id focused app name; do
+             [ -n "${id:-}" ] || continue
+             printf '%s %-12s %s\t%s\n' \
+                 "$([ "$focused" = true ] && echo "▸" || echo " ")" \
+                 "${ws:0:12}" "${name:0:48}" "$id"
+         done <<<"$rows")"
+
+pick="$(cut -f1 <<<"$table" | menu "windows")"
+[ -n "${pick:-}" ] || exit 0
+
+id="$(grep -F "$pick"$'\t' <<<"$table" | cut -f2 | head -1)"
+[ -n "${id:-}" ] && swaymsg "[con_id=$id] focus" >/dev/null

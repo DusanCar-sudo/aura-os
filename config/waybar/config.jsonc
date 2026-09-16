@@ -168,17 +168,20 @@
     "width": 300,
     "spacing": 0,
     "on-sigusr1": "toggle",
-    "modules-left": ["custom/spaces", "memory"],
+    "modules-left": ["custom/spaces", "custom/sysgraph"],
     "modules-center": ["custom/recent"],
     "modules-right": ["custom/agents"],
-    // The one system reading in the sidebar. The only polled module:
-    // RAM has no change event; one /proc/meminfo read every 5 s.
-    "memory": {
-      "interval": 5,
+    // The system block: cpu, ram, gpu, temperatures, and what the
+    // machine costs to run. The only polled module in the bar — none of
+    // these have a change event — one /proc + /sys read every 3 s.
+    "custom/sysgraph": {
+      "exec": "aura-os-sysgraph",
+      "return-type": "json",
+      "interval": 3,
+      "escape": false,
       "align": 0,
-      "format": "ram {used:0.1f}/{total:0.1f}G {percentage}%",
-      "tooltip-format": "swap {swapUsed:0.1f}/{swapTotal:0.1f}G",
-      "states": { "high": 85 }
+      "justify": "left",
+      "on-click": "aura-term --app-id=aura-float -e btop"
     },
     // Last used anything: $ command, d folder, f file, @ address, a app.
     "custom/recent": {

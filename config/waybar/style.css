@@ -97,8 +97,13 @@ tooltip label { color: @fg; }
 /* sidebar toggle (top-left) and the sidebar's RAM line */
 window#waybar.top #custom-sidebar { color: @dim; padding: 0 10px; }
 window#waybar.top #custom-sidebar:hover { color: @fg; background: @bg_alt; }
-window#waybar.left #memory { color: @muted; padding: 4px 10px; }
-window#waybar.left #memory.high { color: @red; }
+/* The system block. Monospace so the sparklines and the percentages line
+   up into columns — a graph that jitters sideways is unreadable. */
+window#waybar.left #custom-sysgraph {
+  color: @muted;
+  padding: 4px 10px;
+  font-family: "JetBrains Mono", monospace;
+}
 
 /* sidebar middle: last used anything */
 window#waybar.left #custom-recent { padding: 8px 10px; }

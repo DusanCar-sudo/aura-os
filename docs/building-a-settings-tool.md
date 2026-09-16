@@ -115,10 +115,12 @@ debug a command you never actually typed; and the guest resolution follows
 the QEMU window size, so `--fullscreen` is how you get a real one.
 
 Fastest way to check a list reads well, without a GUI at all — stub the
-picker and look at the rows:
+picker and look at the rows. The stub must write to **stderr** — the
+caller captures stdout in a command substitution, so a stub that prints
+to stdout shows you nothing and looks like a bug in the tool:
 
 ```sh
-sed 's|^\. "\$(dirname.*|. bin/aura-os-menu; menu() { cat; echo ""; }|' \
+sed 's|^\. "\$(dirname.*|. bin/aura-os-menu; menu() { cat >\&2; echo ""; }|' \
     bin/aura-os-thing | bash
 ```
 

@@ -46,3 +46,9 @@ task needs one, use the variable name.
 ## Done means tested
 A change is done when it works after a real reboot, not when
 the script exits 0. Say what you verified and what you did not.
+
+## Lessons from past sessions
+Before debugging something that smells familiar, read
+`docs/lessons-2026-09-16.md` (deploy-vs-built, sway/waybar traps, ALSA mic
+layout, pty test harness, wtype ban) and `docs/building-a-settings-tool.md`
+(menu patterns). Per-solution write-ups: `/mnt/bigdata/solutions/`.

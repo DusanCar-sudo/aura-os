@@ -170,7 +170,7 @@
     "on-sigusr1": "toggle",
     "modules-left": ["custom/spaces", "custom/sysgraph"],
     "modules-center": ["custom/recent"],
-    "modules-right": ["custom/agents"],
+    "modules-right": ["custom/agents", "custom/llm"],
     // The system block: cpu, ram, gpu, temperatures, and what the
     // machine costs to run. The only polled module in the bar — none of
     // these have a change event — one /proc + /sys read every 3 s.
@@ -201,6 +201,18 @@
       "escape": false,
       "signal": 8,
       "tooltip": false
+    },
+    // The local model, under the agent list. Reads a cache — measuring
+    // costs tokens, so only a click does that.
+    "custom/llm": {
+      "exec": "aura-os-llmtest status",
+      "return-type": "json",
+      "interval": 30,
+      "escape": false,
+      "align": 0,
+      "justify": "left",
+      "on-click": "aura-term --app-id=aura-float -e sh -c 'aura-os-llmtest; printf \"\\n[any key]\"; read -rsn1'",
+      "on-click-right": "aura-os-llmtest pick"
     },
     "custom/agents": {
       "align": 0,

@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+# aura-os-llmtest — is the local model up, and how fast is it right now.
+#
+#   aura-os-llmtest            run a real prompt and print the numbers
+#   aura-os-llmtest status     one waybar JSON line (what the sidebar calls)
+#   aura-os-llmtest pick       choose which model the test uses
+#
+# Two backends, whichever is listening: LM Studio on :1234 and ollama on
+# :11434, both OpenAI-compatible at /v1. The sidebar never generates
+# anything — it reads the cache this writes, and falls back to a cheap
+# liveness check. Only an explicit run costs tokens or CPU.
+set -uo pipefail
+. "$(dirname "$(readlink -f "$0")")/aura-os-menu"
+
+cfg="${XDG_CONFIG_HOME:-$HOME/.config}/aura-os"
+cache="${XDG_RUNTIME_DIR:-/tmp}/aura-os-llmtest.json"
+mkdir -p "$cfg"
+
+PROMPT="${AURA_LLM_PROMPT:-Name three primary colours.}"
+TOKENS="${AURA_LLM_TOKENS:-64}"
+
+backend() {  # -> "<base-url> <name>", or nothing
+    local u
+    for u in "${AURA_LLM_URL:-}" http://127.0.0.1:1234 http://127.0.0.1:11434; do
+        [ -n "$u" ] || continue
+        curl -sf -m 1 "$u/v1/models" >/dev/null 2>&1 || continue
+        case "$u" in *1234*) echo "$u LM-Studio" ;; *11434*) echo "$u ollama" ;;
+                     *)      echo "$u local" ;; esac
+        return
+    done
+}
+
+models() { curl -sf -m 2 "$1/v1/models" | jq -r '.data[].id' 2>/dev/null; }
+
+chosen_model() { # the pinned one if it is still loaded, else the first
+    local url="$1" want list
+    want="$(cat "$cfg/llm-model" 2>/dev/null)"
+    list="$(models "$url")"
+    [ -n "$want" ] && grep -qxF "$want" <<<"$list" && { echo "$want"; return; }
+    head -1 <<<"$list"
+}
+
+run_test() { # run_test <url> <model> -> writes the cache, echoes a summary
+    local url="$1" model="$2" t0 t1 body out ntok secs tps
+    t0="$(date +%s.%N)"
+    body="$(curl -sf -m 120 "$url/v1/chat/completions" \
+              -H 'Content-Type: application/json' \
+              -d "$(jq -n --arg m "$model" --arg p "$PROMPT" --argjson n "$TOKENS" \
+                    '{model:$m, max_tokens:$n, stream:false,
+                      messages:[{role:"user",content:$p}]}')" 2>/dev/null)"
+    t1="$(date +%s.%N)"
+    [ -n "$body" ] || { echo "no answer"; return 1; }
+
+    # completion_tokens is what we are timing; fall back to counting words.
+    ntok="$(jq -r '.usage.completion_tokens // empty' <<<"$body" 2>/dev/null)"
+    out="$(jq -r '.choices[0].message.content // empty' <<<"$body" 2>/dev/null)"
+    [ -n "$ntok" ] || ntok="$(wc -w <<<"$out")"
+    secs="$(awk -v a="$t0" -v b="$t1" 'BEGIN{printf "%.2f", b-a}')"
+    tps="$(awk -v n="$ntok" -v s="$secs" 'BEGIN{printf "%.1f", (s>0? n/s : 0)}')"
+
+    jq -n --arg m "$model" --arg tps "$tps" --arg secs "$secs" \
+          --arg ntok "$ntok" --arg when "$(date +%s)" \
+          '{model:$m, tps:$tps, secs:$secs, tokens:$ntok, when:($when|tonumber)}' > "$cache"
+    printf '%s\t%s\t%s\t%s' "$model" "$tps" "$secs" "$ntok"
+}
+
+case "${1:-run}" in
+status)
+    read -r url name <<<"$(backend)"
+    if [ -z "${url:-}" ]; then
+        printf '{"text":"llm  offline","tooltip":"no local model server on :1234 or :11434","class":"llm-off"}\n'
+        exit 0
+    fi
+    model="$(chosen_model "$url")"
+    if [ -r "$cache" ]; then
+        tps="$(jq -r .tps "$cache" 2>/dev/null)"
+        when="$(jq -r .when "$cache" 2>/dev/null)"
+        age=$(( $(date +%s) - ${when:-0} ))
+        if [ "$age" -lt 3600 ]; then
+            printf '{"text":"llm  %s  %s tok/s","tooltip":"%s · measured %dm ago · click to re-test","class":"llm-ok"}\n' \
+                   "${model:0:18}" "$tps" "$name" "$((age/60))"
+            exit 0
+        fi
+    fi
+    printf '{"text":"llm  %s  ready","tooltip":"%s · click to measure tokens/sec","class":"llm-ok"}\n' \
+           "${model:0:18}" "$name"
+    ;;
+pick)
+    read -r url _ <<<"$(backend)"
+    [ -n "${url:-}" ] || { notify "Local model" "No model server is running"; exit 1; }
+    m="$(models "$url" | menu "model")"
+    [ -n "${m:-}" ] && { echo "$m" > "$cfg/llm-model"; notify "Local model" "Tests will use $m"; }
+    ;;
+*)
+    read -r url name <<<"$(backend)"
+    if [ -z "${url:-}" ]; then
+        echo "No local model server answered on :1234 (LM Studio) or :11434 (ollama)."
+        echo "Start one, then run this again."
+        exit 1
+    fi
+    model="$(chosen_model "$url")"
+    [ -n "$model" ] || { echo "$name is up but has no model loaded."; exit 1; }
+    echo "backend   $name  ($url)"
+    echo "model     $model"
+    echo "prompt    \"$PROMPT\"  (max $TOKENS tokens)"
+    echo
+    printf 'measuring… '
+    if out="$(run_test "$url" "$model")"; then
+        IFS=$'\t' read -r _ tps secs ntok <<<"$out"
+        printf '\r                \r'
+        printf 'speed     %s tokens/sec\n' "$tps"
+        printf 'produced  %s tokens in %ss\n' "$ntok" "$secs"
+        echo
+        echo "Sidebar now shows this until it is an hour old."
+    else
+        echo "failed — the server answered, but the completion did not."
+        exit 1
+    fi
+    ;;
+esac

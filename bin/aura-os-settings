@@ -27,6 +27,7 @@ snapshots   system snapshots, roll back    (snapper)
 updates     update all packages            (snapshot, then pacman -Syu)
 sidebar     recent list: recent or frequent
 ram         what uses memory now           (aura-os-bench)
+llm         local model: is it up, how fast (test)
 power       reboot, shut down, log out
 about       Aura OS version and repo"
 
@@ -56,6 +57,7 @@ case $pick in
     sidebar)   m="$(printf 'recent\nfrequent\n' | fuzzel --dmenu --prompt "list mode ($(aura-os-recent mode)) > " --lines 2)" || exit 0
                aura-os-recent mode "$m" >/dev/null ;;
     ram)       hold "aura-os-bench" ;;
+    llm)       hold "aura-os-llmtest" ;;
     power)     exec aura-os-power ;;
     about)     hold "echo 'Aura OS — a dev OS Aura built for herself'; git -C '$repo' log --oneline -5 2>/dev/null || true" ;;
     *) echo "aura-os-settings: unknown item '$pick'" >&2; exit 2 ;;

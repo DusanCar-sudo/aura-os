@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# aura-os-wifi — networks as a list, password in a hidden prompt.
+# Replaces nmtui, which is a form, not a list.
+set -uo pipefail
+. "$(dirname "$(readlink -f "$0")")/aura-os-menu"
+
+command -v nmcli >/dev/null || { notify "Wi-Fi" "NetworkManager is not installed"; exit 1; }
+
+radio_state() { [ "$(probe nmcli radio wifi)" = enabled ] && echo on || echo off; }
+
+# nmcli's terse output is the only stable thing to parse.
+network_rows() {
+    probe nmcli -t -f IN-USE,SIGNAL,SECURITY,SSID device wifi list --rescan no |
+    while IFS=: read -r inuse signal sec ssid; do
+        [ -n "${ssid:-}" ] || continue
+        local icon bars meter
+        [ "$inuse" = "*" ] && icon="●" || icon="·"
+        # One glyph for signal — `cut -c` would slice these blocks in half.
+        bars=$(( (${signal:-0} + 24) / 25 ))
+        [ "$bars" -lt 1 ] && bars=1; [ "$bars" -gt 4 ] && bars=4
+        meter="$(awk -v n="$bars" 'BEGIN{split("▁ ▃ ▆ █",b," "); print b[n]}')"
+        [ -n "$sec" ] && sec=" 🔒" || sec=""
+        printf '%s %s %s%s\t%s\n' "$icon" "$meter" "$ssid" "$sec" "$ssid"
+    done | sort -u -t$'\t' -k2
+}
+
+ask_password() {
+    if command -v fuzzel >/dev/null; then
+        fuzzel --dmenu --password --layer overlay --prompt "password for $1  " --lines 1
+    else
+        printf 'password for %s: ' "$1" >&2; read -rs p </dev/tty; echo >&2; printf '%s' "$p"
+    fi
+}
+
+join_network() {
+    local ssid="$1" pw
+    # A saved profile needs no password at all.
+    if nmcli -t -f NAME connection show | grep -qxF "$ssid"; then
+        nmcli connection up id "$ssid" >/dev/null 2>&1 &&
+            { notify "Wi-Fi" "Connected to $ssid"; return; }
+    fi
+    pw="$(ask_password "$ssid")"
+    if [ -z "${pw:-}" ]; then nmcli device wifi connect "$ssid" >/dev/null 2>&1
+    else                      nmcli device wifi connect "$ssid" password "$pw" >/dev/null 2>&1; fi
+    if [ $? -eq 0 ]; then notify "Wi-Fi" "Connected to $ssid"
+    else notify "Wi-Fi" "Could not join $ssid — wrong password?"; fi
+}
+
+saved_networks() {
+    local pick ssid act
+    pick="$( { nmcli -t -f NAME,TYPE connection show |
+                 awk -F: '$2=="802-11-wireless"{print "·  " $1}'
+               row_back; } | menu "saved networks" )"
+    [ -n "${pick:-}" ] && [ "$pick" != "←  Back" ] || return
+    ssid="${pick#·  }"
+    act="$(printf 'Connect\nForget\n←  Back\n' | menu "$ssid")"
+    case "${act:-}" in
+        Connect) nmcli connection up id "$ssid" >/dev/null 2>&1 &&
+                   notify "Wi-Fi" "Connected to $ssid" || notify "Wi-Fi" "Failed to connect" ;;
+        Forget)  nmcli connection delete id "$ssid" >/dev/null 2>&1; notify "Wi-Fi" "$ssid forgotten" ;;
+    esac
+}
+
+while :; do
+    state="$(radio_state)"
+    rows=""; [ "$state" = on ] && rows="$(network_rows)"
+    pick="$( { row_toggle "$state" "Wi-Fi"
+               rule
+               if [ "$state" = on ]; then
+                   [ -n "$rows" ] && cut -f1 <<<"$rows"
+                   echo "⟳  Rescan"
+                   echo "★  Saved networks"
+               fi
+               row_back; } | menu "wi-fi" )"
+    case "${pick:-}" in
+        "") exit 0 ;;
+        *"Wi-Fi") probe nmcli radio wifi "$([ "$state" = on ] && echo off || echo on)"; sleep 0.6 ;;
+        "⟳  Rescan") nmcli device wifi rescan >/dev/null 2>&1; sleep 2 ;;
+        "★  Saved networks") saved_networks ;;
+        "←  Back"|"──────────────") exit 0 ;;
+        *) ssid="$(grep -F "$pick"$'\t' <<<"$rows" | cut -f2 | head -1)"
+           [ -n "${ssid:-}" ] && join_network "$ssid" ;;
+    esac
+done

@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# aura-os-osd — the one-line readout the function keys show: a name, a
+# meter, a number. Replaces itself rather than stacking, so holding a key
+# does not fill the corner with popups.
+#
+#   aura-os-osd "Sound" 40
+#   aura-os-osd "Sound" -- muted
+set -uo pipefail
+label="${1:-}"; pct="${2:---}"; suffix="${3:-}"
+
+meter() {
+    local p="$1" i out=""
+    local filled=$(( p * 16 / 100 ))
+    [ "$filled" -gt 16 ] && filled=16; [ "$filled" -lt 0 ] && filled=0
+    for ((i=0;i<16;i++)); do [ $i -lt $filled ] && out+="█" || out+="░"; done
+    printf '%s' "$out"
+}
+
+if [ "$pct" = "--" ]; then body="$suffix"
+else body="$(meter "$pct")  ${pct}%${suffix:+  $suffix}"; fi
+
+if command -v notify-send >/dev/null; then
+    # A synchronous hint keeps one popup updating in place.
+    notify-send -a Aura -t 1200 -h string:x-canonical-private-synchronous:aura-osd \
+                "$label" "$body" 2>/dev/null
+else
+    printf '%s  %s\n' "$label" "$body"
+fi

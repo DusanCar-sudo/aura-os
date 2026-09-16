@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# Boot the *installed* Aura adOS (nvme0n1p9, btrfs subvol @) in a VM, so the
+# shell can be tested under a real sway session without rebooting the laptop.
+#
+# Safe by default: snapshot mode sends every guest write to a throwaway overlay,
+# so the real installation cannot be changed. Pass --write only when you mean to
+# modify the installed system for real.
+set -euo pipefail
+
+ROOT_PART=/dev/nvme0n1p9
+BOOT_PART=/dev/nvme0n1p8
+VMDIR=/mnt/bigdata/aura-vm
+SHELL_SRC=/mnt/bigdata/aura-os-shell
+MODE=snapshot
+MEM=4096
+CPUS=4
+RES=1920x1080
+FULLSCREEN=
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --write) MODE=write ;;  --snapshot) MODE=snapshot ;;
+    --mem)   MEM="$2"; shift ;;  --cpus) CPUS="$2"; shift ;;
+    --res)   RES="$2"; shift ;;
+    --fullscreen) FULLSCREEN=-full-screen ;;
+    --extract) rm -f "$VMDIR/vmlinuz" "$VMDIR/initrd" ;;
+    *) echo "usage: aura-vm [--snapshot|--write] [--mem MB] [--cpus N] [--res WxH] [--fullscreen] [--extract]" >&2; exit 2 ;;
+  esac
+  shift
+done
+
+# The guest writing to a filesystem the host also has open is how btrfs gets
+# corrupted — refuse rather than risk it.
+if mount | grep -qE "$ROOT_PART|$BOOT_PART"; then
+  echo "Refusing to start: $ROOT_PART or $BOOT_PART is mounted on the host." >&2
+  exit 1
+fi
+
+mkdir -p "$VMDIR"
+
+# adOS boots a Unified Kernel Image — kernel, initramfs and cmdline are all
+# inside EFI/Linux/aura-os.efi. Pulling the sections out lets qemu boot the
+# kernel directly, which skips firmware and the bootloader entirely.
+if [ ! -s "$VMDIR/vmlinuz" ] || [ ! -s "$VMDIR/initrd" ]; then
+  echo "Extracting kernel and initramfs from the UKI (needs sudo once)…"
+  sudo mkdir -p /mnt/aura-vm-boot
+  sudo mount -o ro "$BOOT_PART" /mnt/aura-vm-boot
+  UKI="$(sudo find /mnt/aura-vm-boot/EFI/Linux -name '*.efi' | head -1)"
+  sudo objcopy -O binary --only-section=.linux   "$UKI" "$VMDIR/vmlinuz"
+  sudo objcopy -O binary --only-section=.initrd  "$UKI" "$VMDIR/initrd"
+  sudo objcopy -O binary --only-section=.cmdline "$UKI" "$VMDIR/cmdline"
+  sudo chown "$(id -u):$(id -g)" "$VMDIR"/vmlinuz "$VMDIR"/initrd "$VMDIR"/cmdline
+  sudo umount /mnt/aura-vm-boot
+fi
+
+CMDLINE="$(tr -d '\0' < "$VMDIR/cmdline")"
+
+# /boot and /efi are not nofail in the guest's fstab, so systemd blocks without
+# them. The guest gets private copies (UUIDs come along with a raw dd), which
+# keeps the host's real ESP out of the VM entirely.
+for img in boot.img:"$BOOT_PART" efi.img:/dev/nvme0n1p1; do
+  f="$VMDIR/${img%%:*}"; src="${img##*:}"
+  [ -s "$f" ] || { echo "Copying $src → $f …"; sudo dd if="$src" of="$f" bs=4M status=none conv=sparse
+                   sudo chown "$(id -u):$(id -g)" "$f"; }
+done
+
+SNAP=on
+if [ "$MODE" = write ]; then
+  echo "!! WRITE MODE — the guest will modify the real Aura installation on $ROOT_PART."
+  read -rp "Type 'yes' to continue: " ok
+  [ "$ok" = yes ] || exit 1
+  SNAP=off
+fi
+
+echo "Starting Aura adOS  ·  ${MODE}  ·  ${MEM}MB  ·  ${CPUS} cpus  ·  ${RES}"
+echo "Resolution follows the window: drag it bigger and the guest resizes live."
+echo "The repo is shared into the guest as 9p tag 'aurashell':"
+echo "  sudo mount -t 9p -o trans=virtio,version=9p2000.L aurashell /mnt"
+
+exec qemu-system-x86_64 \
+  -enable-kvm -machine q35,accel=kvm -cpu host \
+  -m "$MEM" -smp "$CPUS" \
+  -drive file="$ROOT_PART",format=raw,if=virtio,cache=unsafe,snapshot="$SNAP" \
+  -drive file="$VMDIR/boot.img",format=raw,if=virtio,snapshot=on \
+  -drive file="$VMDIR/efi.img",format=raw,if=virtio,snapshot=on \
+  -kernel "$VMDIR/vmlinuz" -initrd "$VMDIR/initrd" \
+  -append "$CMDLINE console=tty0 console=ttyS0,115200" \
+  -vga none -device virtio-vga,xres="${RES%x*}",yres="${RES#*x}",edid=on \
+  -display gtk,show-cursor=on ${FULLSCREEN:+$FULLSCREEN} \
+  -serial "file:$VMDIR/console.log" \
+  -monitor "unix:$VMDIR/monitor.sock,server,nowait" \
+  -device virtio-tablet -device virtio-keyboard \
+  -audiodev pipewire,id=snd0 -device intel-hda -device hda-output,audiodev=snd0 \
+  -netdev user,id=net0 -device virtio-net,netdev=net0 \
+  -virtfs local,path="$SHELL_SRC",mount_tag=aurashell,security_model=mapped-xattr \
+  -name "Aura adOS"

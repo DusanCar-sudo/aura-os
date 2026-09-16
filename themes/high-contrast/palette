@@ -1,0 +1,16 @@
+# high-contrast — maximum legibility, nothing decorative
+bg=#000000
+bg_alt=#000000
+border=#ffffff
+fg=#ffffff
+fg_bright=#ffffff
+dim=#9a9a9a
+muted=#c8c8c8
+accent=#ffff00
+accent_bright=#ffffaa
+red=#ff4444
+green=#44ff44
+yellow=#ffff00
+blue=#44aaff
+cyan=#00ffff
+orange=#ffaa00

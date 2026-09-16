@@ -11,13 +11,15 @@ float() { exec aura-term --app-id=aura-float -e "$@"; }
 hold()  { float sh -c "$1; printf '\n[any key]'; read -rsn1"; }
 
 items="setup       language, keyboard, time, wifi, name  (tiles)
-sound       volume, outputs, microphones   (wiremix)
-wifi        networks, VPN, ethernet        (nmtui)
-bluetooth   pair and connect devices       (bluetoothctl)
+sound       volume, outputs, microphones   (list)
+wifi        networks, password, saved      (list)
+bluetooth   pair and connect headphones    (list)
+mixer       per-stream routing             (wiremix)
+netmanual   VPN, ethernet, advanced        (nmtui)
 display     arrange screens, resolution, scale  (Super+P)
 profile     performance / balanced / power-saver  (Super+Shift+P)
 keyboard    layouts us / sr latin / sr cyrillic
-theme       color combos: purplerain, tokyo-night, gruvbox, nord, mono, paper
+theme       color combos: neon-night, cyan-grid, neon-day, and 8 more
 wallpaper   solid theme color or an image
 tab color   color of the current desk's tab
 keys        every key binding              (read)
@@ -30,16 +32,18 @@ about       Aura OS version and repo"
 
 pick="${1:-}"
 if [[ -z $pick ]]; then
-    pick="$(printf '%s\n' "$items" | fuzzel --dmenu --prompt 'settings > ' --width 64 --lines 16)" || exit 0
+    pick="$(printf '%s\n' "$items" | fuzzel --dmenu --prompt 'settings > ' --width 64 --lines 18)" || exit 0
     pick="${pick%% *}"
 fi
 
 repo="${AURA_OS_REPO:-$HOME/aura-os}"
 case $pick in
     setup)     exec aura-os-setup ;;
-    sound)     float wiremix ;;
-    wifi)      float nmtui ;;
-    bluetooth) float bluetoothctl ;;
+    sound)     exec aura-os-audio ;;
+    wifi)      exec aura-os-wifi ;;
+    bluetooth) exec aura-os-bluetooth ;;
+    mixer)     float wiremix ;;
+    netmanual) float nmtui ;;
     display)   exec aura-os-display ;;
     profile)   exec aura-os-profile ;;
     keyboard)  hold "swaymsg -t get_inputs | jq -r '.[] | select(.type==\"keyboard\") | \"\\(.identifier): \\(.xkb_active_layout_name)\"' | sort -u; echo; echo 'switch: Alt+Shift   (layouts set in config/sway/config)'" ;;

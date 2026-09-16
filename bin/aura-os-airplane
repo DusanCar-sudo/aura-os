@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# aura-os-airplane — everything that transmits off in one key, and back on
+# to exactly what was on before (not "on", which is not the same thing).
+#
+#   aura-os-airplane          toggle
+#   aura-os-airplane status   on|off
+set -uo pipefail
+. "$(dirname "$(readlink -f "$0")")/aura-os-menu"
+
+state="${XDG_STATE_HOME:-$HOME/.local/state}/aura-os"
+mkdir -p "$state"
+flag="$state/airplane"
+
+on() {
+    : > "$flag"
+    command -v nmcli >/dev/null && [ "$(probe nmcli radio wifi)" = enabled ] &&
+        { echo wifi >> "$flag"; probe nmcli radio wifi off; }
+    command -v bluetoothctl >/dev/null && probe bluetoothctl show | grep -q "Powered: yes" &&
+        { echo bt >> "$flag"; probe bluetoothctl power off >/dev/null; }
+    notify "Flight mode" "Wi-Fi and Bluetooth off"
+}
+
+off() {
+    grep -qx wifi "$flag" 2>/dev/null && probe nmcli radio wifi on
+    grep -qx bt   "$flag" 2>/dev/null && probe bluetoothctl power on >/dev/null
+    rm -f "$flag"
+    notify "Flight mode" "Radios back on"
+}
+
+case "${1:-toggle}" in
+    on)     on ;;
+    off)    off ;;
+    status) [ -f "$flag" ] && echo on || echo off ;;
+    *)      [ -f "$flag" ] && off || on ;;
+esac

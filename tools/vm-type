@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Type a line into the running VM through the QEMU monitor. There is no guest
+# agent and sshd is not enabled, so keystrokes are the way in.
+#
+#   vm-type 'some command'      — types it
+#   vm-type --key ret           — sends one named key (ret, tab, meta_l-2, …)
+#
+# Keys are paced deliberately: virtio-keyboard drops and reorders them when a
+# batch arrives all at once, which silently corrupts whatever you typed.
+MON=${MON:-/mnt/bigdata/aura-vm/monitor.sock}
+DELAY=${DELAY:-0.035}
+
+key_of() {
+  case "$1" in
+    [a-z0-9]) printf '%s' "$1" ;;
+    [A-Z])    printf 'shift-%s' "$(printf '%s' "$1" | tr 'A-Z' 'a-z')" ;;
+    ' ')  printf spc ;;            '-')  printf minus ;;
+    '=')  printf equal ;;          '.')  printf dot ;;
+    ',')  printf comma ;;          '/')  printf slash ;;
+    ';')  printf semicolon ;;      "'")  printf apostrophe ;;
+    '\')  printf backslash ;;      '[')  printf bracket_left ;;
+    ']')  printf bracket_right ;;  '`')  printf grave_accent ;;
+    '_')  printf 'shift-minus' ;;  '+')  printf 'shift-equal' ;;
+    ':')  printf 'shift-semicolon' ;; '"') printf 'shift-apostrophe' ;;
+    '|')  printf 'shift-backslash' ;; '~') printf 'shift-grave_accent' ;;
+    '?')  printf 'shift-slash' ;;  '<')  printf 'shift-comma' ;;
+    '>')  printf 'shift-dot' ;;    '(')  printf 'shift-9' ;;
+    ')')  printf 'shift-0' ;;      '!')  printf 'shift-1' ;;
+    '@')  printf 'shift-2' ;;      '#')  printf 'shift-3' ;;
+    '$')  printf 'shift-4' ;;      '%')  printf 'shift-5' ;;
+    '^')  printf 'shift-6' ;;      '&')  printf 'shift-7' ;;
+    '*')  printf 'shift-8' ;;      '{')  printf 'shift-bracket_left' ;;
+    '}')  printf 'shift-bracket_right' ;;
+    *) return 1 ;;
+  esac
+}
+
+# One connection, paced writes — the monitor stays in step with the guest.
+stream() { timeout 120 socat - UNIX-CONNECT:"$MON" >/dev/null 2>&1; }
+
+if [ "${1:-}" = --key ]; then
+  { printf 'sendkey %s\n' "$2"; sleep 0.2; } | stream
+  exit
+fi
+
+text="$*"
+{
+  for (( i=0; i<${#text}; i++ )); do
+    k="$(key_of "${text:i:1}")" || continue
+    printf 'sendkey %s\n' "$k"
+    sleep "$DELAY"
+  done
+  sleep 0.3
+} | stream

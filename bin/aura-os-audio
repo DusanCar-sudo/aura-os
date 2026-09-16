@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# aura-os-audio — pick an output or input by clicking it; volume and mic as
+# pickable steps. Replaces wiremix for the everyday case (wiremix is still
+# the right tool for per-stream routing).
+#
+#   aura-os-audio                 the list
+#   aura-os-audio up|down|mute    what the F1-F3 keys call
+#   aura-os-audio mic-mute
+set -uo pipefail
+. "$(dirname "$(readlink -f "$0")")/aura-os-menu"
+
+command -v wpctl >/dev/null || { notify "Audio" "wireplumber is not installed"; exit 1; }
+
+SINK=@DEFAULT_AUDIO_SINK@
+SRC=@DEFAULT_AUDIO_SOURCE@
+
+vol_of() { probe wpctl get-volume "$1" | awk '{printf "%d", $2*100}'; }
+muted()  { probe wpctl get-volume "$1" | grep -q MUTED && echo yes || echo no; }
+
+# wpctl status draws a box tree; the section runs from its heading to the
+# next. Match on the "ends with a colon" shape, not the box-drawing glyphs —
+# mawk cannot put multibyte characters in a bracket class.
+nodes() { # nodes <Sinks|Sources> -> "*|<tab>id<tab>name"
+    probe wpctl status | awk -v want="$1" '
+      /^[A-Za-z]/     { audio = ($0 ~ /^Audio/); inside = 0; next }   # Video has Sources too
+      !audio          { next }
+      /[A-Za-z]+: *$/ { inside = (index($0, want ":") > 0); next }
+      !inside { next }
+      match($0, /[0-9]+\./) {
+        star = ($0 ~ /\*/) ? "*" : ""
+        id   = substr($0, RSTART, RLENGTH - 1)
+        name = substr($0, RSTART + RLENGTH)
+        sub(/ *\[vol:.*$/, "", name); sub(/^ +/, "", name); sub(/ +$/, "", name)
+        printf "%s\t%s\t%s\n", star, id, name
+      }'
+}
+
+pick_volume() { # pick_volume <node> <label>
+    local node="$1" label="$2" cur pick p
+    cur="$(vol_of "$node")"
+    pick="$( { for p in 100 90 80 70 60 50 40 30 20 10 0; do
+                 printf '%s  %s\n' "$(bar "$p")" "$([ "$p" = "$cur" ] && echo "←")"
+               done
+               row_back; } | menu "$label volume" )"
+    [ -n "${pick:-}" ] && [ "$pick" != "←  Back" ] || return
+    p="$(grep -o '[0-9]\+%' <<<"$pick" | tr -d '%')"
+    [ -n "${p:-}" ] && wpctl set-volume "$node" "${p}%"
+}
+
+device_list() { # device_list <Sinks|Sources> <word>
+    local kind="$1" word="$2" rows pick id
+    while :; do
+        rows="$(nodes "$kind")"
+        [ -n "$rows" ] || { notify "Audio" "No $word devices found"; return; }
+        pick="$( { while IFS=$'\t' read -r def _ name; do
+                     printf '%s %s\n' "$([ "$def" = "*" ] && echo "●" || echo "·")" "$name"
+                   done <<<"$rows"
+                   rule; row_back; } | menu "$word" )"
+        case "${pick:-}" in ""|"←  Back"|"──────────────") return ;; esac
+        id="$(awk -F'\t' -v p="${pick#* }" '$3==p{print $2}' <<<"$rows" | head -1)"
+        [ -n "${id:-}" ] || continue
+        wpctl set-default "$id"
+        notify "Audio" "${pick#* } is now the $word device"
+    done
+}
+
+# What the function-key row calls — one code path for keys and menu alike.
+case "${1:-}" in
+    up)       wpctl set-mute "$SINK" 0; wpctl set-volume -l 1.0 "$SINK" 5%+
+              exec aura-os-osd "Sound" "$(vol_of "$SINK")" ;;
+    down)     wpctl set-mute "$SINK" 0; wpctl set-volume "$SINK" 5%-
+              exec aura-os-osd "Sound" "$(vol_of "$SINK")" ;;
+    mute)     wpctl set-mute "$SINK" toggle
+              if [ "$(muted "$SINK")" = yes ]; then exec aura-os-osd "Sound" -- muted
+              else exec aura-os-osd "Sound" "$(vol_of "$SINK")"; fi ;;
+    mic-mute) wpctl set-mute "$SRC" toggle
+              exec aura-os-osd "Microphone" -- "$([ "$(muted "$SRC")" = yes ] && echo muted || echo on)" ;;
+esac
+
+while :; do
+    sinkv="$(vol_of "$SINK")"; sinkm="$(muted "$SINK")"
+    srcv="$(vol_of "$SRC")";   srcm="$(muted "$SRC")"
+    pick="$( { printf '♪  Volume       %s%s\n' "$(bar "$sinkv")" "$([ "$sinkm" = yes ] && echo "  MUTED")"
+               printf '⎙  Microphone   %s%s\n' "$(bar "$srcv")"  "$([ "$srcm" = yes ] && echo "  MUTED")"
+               rule
+               echo "◈  Output device"
+               echo "◈  Input device"
+               row_toggle "$([ "$sinkm" = yes ] && echo off || echo on)" "Sound on"
+               row_toggle "$([ "$srcm"  = yes ] && echo off || echo on)" "Microphone on"
+               row_back; } | menu "audio" )"
+    case "${pick:-}" in
+        "") exit 0 ;;
+        "♪  Volume"*)       pick_volume "$SINK" "output" ;;
+        "⎙  Microphone"*)   pick_volume "$SRC"  "microphone" ;;
+        "◈  Output device") device_list Sinks output ;;
+        "◈  Input device")  device_list Sources input ;;
+        *"Sound on")        wpctl set-mute "$SINK" toggle ;;
+        *"Microphone on")   wpctl set-mute "$SRC" toggle ;;
+        "←  Back"|"──────────────") exit 0 ;;
+    esac
+done

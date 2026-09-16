@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# aura-os-bluetooth — pair and connect from a list. Replaces dropping the
+# user into the bluetoothctl prompt, which is the one thing about this
+# machine that was genuinely unusable without memorising a REPL.
+#
+#   aura-os-bluetooth          the list
+#   aura-os-bluetooth on|off   power the adapter
+set -uo pipefail
+. "$(dirname "$(readlink -f "$0")")/aura-os-menu"
+
+command -v bluetoothctl >/dev/null || { notify "Bluetooth" "bluez-utils is not installed"; exit 1; }
+
+power_state() { probe bluetoothctl show | grep -q "Powered: yes" && echo on || echo off; }
+
+# One row per device, carrying its own state: connected ●, paired ○, seen ·
+device_rows() {
+    local -a filter=(); [ -n "${1:-}" ] && filter=("$1")
+    local mac name info icon
+    while read -r _ mac name; do
+        [ -n "${mac:-}" ] || continue
+        info="$(probe bluetoothctl info "$mac")"
+        if   grep -q "Connected: yes" <<<"$info"; then icon="●"
+        elif grep -q "Paired: yes"    <<<"$info"; then icon="○"
+        else icon="·"; fi
+        printf '%s %s\t%s\n' "$icon" "${name:-$mac}" "$mac"
+    done < <(probe bluetoothctl devices "${filter[@]}")
+}
+
+connect_device() {
+    local mac="$1" name="$2" id
+    notify "Bluetooth" "Connecting to $name…"
+    # Pair if we never have, and trust so it comes back by itself next boot.
+    probe bluetoothctl info "$mac" | grep -q "Paired: yes" ||
+        bluetoothctl --timeout 25 pair "$mac" >/dev/null 2>&1
+    bluetoothctl trust "$mac" >/dev/null 2>&1
+    if bluetoothctl --timeout 25 connect "$mac" >/dev/null 2>&1; then
+        notify "Bluetooth" "$name connected"
+        # A headset shows up as a sink a moment later; make it the default,
+        # otherwise sound keeps coming out of the laptop speakers.
+        command -v wpctl >/dev/null || return 0
+        for _ in 1 2 3 4 5 6; do
+            sleep 0.5
+            id="$(probe wpctl status | grep -i "bluez\|$name" | grep -o '[0-9]\+\.' | head -1 | tr -d '.')"
+            [ -n "${id:-}" ] && { wpctl set-default "$id"; break; }
+        done
+    else
+        notify "Bluetooth" "Could not connect to $name — hold its pairing button, then Scan"
+    fi
+}
+
+scan_and_pick() {
+    notify "Bluetooth" "Looking for devices — hold the pairing button"
+    bluetoothctl --timeout 12 scan on >/dev/null 2>&1
+    local rows; rows="$(device_rows)"
+    [ -n "$rows" ] || { notify "Bluetooth" "Nothing found. Put the device in pairing mode and scan again."; return; }
+    local pick; pick="$(cut -f1 <<<"$rows" | menu "pair")"
+    [ -n "${pick:-}" ] || return
+    connect_device "$(grep -F "$pick"$'\t' <<<"$rows" | cut -f2 | head -1)" "${pick#* }"
+}
+
+device_actions() {
+    local mac="$1" name="$2" info pick
+    info="$(probe bluetoothctl info "$mac")"
+    local -a rows=()
+    grep -q "Connected: yes" <<<"$info" && rows+=("Disconnect") || rows+=("Connect")
+    grep -q "Paired: yes" <<<"$info" && rows+=("Forget this device")
+    rows+=("←  Back")
+    pick="$(printf '%s\n' "${rows[@]}" | menu "$name")"
+    case "${pick:-}" in
+        Connect)    connect_device "$mac" "$name" ;;
+        Disconnect) bluetoothctl disconnect "$mac" >/dev/null 2>&1; notify "Bluetooth" "$name disconnected" ;;
+        "Forget this device") bluetoothctl remove "$mac" >/dev/null 2>&1; notify "Bluetooth" "$name forgotten" ;;
+    esac
+}
+
+case "${1:-}" in
+    on)  probe bluetoothctl power on  >/dev/null; exit ;;
+    off) probe bluetoothctl power off >/dev/null; exit ;;
+esac
+
+while :; do
+    state="$(power_state)"
+    rows=""; [ "$state" = on ] && rows="$(device_rows)"
+    pick="$( { row_toggle "$state" "Bluetooth"
+               rule
+               if [ "$state" = on ]; then
+                   [ -n "$rows" ] && cut -f1 <<<"$rows"
+                   echo "⟳  Scan for new devices"
+               fi
+               row_back; } | menu "bluetooth" )"
+    case "${pick:-}" in
+        "") exit 0 ;;
+        *"Bluetooth") [ "$state" = on ] && probe bluetoothctl power off >/dev/null \
+                                        || probe bluetoothctl power on  >/dev/null
+                      sleep 0.4 ;;
+        "⟳  Scan for new devices") scan_and_pick ;;
+        "←  Back"|"──────────────") exit 0 ;;
+        *) mac="$(grep -F "$pick"$'\t' <<<"$rows" | cut -f2 | head -1)"
+           [ -n "${mac:-}" ] && device_actions "$mac" "${pick#* }" ;;
+    esac
+done

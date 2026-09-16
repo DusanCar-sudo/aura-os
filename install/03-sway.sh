@@ -36,6 +36,7 @@ put() { # put <src> <dst> — install only when it differs, say so either way
 
 put "$REPO/config/sway/config" "$cfg/sway/config"
 put "$REPO/config/sway/config.d/10-binds.conf" "$cfg/sway/config.d/10-binds.conf"
+put "$REPO/config/sway/config.d/15-fkeys.conf" "$cfg/sway/config.d/15-fkeys.conf"
 put "$REPO/config/sway/config.d/05-aura-term.conf" "$cfg/sway/config.d/05-aura-term.conf"
 # voice (dic), aura-pulse, powerboard (install/09) — keybinds + launcher
 put "$REPO/config/sway/config.d/20-dusan-apps.conf" "$cfg/sway/config.d/20-dusan-apps.conf"

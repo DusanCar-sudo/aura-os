@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# aura-os-menu — the one list every settings tool draws with.
+#
+# Colors come from ~/.config/fuzzel/theme.ini, which aura-os-theme writes,
+# so these menus follow the system theme without carrying a palette of
+# their own. Rows read state-first: "[ ON  ] Bluetooth", never a bare label.
+set -uo pipefail
+
+have() { command -v "$1" >/dev/null 2>&1; }
+
+# Every state probe goes through this. bluetoothctl blocks forever when no
+# controller is present (absent hardware, or rfkilled), which would hang a
+# menu before it ever drew.
+probe() { timeout "${AURA_PROBE_TIMEOUT:-3}" "$@" 2>/dev/null; }
+
+# --layer overlay is not optional: sway stacks tiled and fullscreen windows
+# above the default 'top' layer, so the menu opens, takes keys, and draws
+# underneath the window — invisible.
+menu() { # menu <prompt>   lines on stdin, choice on stdout, empty = cancelled
+    local prompt="${1:-aura}"
+    if have fuzzel; then
+        fuzzel --dmenu --layer overlay --prompt "$prompt  " \
+               --width 52 --lines 14 2>/dev/null
+    else
+        # Terminal fallback, so every tool still works over SSH or in a TTY.
+        local -a opts=(); local line i=1
+        while IFS= read -r line; do opts+=("$line"); done
+        printf '%s\n' "── $prompt ──" >&2
+        for line in "${opts[@]}"; do printf '%3d) %s\n' "$i" "$line" >&2; i=$((i+1)); done
+        printf 'choice (empty to cancel): ' >&2; read -r i </dev/tty || return 1
+        [ -n "${i:-}" ] || return 1
+        printf '%s\n' "${opts[$((i-1))]}"
+    fi
+}
+
+row_toggle() { # row_toggle <on|off> <label>
+    if [ "$1" = on ]; then printf '[ ON  ]  %s\n' "$2"; else printf '[ OFF ]  %s\n' "$2"; fi
+}
+row_back() { printf '←  Back\n'; }
+rule()     { printf '──────────────\n'; }
+
+notify() { have notify-send && notify-send -a "Aura" -t 2500 "$1" "${2:-}" || printf '%s: %s\n' "$1" "${2:-}" >&2; }
+
+# A 20-cell meter that reads at a glance.
+bar() {
+    local p="${1:-0}" i out=""
+    local filled=$(( p * 20 / 100 ))
+    [ "$filled" -gt 20 ] && filled=20; [ "$filled" -lt 0 ] && filled=0
+    for ((i=0;i<20;i++)); do [ $i -lt $filled ] && out+="█" || out+="░"; done
+    printf '%s %3d%%' "$out" "$p"
+}

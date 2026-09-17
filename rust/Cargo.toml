@@ -1,0 +1,16 @@
+# Aura OS native tools — one design for every menu and system window.
+#   crates/aura-ui   shared look: theme, fonts, widgets (every app uses it)
+#   apps/*           one binary per tool
+[workspace]
+resolver = "2"
+members = ["crates/aura-ui", "apps/*"]
+
+[workspace.dependencies]
+eframe = { version = "0.31.1", default-features = false, features = ["glow", "wayland", "x11", "default_fonts"] }
+egui = "0.31.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = 2
+lto = "thin"

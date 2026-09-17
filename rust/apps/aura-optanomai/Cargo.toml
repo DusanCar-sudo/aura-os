@@ -1,0 +1,12 @@
+[package]
+name = "aura-optanomai"
+version = "0.1.0"
+edition = "2021"
+description = "A small, flat window for arranging your monitors the way they really sit on your desk."
+
+[dependencies]
+aura-ui = { path = "../../crates/aura-ui" }
+eframe = { workspace = true }
+egui = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

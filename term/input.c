@@ -193,6 +193,12 @@ execute_binding(struct seat *seat, struct terminal *term,
         term_reset_view(term);
         return true;
 
+    case BIND_ACTION_AURA_ENTER:
+        /* middle-click: the same as pressing Enter */
+        term_to_slave(term, "\r", 1);
+        term_reset_view(term);
+        return true;
+
     case BIND_ACTION_SEARCH_START:
         search_begin(term);
         return true;

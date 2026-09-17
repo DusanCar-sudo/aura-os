@@ -6,6 +6,7 @@
 #   aura-os-logo          one waybar JSON reading (what the bar calls)
 #   aura-os-logo plain    the logo in the terminal, true-colour
 #   aura-os-logo header   the terminal header: logo, motto, copyright, repo
+#   aura-os-logo banner   the small 3-line banner atop each aura-term shell
 #
 # Colours come from the active theme (~/.config/waybar/theme.css, written by
 # aura-os-theme), so the logo follows a theme switch. So does the vertical
@@ -96,6 +97,23 @@ header() {
     printf '\n'
 }
 
+# The small banner at the top of every new aura-term shell: a tiny A with
+# the globe, who we are, what we do. Three lines, so it never pushes the
+# prompt far down. Turn it off with AURA_TERM_BANNER=0 in ~/.bashrc.
+banner() {
+    local R=$'\e[0m' A G T M D
+    A="$(ansi "$bright")"; G="$(ansi "$accent")"; T="$(ansi "$bright")"
+    M="$(ansi "$muted")"; D="$(ansi "$dim")"
+    local cols="${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}"
+    if [ "$cols" -lt 60 ]; then
+        printf ' %s▟▙%s %s\uf0ac%s  %saura ad%sOS%s\n\n' "$A" "$R" "$G" "$R" "$T" "$G" "$R"
+        return
+    fi
+    printf ' %s▗▟▙▖%s %s\uf0ac%s  %saura ad%sOS%s %s· the agentic operating system%s\n' "$A" "$R" "$G" "$R" "$T" "$G" "$R" "$D" "$R"
+    printf ' %s▟▘▝▙%s     %sAn AI agent built into your computer: tell it what you need,%s\n' "$A" "$R" "$M" "$R"
+    printf '           %sit installs, sets up and fixes things with you. Your machine, your key.%s\n\n' "$M" "$R"
+}
+
 # ── the vertical tagline image, in the theme's colours ──────────────────────
 tagline() {
     local out="${XDG_CONFIG_HOME:-$HOME/.config}/waybar/assets/left-watermark.png"
@@ -126,6 +144,7 @@ tagline() {
 case "${1:-}" in
     plain)  render ansi ;;
     header) header ;;
+    banner) banner ;;
     *)
         text="$(render pango | sed 's/"/\\"/g' | sed 's/$/\\n/' | tr -d '\n')"
         printf '{"text":"%s","tooltip":false,"class":"logo"}\n' "${text%\\n}"

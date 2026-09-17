@@ -186,6 +186,7 @@ static const char *const binding_action_map[] = {
     [BIND_ACTION_AURA_SPLIT_RIGHT] = "aura-split-right",
     [BIND_ACTION_AURA_SPLIT_UP] = "aura-split-up",
     [BIND_ACTION_AURA_SPLIT_DOWN] = "aura-split-down",
+    [BIND_ACTION_AURA_ENTER] = "aura-enter",
     [BIND_ACTION_UNICODE_INPUT] = "unicode-input",
     [BIND_ACTION_QUIT] = "quit",
     [BIND_ACTION_REGEX_LAUNCH] = "regex-launch",
@@ -3481,11 +3482,15 @@ add_default_mouse_bindings(struct config *conf)
     const struct config_key_binding bindings[] = {
         {BIND_ACTION_SCROLLBACK_UP_MOUSE, m("none"), {.m = {BTN_WHEEL_BACK, 1}}},
         {BIND_ACTION_SCROLLBACK_DOWN_MOUSE, m("none"), {.m = {BTN_WHEEL_FORWARD, 1}}},
-        {BIND_ACTION_PRIMARY_PASTE, m("none"), {.m = {BTN_MIDDLE, 1}}},
+        /* Aura OS: select copies (selection-target=both), right-click
+         * pastes, middle-click is Enter; Ctrl+right-click extends a
+         * selection. (Not Shift: Shift+click already means "bypass the
+         * app's mouse grab".) */
+        {BIND_ACTION_AURA_ENTER, m("none"), {.m = {BTN_MIDDLE, 1}}},
         {BIND_ACTION_SELECT_BEGIN, m("none"), {.m = {BTN_LEFT, 1}}},
         {BIND_ACTION_SELECT_BEGIN_BLOCK, m(XKB_MOD_NAME_CTRL), {.m = {BTN_LEFT, 1}}},
-        {BIND_ACTION_SELECT_EXTEND, m("none"), {.m = {BTN_RIGHT, 1}}},
-        {BIND_ACTION_SELECT_EXTEND_CHAR_WISE, m(XKB_MOD_NAME_CTRL), {.m = {BTN_RIGHT, 1}}},
+        {BIND_ACTION_CLIPBOARD_PASTE, m("none"), {.m = {BTN_RIGHT, 1}}},
+        {BIND_ACTION_SELECT_EXTEND, m(XKB_MOD_NAME_CTRL), {.m = {BTN_RIGHT, 1}}},
         {BIND_ACTION_SELECT_WORD, m("none"), {.m = {BTN_LEFT, 2}}},
         {BIND_ACTION_SELECT_WORD_WS, m(XKB_MOD_NAME_CTRL), {.m = {BTN_LEFT, 2}}},
         {BIND_ACTION_SELECT_QUOTE, m("none"), {.m = {BTN_LEFT, 3}}},
@@ -3642,7 +3647,7 @@ config_load(struct config *conf, const char *conf_path,
         .render_worker_count = sysconf(_SC_NPROCESSORS_ONLN),
         .server_socket_path = get_server_socket_path(),
         .presentation_timings = false,
-        .selection_target = SELECTION_TARGET_PRIMARY,
+        .selection_target = SELECTION_TARGET_BOTH,
         .hold_at_exit = false,
         .desktop_notifications = {
             .command = {

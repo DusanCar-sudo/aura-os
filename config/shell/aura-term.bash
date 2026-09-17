@@ -40,3 +40,17 @@ __aura_term_precmd() {
 # ${__aura_term_ran=} assigns in the current shell and expands to nothing
 PS0='\[\e]133;C\e\\\]${__aura_term_ran=}'"${PS0-}"
 PROMPT_COMMAND=(__aura_term_precmd "${PROMPT_COMMAND[@]}")
+
+# The small Aura banner atop a new aura-term window: who we are, what we
+# do. Once per window (not in shells started inside it), only in
+# aura-term, never when bash runs a command. AURA_TERM_BANNER=0 turns it off.
+if [[ ${TERMINFO-} == */aura-term/* && -z ${AURA_TERM_BANNER_SHOWN-} && ${AURA_TERM_BANNER:-1} != 0 ]]; then
+    export AURA_TERM_BANNER_SHOWN=1
+    for __aura_logo in aura-os-logo "$HOME/.local/bin/aura-os-logo"; do
+        if command -v "$__aura_logo" >/dev/null 2>&1; then
+            "$__aura_logo" banner 2>/dev/null
+            break
+        fi
+    done
+    unset __aura_logo
+fi

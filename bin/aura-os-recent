@@ -150,7 +150,7 @@ cmd_label() {
         {text: ("<span color=\"#5c5f77\">" + $m + "</span>\n"
                 + ($l | split("\n") | map(select(. != ""))
                    | map("<span color=\"#8b7cf6\">" + .[0:1] + "</span> "
-                         + "<span color=\"#c8cad8\">" + (.[2:] | cut(32) | esc) + "</span>")
+                         + "<span color=\"#c8cad8\">" + (.[2:] | cut(24) | esc) + "</span>")
                    | if length == 0 then ["<span color=\"#5c5f77\">nothing yet</span>"] else . end
                    | join("\n"))),
          tooltip: "click: open any recent item — mode in settings (Super+,)"}' | recolor

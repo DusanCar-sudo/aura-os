@@ -165,7 +165,7 @@
     "name": "left",
     "layer": "top",
     "position": "left",
-    "width": 300,
+    "width": 270,
     "spacing": 0,
     "on-sigusr1": "toggle",
     "modules-left": ["custom/spaces", "custom/sysgraph", "custom/procs"],
@@ -194,7 +194,7 @@
     },
     // Last used anything: $ command, d folder, f file, @ address, a app.
     "custom/recent": {
-      "exec": "aura-os-recent label",
+      "exec": "$HOME/.local/bin/aura-os-recent label",
       "return-type": "json",
       "escape": false,
       "signal": 10,
@@ -205,7 +205,7 @@
     "custom/spaces": {
       "align": 0,
       "justify": "left",
-      "exec": "aura-os-status spaces",
+      "exec": "$HOME/.local/bin/aura-os-status spaces",
       "return-type": "json",
       "escape": false,
       "signal": 8,
@@ -234,7 +234,7 @@
     "custom/agents": {
       "align": 0,
       "justify": "left",
-      "exec": "aura-os-status agents",
+      "exec": "$HOME/.local/bin/aura-os-status agents",
       "return-type": "json",
       "escape": false,
       "signal": 8,

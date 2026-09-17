@@ -12,7 +12,7 @@ set -uo pipefail
 
 state="${XDG_RUNTIME_DIR:-/tmp}/aura-os-sysgraph"
 mkdir -p "$state"
-SPARK_N=12          # samples across the graph — 12 fits a 300px sidebar
+SPARK_N=10          # samples across the graph — always drawn 10 wide
 
 # US residential average, EIA, 2025: 17.4 ¢/kWh. Override per machine:
 #   echo 0.31 > ~/.config/aura-os/kwh-price      (euro-cents, pounds, whatever)
@@ -34,6 +34,8 @@ spark() { # spark <name> <value> -> the line
       END {
         split("▁ ▂ ▃ ▄ ▅ ▆ ▇ █", g, " ")
         start = (NR > n) ? NR - n + 1 : 1
+        # Pad short history with blanks so the graph is always n wide.
+        for (i = NR - start + 1; i < n; i++) printf " "
         for (i = start; i <= NR; i++) {
           v = a[i]; if (v < 0) v = 0; if (v > 100) v = 100
           k = int(v / 12.5) + 1; if (k > 8) k = 8
@@ -182,12 +184,21 @@ fi
 # sidebar modules get theirs.
 esc() { sed -e 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'; }
 
-lines="cpu  $c_spark  $(printf '%3s' "$c_pct")%${c_t:+  ${c_t}°C}
-ram  $m_spark  $(printf '%3s' "$m_pct")%  ${m_used}/${m_total}G"
+# Every row is the same shape, every field a fixed width, so nothing
+# slides sideways as the numbers change. The font must be monospace
+# (style.css) or the block glyphs change width.
+row() { printf '%s %s %4s %s' "$1" "$2" "$3" "$4"; }
+lines="$(row cpu "$c_spark" "${c_pct}%" "${c_t:+${c_t}°C}")
+$(row ram "$m_spark" "${m_pct}%" "${m_used}/${m_total}G")"
 [ -n "$g_pct" ] && lines="$lines
-gpu  $g_spark  $(printf '%3s' "$g_pct")%${g_t:+  ${g_t}°C}"
+$(row gpu "$g_spark" "${g_pct}%" "${g_t:+${g_t}°C}")"
+if [ -n "$watts" ]; then
+    _p="$(printf '%s%.0fW $%s/d $%s/mo' "$approx" "$watts" "$day" "$month")"
+else
+    _p="not reported on AC"
+fi
 lines="$lines
-$power_line"
+pwr $_p"
 
 text="$(printf '%s' "$lines" | esc | sed 's/$/\\n/' | tr -d '\n')"
 text="${text%\\n}"

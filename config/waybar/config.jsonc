@@ -186,7 +186,7 @@
     "width": 270,
     "spacing": 0,
     "on-sigusr1": "toggle",
-    "modules-left": ["custom/spaces", "custom/sysgraph", "custom/procs"],
+    "modules-left": ["custom/spaces", "custom/sysgraph", "custom/procs", "custom/minimized"],
     "modules-center": ["custom/recent"],
     "modules-right": ["custom/agents", "custom/llm"],
     // The system block: cpu, ram, gpu, temperatures, power (aura-os-sysgraph).
@@ -198,6 +198,17 @@
       "tooltip": false,
       "on-click": "$HOME/.local/bin/aura-os-procs",
       "on-click-right": "$HOME/.local/bin/aura-os-procs cpu"
+    },
+    // Minimized windows (Super+H), under the system block; click brings one back.
+    "custom/minimized": {
+      "exec": "$HOME/.local/bin/aura-os-minimize label",
+      "return-type": "json",
+      "escape": false,
+      "signal": 11,
+      "interval": 10,
+      "align": 0,
+      "justify": "left",
+      "on-click": "$HOME/.local/bin/aura-os-minimize restore"
     },
     "custom/sysgraph": {
       "exec": "$HOME/.local/bin/aura-os-sysgraph",

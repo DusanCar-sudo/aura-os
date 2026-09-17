@@ -144,3 +144,6 @@ window#waybar.top #battery { color: @muted; padding: 0 10px; }
 window#waybar.top #battery.charging, window#waybar.top #battery.plugged { color: @green; }
 window#waybar.top #battery.warning:not(.charging) { color: @yellow; }
 window#waybar.top #battery.critical:not(.charging) { color: @bg; background: @red; }
+/* minimized windows (aura-os-minimize) */
+window#waybar.left #custom-minimized { padding: 6px 10px 2px; }
+window#waybar.left #custom-minimized:hover { background: @bg_alt; }

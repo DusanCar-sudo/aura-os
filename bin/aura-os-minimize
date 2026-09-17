@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# aura-os-minimize — minimize a window into the sidebar, click to bring it back.
+#
+#   aura-os-minimize            minimize the focused window (Super+H)
+#   aura-os-minimize label      waybar JSON: the minimized windows, under cpu/ram/gpu
+#   aura-os-minimize restore    bring one back (a picker when there are several)
+#   aura-os-minimize restore <con_id>
+#
+# Minimized = sway's scratchpad. Restoring puts the window back into the
+# tiling layout on the current desk, as it was before (floating stays floating).
+set -euo pipefail
+export SWAYSOCK="${SWAYSOCK:-$(ls "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"/sway-ipc.*.sock 2>/dev/null | head -n1)}"
+state="${XDG_RUNTIME_DIR:-/tmp}/aura-os/minimized-floating"   # con_ids that were floating
+mkdir -p "$(dirname "$state")"; touch "$state"
+
+poke() { pkill -RTMIN+11 -x waybar 2>/dev/null || true; }
+
+minimized() {   # con_id<TAB>app<TAB>title, oldest first
+    swaymsg -t get_tree | jq -r '
+      .. | objects | select(.name? == "__i3_scratch") |
+      (.floating_nodes + .nodes)[] | .. | objects |
+      select((.pid? // 0) > 0) |
+      [.id, (.app_id // .window_properties.class // "app"), (.name // "")] | @tsv'
+}
+
+case "${1:-}" in
+    "")
+        info="$(swaymsg -t get_tree | jq -r '.. | objects | select(.focused? == true) | "\(.id) \(.type) \(.pid // 0)"' | head -n1)"
+        read -r id type pid <<<"$info"
+        [[ $type == con || $type == floating_con ]] && (( pid > 0 )) || exit 0
+        [[ $type == floating_con ]] && echo "$id" >> "$state"
+        swaymsg -q "[con_id=$id] move scratchpad"
+        poke
+        ;;
+    label)
+        list="$(minimized)"
+        if [[ -z $list ]]; then
+            printf '{"text":"","class":"empty"}\n'
+            exit 0
+        fi
+        jq -Rsc '
+          def cut(n): if length > n then .[0:n-1] + "…" else . end;
+          def esc: gsub("&"; "&amp;") | gsub("<"; "&lt;") | gsub(">"; "&gt;");
+          split("\n") | map(select(. != "") | split("\t")) as $w |
+          {text: ("<span color=\"#5c5f77\">minimized</span>\n"
+                  + ($w | map("<span color=\"#8b7cf6\">▭</span> <span color=\"#c8cad8\">"
+                              + ((.[2] | if . == "" then null else . end) // .[1] | cut(24) | esc)
+                              + "</span>") | join("\n"))),
+           tooltip: "click: bring back · Super+H minimizes the focused window",
+           class: "some"}' <<<"$list" |
+          { f="${XDG_CONFIG_HOME:-$HOME/.config}/aura-os/colors.sed"; if [[ -f $f ]]; then sed -f "$f"; else cat; fi; }
+        ;;
+    restore)
+        id="${2:-}"
+        if [[ -z $id ]]; then
+            list="$(minimized)"
+            [[ -n $list ]] || exit 0
+            if (( $(wc -l <<<"$list") == 1 )); then
+                id="$(cut -f1 <<<"$list")"
+            else
+                pick="$(awk -F'\t' '{printf "%s\t%s — %s\n", $1, ($3 != "" ? $3 : $2), $2}' <<<"$list" |
+                        cut -f2 | fuzzel --dmenu --index --prompt 'bring back > ' --lines 10)" || exit 0
+                id="$(sed -n "$((pick + 1))p" <<<"$list" | cut -f1)"
+            fi
+        fi
+        [[ -n $id ]] || exit 0
+        swaymsg -q "[con_id=$id] scratchpad show"
+        if grep -qx "$id" "$state"; then
+            sed -i "/^$id\$/d" "$state"
+        else
+            swaymsg -q "[con_id=$id] floating disable"
+        fi
+        swaymsg -q "[con_id=$id] focus"
+        poke
+        ;;
+    *) sed -n '2,8p' "$0" >&2; exit 2 ;;
+esac

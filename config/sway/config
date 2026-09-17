@@ -71,7 +71,7 @@ exec test -f ~/.config/aura-os/setup-done || aura-os-setup
 # Floating TUIs opened from the top bar (bt, wifi, vol, calendar).
 for_window [app_id="aura-float"] floating enable, resize set 960 600, move position center
 # Aura native tools (rust/apps): float centered like popups, never shove the layout
-for_window [app_id="^aura-(optanomai|settings|bluetooth|wifi|audio|look)$"] floating enable, move position center
+for_window [app_id="^aura-(optanomai|settings|bluetooth|wifi|audio|look|appearance)$"] floating enable, move position center
 
 # Keyboard: US, Serbian Latin, Serbian Cyrillic — Alt+Shift cycles.
 # aura-os-setup writes config.d/60-keyboard.conf, included below, so its

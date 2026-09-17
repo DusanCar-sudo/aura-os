@@ -85,8 +85,7 @@ fn items() -> Vec<(&'static str, Vec<Item>)> {
             "look & screens",
             vec![
                 i("▭", "Screens", b("aura-optanomai")),
-                i("◐", "Appearance & themes", b("aura-theme")),
-                i("◇", "Glass, borders & animations", b("aura-look")),
+                i("◐", "Appearance: theme, glass, borders", b("aura-appearance")),
                 i("▣", "Wallpaper", "aura-os-wallpaper pick".into()),
                 i("⌨", "Keyboard", b("aura-keyboard")),
             ],

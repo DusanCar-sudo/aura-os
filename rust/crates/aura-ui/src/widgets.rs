@@ -137,3 +137,32 @@ pub fn row_with_remove(ui: &mut Ui, icon: &str, label: &str, value: &str, remove
     let x = x_resp.clicked();
     (resp.clicked() && !x, x)
 }
+
+/// A slim level bar (volume, brightness): drag or click anywhere on it.
+/// `value` is 0.0..=1.0; returns true while the user changed it this frame.
+pub fn level(ui: &mut Ui, value: &mut f32, muted: bool) -> bool {
+    let w = ui.available_width();
+    let (rect, resp) = ui.allocate_exact_size(vec2(w, 18.0), Sense::click_and_drag());
+    let track = egui::Rect::from_center_size(rect.center(), vec2(rect.width() - 12.0, 4.0));
+    let fill_to = track.left() + track.width() * value.clamp(0.0, 1.0);
+    let on = if muted { theme::overlay0() } else { theme::accent() };
+    ui.painter().rect_filled(track, 2.0, theme::surface1());
+    ui.painter().rect_filled(
+        egui::Rect::from_min_max(track.min, egui::pos2(fill_to, track.max.y)),
+        2.0,
+        on,
+    );
+    ui.painter().circle_filled(egui::pos2(fill_to, track.center().y), if resp.hovered() || resp.dragged() { 7.0 } else { 6.0 }, on);
+    if resp.hovered() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+    if resp.dragged() || resp.clicked() {
+        if let Some(p) = resp.interact_pointer_pos() {
+            let v = ((p.x - track.left()) / track.width()).clamp(0.0, 1.0);
+            let changed = (v - *value).abs() > 0.001;
+            *value = v;
+            return changed;
+        }
+    }
+    false
+}

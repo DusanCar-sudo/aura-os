@@ -1,0 +1,10 @@
+[package]
+name = "aura-audio"
+version = "0.1.0"
+edition = "2021"
+description = "Audio for Aura OS: outputs, microphones, volume — one click each."
+
+[dependencies]
+aura-ui = { path = "../../crates/aura-ui" }
+eframe = { workspace = true }
+egui = { workspace = true }

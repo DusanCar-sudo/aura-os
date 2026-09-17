@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# aura-dic — dictation on Alt+X, the same engine as on Ubuntu.
+#
+# 1st press records, 2nd press transcribes (Xiaomi MiMo ASR, falling back
+# to OpenAI/Groq Whisper — whichever keys you have), types the text into
+# the focused window and presses Enter. It's aura-code's `dic toggle`
+# (node), with two Aura OS fixes around it:
+#   - the microphone: a Bluetooth headset in music mode (A2DP) has no mic,
+#     so aura-mic's picker chooses the laptop mic instead of recording noise
+#   - Enter: dic presses it with ydotool, which Aura OS doesn't have; sway
+#     accepts wtype, so this presses it after dic has typed
+#
+# Keys: ~/.config/environment.d/dic-stt.conf and ~/.aura/.env (owner's keys).
+# Local fallback without keys: aura-mic toggle (whisper.cpp).
+set -uo pipefail
+
+DIC_JS="${AURA_DIC_JS:-/mnt/bigdata/aura/aura-code/dist/cli/dic.js}"
+state="${XDG_RUNTIME_DIR:-/tmp}/dic-toggle/recorder.pid"
+
+# dic-stt.conf last so its keys win: the XIAOMI key in ~/.aura/.env is a
+# different one that the speech service rejects (401).
+for env in "$HOME/.aura/.env" "$HOME/.config/environment.d/dic-stt.conf"; do
+    [[ -r $env ]] && { set -a; . "$env"; set +a; }
+done
+
+if [[ ! -f $DIC_JS ]] || ! command -v node >/dev/null; then
+    exec aura-mic toggle          # no aura-code here: local whisper instead
+fi
+
+# pick the mic the same way aura-mic does (reuses its function)
+src=""
+mic="$(command -v aura-mic || true)"
+if [[ -n $mic ]]; then
+    src="$(bash -c 'source <(sed -n "/^SOURCE_FILE=/,/^mic_name() {/p" "$1" | sed "\$d"); pick_source' _ "$(readlink -f "$mic")" 2>/dev/null)"
+fi
+
+stopping=0
+if [[ -f $state ]] && kill -0 "$(cat "$state" 2>/dev/null)" 2>/dev/null; then
+    stopping=1
+fi
+
+args=(toggle)
+[[ -n $src ]] && args+=(--device "$src")
+node "$DIC_JS" "${args[@]}" "$@"
+rc=$?
+
+# dic types the text on the stopping press; add the Enter it couldn't press
+if (( stopping && rc == 0 )) && ! command -v ydotool >/dev/null && [[ " $* " != *" --no-submit "* ]]; then
+    sleep 0.15
+    wtype -k Return 2>/dev/null || true
+fi
+exit $rc

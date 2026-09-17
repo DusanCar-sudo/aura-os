@@ -196,6 +196,26 @@ EOF
     done
     gsettings set org.gnome.desktop.interface color-scheme prefer-dark 2>/dev/null || true
 
+    # The theme's own wallpaper, if one is installed and the current
+    # wallpaper is another theme's (or none) — a picture the user chose
+    # themselves is left alone.
+    wall=""
+    for d in "$cfg/aura-os/wallpapers" /usr/share/aura-os/wallpapers \
+             "${AURA_OS_REPO:-$HOME/aura-os}/assets/wallpapers"; do
+        [[ -f $d/$1.png ]] && { wall="$d/$1.png"; break; }
+    done
+    if [[ -n $wall ]]; then
+        cur="$(sed -n 's/^output \* bg "\(.*\)" fill/\1/p' \
+              "$cfg/sway/config.d/60-wallpaper.conf" 2>/dev/null | head -n1)"
+        if [[ -z $cur || $(basename "$(dirname "$cur")") == wallpapers ]]; then
+            put "$cfg/sway/config.d/60-wallpaper.conf" <<EOF
+# aura-os-theme ($1) — the theme's wallpaper; pick your own with
+# aura-os-wallpaper and this stops following the theme.
+output * bg "$wall" fill
+EOF
+        fi
+    fi
+
     printf '%s\n' "$1" | put "$state"
 
     # live: sway colors + background, waybar CSS, sidebar labels.

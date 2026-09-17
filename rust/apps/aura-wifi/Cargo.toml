@@ -1,0 +1,10 @@
+[package]
+name = "aura-wifi"
+version = "0.1.0"
+edition = "2021"
+description = "Wi-Fi for Aura OS: networks, password, saved — one click each."
+
+[dependencies]
+aura-ui = { path = "../../crates/aura-ui" }
+eframe = { workspace = true }
+egui = { workspace = true }

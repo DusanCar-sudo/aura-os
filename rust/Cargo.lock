@@ -155,6 +155,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "aura-wifi"
+version = "0.1.0"
+dependencies = [
+ "aura-ui",
+ "eframe",
+ "egui",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

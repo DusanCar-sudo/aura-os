@@ -31,8 +31,14 @@ term=$!
             exit
         fi
     done
-) &
+) </dev/null >/dev/null 2>&1 &
+# ^ never inherit the caller's stdout: waybar logs through a pipe, and a
+#   leftover swaymsg holding it kept the bar supervisor from restarting
+#   waybar — the sidebar and top bar just vanished.
 watcher=$!
 
 wait "$term" || true
+# the pipeline (swaymsg | jq | while) runs as children of the watcher
+# subshell; killing only the subshell left swaymsg and jq behind forever.
+pkill -P "$watcher" 2>/dev/null || true
 kill "$watcher" 2>/dev/null || true

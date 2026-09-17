@@ -27,7 +27,8 @@ spark() { # spark <name> <value> -> the line
     printf '%s\n' "$v" >> "$f"
     # Keep the file bounded without spawning tail on a huge file.
     if [ "$(wc -l < "$f")" -gt $SPARK_N ]; then
-        tail -n $SPARK_N "$f" > "$f.new" && mv "$f.new" "$f"
+        # both screens run their own sidebar copy at once: private temp name
+        tail -n $SPARK_N "$f" > "$f.new.$$" && mv -f "$f.new.$$" "$f"
     fi
     awk -v n=$SPARK_N '
       { a[NR] = $1 + 0 }

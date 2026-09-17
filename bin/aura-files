@@ -8,6 +8,7 @@ mouse. The keyboard works too.
 
   arrows  move      Enter  open         Backspace  up a folder    Alt+←/→ back/forward
   Ctrl+click  select one more    right-click  copy location, properties
+  Ctrl+L / click the path  type or paste a folder to go to    right-click the path  copy it
   Space   select    Ctrl+A select all   Ctrl+C copy    Ctrl+X cut    Ctrl+V paste
   F2 rename    Del delete    Ctrl+Shift+N / F7 new folder    F5 refresh
   v  icons ↔ list    s  sort by …    r  reverse order    .  hidden files    /  filter
@@ -217,15 +218,50 @@ class Files:
                     text = text[:-1]
                 elif k == "\x15":
                     text = ""
+                elif k == "\x16":                                 # Ctrl+V pastes
+                    text += self.clipboard_text().replace("\n", " ")
                 elif k == curses.KEY_MOUSE:
                     try:
-                        curses.getmouse()
+                        _, _, _, _, mb = curses.getmouse()
+                        if mb & (curses.BUTTON3_PRESSED | curses.BUTTON3_CLICKED):
+                            text += self.clipboard_text().replace("\n", " ")  # right-click pastes
                     except curses.error:
                         pass
                 elif isinstance(k, str) and k.isprintable():
                     text += k
         finally:
             curses.curs_set(0)
+
+    def copy_text(self, text, what="location"):
+        try:
+            subprocess.run(["wl-copy", "--", text], check=True, timeout=3,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            self.status = f"Copied {what}: {text}"
+        except (OSError, subprocess.SubprocessError):
+            self.status = f"Could not copy (is wl-clipboard installed?)  {text}"
+
+    def clipboard_text(self):
+        try:
+            out = subprocess.run(["wl-paste", "-n"], capture_output=True, text=True, timeout=3)
+            return out.stdout.strip() if out.returncode == 0 else ""
+        except (OSError, subprocess.SubprocessError):
+            return ""
+
+    def goto_path(self, text):
+        """A typed or pasted path: a folder opens, a file opens its folder with it selected."""
+        text = (text or "").strip().strip("'\"")
+        if text.startswith("file://"):
+            text = text[7:]
+        if not text:
+            return
+        p = os.path.normpath(os.path.expanduser(text if os.path.isabs(os.path.expanduser(text))
+                                                else os.path.join(self.path, text)))
+        if os.path.isdir(p):
+            self.go(p)
+        elif os.path.exists(p):
+            self.go(os.path.dirname(p), keep=os.path.basename(p))
+        else:
+            self.status = f"No such folder or file: {p}"
 
     def ask(self, question, options):
         """A centered box with clickable buttons → chosen key, or None."""
@@ -414,16 +450,16 @@ class Files:
         elif action == "view":
             self.view = "list" if self.view == "icons" else "icons"
             self.top = 0
+        elif action == "pathbar" or action == "ctx:goto":
+            self.popup = None
+            self.goto_path(self.prompt("Go to folder  (Ctrl+V or right-click pastes)", self.path))
+        elif action == "ctx:folderpath":
+            self.popup = None
+            self.copy_text(self.path, "folder path")
         elif action == "ctx:location":
             self.popup = None
             if e and e.name != "..":
-                full = os.path.join(self.path, e.name)
-                try:
-                    subprocess.run(["wl-copy", "--", full], check=True, timeout=3,
-                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    self.status = f"Copied location: {full}"
-                except (OSError, subprocess.SubprocessError):
-                    self.status = f"Could not copy (is wl-clipboard installed?)  {full}"
+                self.copy_text(os.path.join(self.path, e.name))
         elif action == "ctx:properties":
             self.popup = None
             if e and e.name != "..":
@@ -513,7 +549,7 @@ class Files:
         shown = self.path.replace(os.path.expanduser("~"), "~", 1)
         if self.filter:
             shown += f"    filter: {self.filter}   (Esc clears)"
-        self.put(1, 1, " " + shown[-(w - 4):], curses.color_pair(2) | curses.A_BOLD)
+        self.put(1, 1, (" " + shown[-(w - 4):]).ljust(w - 3), curses.color_pair(2) | curses.A_BOLD, "pathbar")
         self.put(2, 0, "─" * (w - 1), curses.color_pair(6))
 
         # places sidebar
@@ -556,7 +592,7 @@ class Files:
 
         if self.popup == "sort":
             self.draw_sort_popup()
-        elif isinstance(self.popup, tuple) and self.popup[0] == "ctx":
+        elif isinstance(self.popup, tuple) and self.popup[0] in ("ctx", "ctx-folder"):
             self.draw_context_popup()
         scr.refresh()
 
@@ -617,10 +653,15 @@ class Files:
             self.tiles.append((y, left, 1, aw, idx))
 
     def draw_context_popup(self):
-        _, mx, my = self.popup
+        kind, mx, my = self.popup
         h, w = self.scr.getmaxyx()
-        items = [("⧉ Copy location", "ctx:location"), ("ⓘ Properties", "ctx:properties")]
-        width = 20
+        if kind == "ctx":
+            items = [("⧉ Copy location", "ctx:location"), ("ⓘ Properties", "ctx:properties")]
+        else:                                          # the folder itself
+            items = [("⧉ Copy folder path", "ctx:folderpath"), ("→ Go to path…", "ctx:goto")]
+            if self.clipboard[0]:
+                items.append(("⎘ Paste here", "paste"))
+        width = 22
         x0 = max(0, min(mx, w - width - 1))
         y0 = max(1, min(my + 1, h - len(items) - 2))
         for i, (label, action) in enumerate(items):
@@ -725,6 +766,9 @@ class Files:
             if y == my and x1 <= mx < x2:
                 if self.popup and not action.startswith("sort:"):
                     self.popup = None
+                if right and action == "pathbar":
+                    self.popup = ("ctx-folder", mx, my)
+                    return
                 self.act(action)
                 return
         if self.popup:
@@ -753,6 +797,11 @@ class Files:
                     self.last_click = (now, idx)
                     if not b & curses.BUTTON_SHIFT:
                         self.selected.clear()
+                return
+        if right:                                            # right-click on empty space
+            top, left, ah, aw = self.area()
+            if top <= my < top + ah and left <= mx < left + aw:
+                self.popup = ("ctx-folder", mx, my)
                 return
         self.selected.clear()                                # click on empty space
 
@@ -806,7 +855,16 @@ class Files:
         elif k == "\x18":
             self.act("cut")
         elif k == "\x16":
-            self.act("paste")
+            if self.clipboard[0]:
+                self.act("paste")
+            else:                                    # a path on the clipboard: go there
+                t = self.clipboard_text()
+                if t and "\n" not in t and os.path.exists(os.path.expanduser(t.strip().strip("'\""))):
+                    self.goto_path(t)
+                else:
+                    self.act("paste")
+        elif k == "\x0c":                            # Ctrl+L: type or paste a path
+            self.act("pathbar")
         elif k in (curses.KEY_F2,):
             self.act("rename")
         elif k in (curses.KEY_DC,):

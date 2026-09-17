@@ -12,7 +12,12 @@
 # ~/.config/sway/config.d/70-displays.conf, keyed by make/model/serial.
 set -euo pipefail
 
-if [[ ${1:-} != --here && -z ${AURA_DISPLAY_INNER:-} && ! -t 0 ]]; then
+# Open our own window unless we're already in a terminal window. Started
+# from a sway key, stdin is the login console (/dev/tty1) — a tty, but not
+# one anyone can see — so "is stdin a tty" alone would run the TUI there,
+# invisibly (that's why Super+P used to do nothing).
+in_window() { [[ -t 0 ]] && [[ $(tty 2>/dev/null) != /dev/tty[0-9]* ]]; }
+if [[ ${1:-} != --here && -z ${AURA_DISPLAY_INNER:-} ]] && ! in_window; then
     exec aura-term --app-id=aura-float -e env AURA_DISPLAY_INNER=1 "$0" --here
 fi
 

@@ -1,8 +1,10 @@
 /* Colors come from theme.css (aura-os-theme); default purplerain is shipped. */
 @import "theme.css";
+/* glass or fill, from aura-look (Settings → Glass, borders & animations) */
+@import "look.css";
 
 /* Aura OS — waybar, Aura OS bars (task 003).
- * Flat, dark, square. No blur/shadow/rounding. One font.
+ * Square, one font. Panels are glass or a fill colour (look.css).
  * Two bars: window#waybar.top (tabs) and window#waybar.left (sidebar). */
 
 * {
@@ -119,3 +121,8 @@ window#waybar.left #custom-settings { padding: 10px 10px; font-size: 15px; }
 window#waybar.left #custom-settings:hover { background: @bg_alt; }
 window#waybar.left #custom-procs { color: @muted; padding: 2px 10px 8px; }
 window#waybar.left #custom-procs:hover { background: @bg_alt; }
+
+/* aura-look: hover fades instead of snapping */
+button, label, #custom-recent, #custom-agents, #custom-procs, .tab {
+    transition: background-color 160ms ease-in-out, color 160ms ease-in-out;
+}

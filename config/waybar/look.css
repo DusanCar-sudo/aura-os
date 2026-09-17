@@ -1,0 +1,3 @@
+/* default until aura-look apply writes the real one */
+@define-color panel_bg alpha(@bg, 0.6);
+@define-color panel_line @accent;

@@ -2,11 +2,12 @@
 """aura-files — the file manager: clickable icons, in the terminal.
 
 Folders and files as icons drawn in text, like a desktop file manager.
-Everything is clickable: click to select, double-click to open, wheel to
-scroll, and the toolbar, places, view and sort buttons all respond to the
+Everything is clickable: click to select, double-click to open, right-click
+for Copy location / Properties, wheel to scroll, and the toolbar, places, view and sort buttons all respond to the
 mouse. The keyboard works too.
 
   arrows  move      Enter  open         Backspace  up a folder    Alt+←/→ back/forward
+  Ctrl+click  select one more    right-click  copy location, properties
   Space   select    Ctrl+A select all   Ctrl+C copy    Ctrl+X cut    Ctrl+V paste
   F2 rename    Del delete    Ctrl+Shift+N / F7 new folder    F5 refresh
   v  icons ↔ list    s  sort by …    r  reverse order    .  hidden files    /  filter
@@ -132,7 +133,7 @@ class Files:
         self.hits = []                # (y, x1, x2, action) clickable regions
         self.tiles = []               # (y, x, h, w, index)
         self.last_click = (0.0, -1)
-        self.popup = None             # ("sort", items) while a dropdown is open
+        self.popup = None             # "sort", or ("ctx", x, y) for the right-click menu
         self.load()
 
     # ── folder ──────────────────────────────────────────────────────────
@@ -413,6 +414,20 @@ class Files:
         elif action == "view":
             self.view = "list" if self.view == "icons" else "icons"
             self.top = 0
+        elif action == "ctx:location":
+            self.popup = None
+            if e and e.name != "..":
+                full = os.path.join(self.path, e.name)
+                try:
+                    subprocess.run(["wl-copy", "--", full], check=True, timeout=3,
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    self.status = f"Copied location: {full}"
+                except (OSError, subprocess.SubprocessError):
+                    self.status = f"Could not copy (is wl-clipboard installed?)  {full}"
+        elif action == "ctx:properties":
+            self.popup = None
+            if e and e.name != "..":
+                self.properties(e)
         elif action == "sort":
             self.popup = "sort"
         elif action.startswith("sort:"):
@@ -541,6 +556,8 @@ class Files:
 
         if self.popup == "sort":
             self.draw_sort_popup()
+        elif isinstance(self.popup, tuple) and self.popup[0] == "ctx":
+            self.draw_context_popup()
         scr.refresh()
 
     def draw_icons(self):
@@ -599,6 +616,86 @@ class Files:
             self.put(y, left, line.ljust(aw)[:aw], attr)
             self.tiles.append((y, left, 1, aw, idx))
 
+    def draw_context_popup(self):
+        _, mx, my = self.popup
+        h, w = self.scr.getmaxyx()
+        items = [("⧉ Copy location", "ctx:location"), ("ⓘ Properties", "ctx:properties")]
+        width = 20
+        x0 = max(0, min(mx, w - width - 1))
+        y0 = max(1, min(my + 1, h - len(items) - 2))
+        for i, (label, action) in enumerate(items):
+            self.put(y0 + i, x0, f" {label}".ljust(width), curses.color_pair(3) | curses.A_BOLD, action)
+
+    def properties(self, e):
+        """Name, type, size, location, modified — and a Copy location button."""
+        full = os.path.join(self.path, e.name)
+        try:
+            st = os.lstat(full)
+        except OSError as err:
+            self.status = f"{e.name}: {err.strerror}"
+            return
+        if stat.S_ISLNK(st.st_mode):
+            kind = f"link → {os.readlink(full)}"
+        elif e.is_dir:
+            kind = "folder"
+        else:
+            kind = "text file" if is_text(full) else "file"
+        if e.is_dir:
+            try:
+                n = len(os.listdir(full))
+                size = f"{n} item{'s' * (n != 1)}"
+            except OSError:
+                size = "can't read"
+        else:
+            size = f"{human(st.st_size)}  ({st.st_size:,} bytes)"
+        rows = [("Name", e.name), ("Type", kind), ("Size", size),
+                ("Location", self.path),
+                ("Modified", time.strftime("%d %b %Y %H:%M", time.localtime(st.st_mtime))),
+                ("Permissions", stat.filemode(st.st_mode))]
+        while True:
+            h, w = self.scr.getmaxyx()
+            bw = min(w - 2, max(46, max(len(v) for _, v in rows) + 18))
+            bh = len(rows) + 6
+            bx, by = (w - bw) // 2, max(1, (h - bh) // 2)
+            box = curses.color_pair(3)
+            for i in range(bh):
+                self.scr.addstr(by + i, bx, " " * bw, box)
+            self.scr.addstr(by + 1, bx + 3, "Properties", box | curses.A_BOLD)
+            for i, (k, v) in enumerate(rows):
+                self.scr.addstr(by + 3 + i, bx + 3, f"{k:<12} {v}"[:bw - 6], box)
+            btns = [("Copy location", "c"), ("Close", "x")]
+            x, spans, yb = bx + 3, [], by + bh - 2
+            for label, key in btns:
+                b = f"[ {label} ]"
+                self.scr.addstr(yb, x, b, curses.color_pair(4) | curses.A_BOLD)
+                spans.append((x, x + len(b), key))
+                x += len(b) + 2
+            self.scr.refresh()
+            try:
+                k = self.scr.get_wch()
+            except curses.error:
+                continue
+            key = None
+            if k == curses.KEY_MOUSE:
+                try:
+                    _, mx, my, _, b = curses.getmouse()
+                except curses.error:
+                    continue
+                if not b & (curses.BUTTON1_PRESSED | curses.BUTTON1_CLICKED):
+                    continue
+                key = next((kk for x1, x2, kk in spans if my == yb and x1 <= mx < x2), None)
+                if key is None and not (bx <= mx < bx + bw and by <= my < by + bh):
+                    key = "x"                                # click outside closes
+            elif k in ("\x1b", "q", "x", "\n"):
+                key = "x"
+            elif k == "c":
+                key = "c"
+            if key == "c":
+                self.act("ctx:location")
+                return
+            if key == "x":
+                return
+
     def draw_sort_popup(self):
         x0 = next((x1 for (y, x1, x2, a) in self.hits if a == "sort"), 40)
         items = [(f"{'●' if self.sort == k else '○'} {label}", "sort:" + k) for k, label in SORTS]
@@ -635,7 +732,12 @@ class Files:
             return
         for y, x, th, tw, idx in self.tiles:
             if y <= my < y + th and x <= mx < x + tw:
-                if right or b & curses.BUTTON_CTRL:
+                if right:
+                    self.cur = idx
+                    if self.entries[idx].name != "..":
+                        self.popup = ("ctx", mx, my)
+                    return
+                if b & curses.BUTTON_CTRL:
                     name = self.entries[idx].name
                     if name != "..":
                         self.selected ^= {name}

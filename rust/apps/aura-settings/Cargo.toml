@@ -1,0 +1,10 @@
+[package]
+name = "aura-settings"
+version = "0.1.0"
+edition = "2021"
+description = "The Aura OS settings hub: every setting one click away, each row showing its state."
+
+[dependencies]
+aura-ui = { path = "../../crates/aura-ui" }
+eframe = { workspace = true }
+egui = { workspace = true }

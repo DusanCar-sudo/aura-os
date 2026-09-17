@@ -5,3 +5,5 @@
 //! Change the look here, and every menu changes with it.
 
 pub mod theme;
+
+pub mod widgets;

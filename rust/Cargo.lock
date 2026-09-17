@@ -130,6 +130,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "aura-settings"
+version = "0.1.0"
+dependencies = [
+ "aura-ui",
+ "eframe",
+ "egui",
+]
+
+[[package]]
 name = "aura-ui"
 version = "0.1.0"
 dependencies = [

@@ -362,6 +362,69 @@ pub fn aura_theme() -> Option<AuraTheme> {
     AuraTheme::parse(&std::fs::read_to_string(path).ok()?, &name)
 }
 
+/// Aura OS has two theme pickers: `aura-theme` (above) and `aura-os-theme`,
+/// which colours the bar and terminal and writes `~/.config/waybar/theme.css`
+/// (`@define-color bg #rrggbb;` …). Reading both — and wearing whichever was
+/// picked last — keeps every tool the same colour as the bar.
+fn parse_waybar_css(text: &str, name: &str) -> Option<AuraTheme> {
+    let colour = |key: &str| -> Option<Color32> {
+        text.lines().find_map(|line| {
+            let rest = line.trim().strip_prefix("@define-color ")?;
+            let (k, v) = rest.split_once(char::is_whitespace)?;
+            (k == key).then(|| parse_hex(v.trim().trim_end_matches(';')))?
+        })
+    };
+    let tokens = Tokens {
+        bg: colour("bg")?,
+        surface: colour("bg_alt")?,
+        line: colour("border")?,
+        fg: colour("fg")?,
+        dim: colour("dim")?,
+        accent: colour("accent")?,
+        accent2: colour("red").or_else(|| colour("accent_bright"))?,
+    };
+    Some(AuraTheme {
+        name: name.to_string(),
+        title: name.to_string(),
+        tokens,
+        radius: 0,
+    })
+}
+
+fn config_home() -> Option<PathBuf> {
+    aura_config_dir().and_then(|d| d.parent().map(PathBuf::from))
+}
+
+/// The bar's theme, from `aura-os-theme`.
+pub fn waybar_theme() -> Option<AuraTheme> {
+    let cfg = config_home()?;
+    let name = std::fs::read_to_string(cfg.join("aura-os").join("theme"))
+        .map(|n| n.trim().to_string())
+        .unwrap_or_else(|_| "aura-os".to_string());
+    parse_waybar_css(&std::fs::read_to_string(cfg.join("waybar").join("theme.css")).ok()?, &name)
+}
+
+fn modified(p: PathBuf) -> Option<std::time::SystemTime> {
+    std::fs::metadata(p).and_then(|m| m.modified()).ok()
+}
+
+/// Whichever picker ran last wins.
+fn active_theme() -> Option<AuraTheme> {
+    let cfg = config_home();
+    let shell_t = cfg.clone().and_then(|c| modified(c.join("aura").join("theme")));
+    let bar_t = cfg.and_then(|c| modified(c.join("waybar").join("theme.css")));
+    let bar_first = match (bar_t, shell_t) {
+        (Some(b), Some(s)) => b >= s,
+        (Some(_), None) => true,
+        _ => false,
+    };
+    if bar_first {
+        waybar_theme().or_else(aura_theme)
+    } else {
+        aura_theme().or_else(waybar_theme)
+    }
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Which theme are we wearing
 // ────────────────────────────────────────────────────────────────────────────
@@ -408,7 +471,7 @@ impl ThemeId {
                 return ThemeId::Scheme(s);
             }
         }
-        match aura_theme() {
+        match active_theme() {
             Some(t) => ThemeId::Aura(t),
             None => ThemeId::Scheme(detect_scheme()),
         }
@@ -778,6 +841,17 @@ pub fn apply(ctx: &egui::Context, theme: &ThemeId) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn waybar_css_becomes_a_theme() {
+        let css = "/* generated */\n@define-color bg #0b0c0e;\n@define-color bg_alt #14161a;\n\
+                   @define-color border #262a2f;\n@define-color fg #6ee9e4;\n\
+                   @define-color dim #565b61;\n@define-color accent #00e5d0;\n@define-color red #ff6ac7;\n";
+        let t = super::parse_waybar_css(css, "aura").expect("parses");
+        assert_eq!(t.tokens.bg, egui::Color32::from_rgb(0x0b, 0x0c, 0x0e));
+        assert_eq!(t.tokens.accent, egui::Color32::from_rgb(0x00, 0xe5, 0xd0));
+        assert_eq!(t.tokens.accent2, egui::Color32::from_rgb(0xff, 0x6a, 0xc7));
+    }
+
     use super::*;
 
     /// Byte-for-byte the shape aura-theme writes.

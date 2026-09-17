@@ -184,6 +184,10 @@ EOF
         export SWAYSOCK="${SWAYSOCK:-$(ls "${XDG_RUNTIME_DIR:-/tmp}"/sway-ipc.*.sock | head -n1)}"
         swaymsg reload >/dev/null 2>&1 || true
     fi
+    # own panel/border colours (aura-look) give way to the new theme
+    for look in "$HOME/.local/bin/aura-look" aura-look; do
+        command -v "$look" >/dev/null && { "$look" theme-changed || true; break; }
+    done
     pkill -USR2 -x waybar 2>/dev/null || true
     aura-os-status poke 2>/dev/null || true
     pkill -RTMIN+10 -x waybar 2>/dev/null || true

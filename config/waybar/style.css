@@ -128,3 +128,8 @@ button, label, #custom-recent, #custom-agents, #custom-procs, .tab {
 }
 window#waybar.top #custom-settings { color: @accent; padding: 0 12px; }
 window#waybar.top #custom-settings:hover { color: @fg; background: @bg_alt; }
+/* battery, left of the clock */
+window#waybar.top #battery { color: @muted; padding: 0 10px; }
+window#waybar.top #battery.charging, window#waybar.top #battery.plugged { color: @green; }
+window#waybar.top #battery.warning:not(.charging) { color: @yellow; }
+window#waybar.top #battery.critical:not(.charging) { color: @bg; background: @red; }

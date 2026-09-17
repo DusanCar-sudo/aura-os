@@ -17,9 +17,8 @@ set -uo pipefail
 DIC_JS="${AURA_DIC_JS:-/mnt/bigdata/aura/aura-code/dist/cli/dic.js}"
 state="${XDG_RUNTIME_DIR:-/tmp}/dic-toggle/recorder.pid"
 
-# dic-stt.conf last so its keys win: the XIAOMI key in ~/.aura/.env is a
-# different one that the speech service rejects (401).
-for env in "$HOME/.aura/.env" "$HOME/.config/environment.d/dic-stt.conf"; do
+# Aura's own keys last, so one key in ~/.aura/.env serves Aura and dictation.
+for env in "$HOME/.config/environment.d/dic-stt.conf" "$HOME/.aura/.env"; do
     [[ -r $env ]] && { set -a; . "$env"; set +a; }
 done
 

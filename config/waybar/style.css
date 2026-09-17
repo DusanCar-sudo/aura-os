@@ -126,3 +126,5 @@ window#waybar.left #custom-procs:hover { background: @bg_alt; }
 button, label, #custom-recent, #custom-agents, #custom-procs, .tab {
     transition: background-color 160ms ease-in-out, color 160ms ease-in-out;
 }
+window#waybar.top #custom-settings { color: @accent; padding: 0 12px; }
+window#waybar.top #custom-settings:hover { color: @fg; background: @bg_alt; }

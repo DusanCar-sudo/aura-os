@@ -146,6 +146,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "aura-keyboard"
+version = "0.1.0"
+dependencies = [
+ "aura-ui",
+ "eframe",
+ "egui",
+]
+
+[[package]]
 name = "aura-optanomai"
 version = "0.1.0"
 dependencies = [

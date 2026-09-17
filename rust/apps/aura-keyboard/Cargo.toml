@@ -1,0 +1,10 @@
+[package]
+name = "aura-keyboard"
+version = "0.1.0"
+edition = "2021"
+description = "Keyboard layouts for Aura OS: pick languages and the key that switches them."
+
+[dependencies]
+aura-ui = { path = "../../crates/aura-ui" }
+eframe = { workspace = true }
+egui = { workspace = true }

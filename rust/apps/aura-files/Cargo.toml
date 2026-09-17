@@ -1,0 +1,10 @@
+[package]
+name = "aura-files-rs"
+version = "0.1.0"
+edition = "2021"
+description = "The Aura OS file manager: icons you can click, in a real window."
+
+[dependencies]
+aura-ui = { path = "../../crates/aura-ui" }
+eframe = { workspace = true }
+egui = { workspace = true }

@@ -93,7 +93,7 @@ fn items() -> Vec<(&'static str, Vec<Item>)> {
         (
             "apps",
             vec![
-                i("▦", "Files", format!("aura-term --app-id=aura-files -e {}", b("aura-files"))),
+                i("▦", "Files", b("aura-files-rs")),
                 i("¶", "Text editor", format!("aura-term --app-id=aura-edit -e {}", b("aura-edit"))),
                 i("▤", "System monitor", "aura-term --app-id=aura-float -e btop".into()),
                 i("✕", "Processes: see and end", b("aura-os-procs")),

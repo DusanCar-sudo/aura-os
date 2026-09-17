@@ -199,7 +199,7 @@
       "on-click": "$HOME/.local/bin/aura-os-procs",
       "on-click-right": "$HOME/.local/bin/aura-os-procs cpu"
     },
-    // Minimized windows (Super+H), under the system block; click brings one back.
+    // Minimized windows (Super+Z), under the system block; click brings one back.
     "custom/minimized": {
       "exec": "$HOME/.local/bin/aura-os-minimize label",
       "return-type": "json",

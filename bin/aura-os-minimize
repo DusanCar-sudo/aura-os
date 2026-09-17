@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # aura-os-minimize — minimize a window into the sidebar, click to bring it back.
 #
-#   aura-os-minimize            minimize the focused window (Super+H)
+#   aura-os-minimize            minimize the focused window (Super+Z)
 #   aura-os-minimize label      waybar JSON: the minimized windows, under cpu/ram/gpu
 #   aura-os-minimize restore    bring one back (a picker when there are several)
 #   aura-os-minimize restore <con_id>
@@ -46,7 +46,7 @@ case "${1:-}" in
                   + ($w | map("<span color=\"#8b7cf6\">▭</span> <span color=\"#c8cad8\">"
                               + ((.[2] | if . == "" then null else . end) // .[1] | cut(24) | esc)
                               + "</span>") | join("\n"))),
-           tooltip: "click: bring back · Super+H minimizes the focused window",
+           tooltip: "click: bring back · Super+Z minimizes the focused window",
            class: "some"}' <<<"$list" |
           { f="${XDG_CONFIG_HOME:-$HOME/.config}/aura-os/colors.sed"; if [[ -f $f ]]; then sed -f "$f"; else cat; fi; }
         ;;

@@ -15,13 +15,31 @@
 }
 
 window#waybar {
-    background: @bg;
+    background-color: @panel_bg;
     color: @fg;
     border: none;
 }
 
-window#waybar.top  { border-bottom: 1px solid @border; }
-window#waybar.left { border-right: 1px solid @border; }
+/* wordmark watermark, sits behind every module - see the watermark PNGs in
+ * the assets folder (regenerate with ImageMagick, JetBrainsMonoNerdFont-Light,
+ * fill rgba(146,131,116,0.55), if the text or theme changes) */
+window#waybar.top {
+    border-bottom: 1px solid @border;
+    background-image: url("assets/top-watermark.png");
+    background-repeat: no-repeat;
+    background-position: center center;
+}
+window#waybar.left {
+    border-right: 1px solid @border;
+    background-image: url("assets/left-watermark.png");
+    background-repeat: no-repeat;
+    background-position: 10px center;
+}
+/* Everything in the sidebar sits right of the vertical tagline, so the
+   tagline gets its own clear column instead of text running over it. */
+window#waybar.left .modules-left,
+window#waybar.left .modules-center,
+window#waybar.left .modules-right { margin-left: 44px; }
 
 /* ── top bar: workspace tabs ─────────────────────────────────── */
 
@@ -74,8 +92,8 @@ window#waybar.top #clock  { color: @accent; padding: 0 12px; }
 
 /* ── left sidebar ────────────────────────────────────────────── */
 
-window#waybar.left #custom-spaces { padding: 8px 10px; }
-window#waybar.left #custom-agents { padding: 8px 10px; }
+window#waybar.left #custom-spaces { padding: 2px 10px; }
+window#waybar.left #custom-agents { padding: 2px 10px; }
 window#waybar.left #custom-agents:hover { background: @bg_alt; }
 
 /* ── top bar: system items (bt, wifi, vol, clip), plain text ─── */
@@ -99,28 +117,21 @@ tooltip label { color: @fg; }
 /* sidebar toggle (top-left) and the sidebar's RAM line */
 window#waybar.top #custom-sidebar { color: @dim; padding: 0 10px; }
 window#waybar.top #custom-sidebar:hover { color: @fg; background: @bg_alt; }
-/* The system block. Monospace so the sparklines and the percentages line
-   up into columns — a graph that jitters sideways is unreadable. */
-window#waybar.left #custom-llm { color: @muted; padding: 4px 10px;
+window#waybar.left #custom-sysgraph { color: @muted; padding: 2px 10px;
+  font-family: "JetBrainsMono Nerd Font Mono", monospace; }
+window#waybar.left #custom-llm { color: @muted; padding: 2px 10px;
   font-family: "JetBrainsMono Nerd Font Mono", monospace; }
 window#waybar.left #custom-llm.llm-off { color: @dim; }
 
-window#waybar.left #custom-sysgraph {
-  color: @muted;
-  padding: 4px 10px;
-  font-family: "JetBrainsMono Nerd Font Mono", monospace;
-}
-
 /* sidebar middle: last used anything */
-window#waybar.left #custom-recent { padding: 8px 10px; }
+window#waybar.left #custom-recent { padding: 2px 10px; }
 window#waybar.left #custom-recent:hover { background: @bg_alt; }
 
 /* active sway mode (Super+R → resize) */
 window#waybar.top #mode { color: @bg; background: @accent; padding: 0 8px; }
-window#waybar.left #custom-settings { padding: 10px 10px; font-size: 15px; }
-window#waybar.left #custom-settings:hover { background: @bg_alt; }
-window#waybar.left #custom-procs { color: @muted; padding: 2px 10px 8px; }
+window#waybar.left #custom-procs { color: @muted; padding: 0px 10px 4px; }
 window#waybar.left #custom-procs:hover { background: @bg_alt; }
+
 
 /* aura-look: hover fades instead of snapping */
 button, label, #custom-recent, #custom-agents, #custom-procs, .tab {

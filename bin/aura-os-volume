@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# aura-os-volume — the top-bar volume button as a menu: volume bars,
+# mute toggles in brand colors, output device pick. wpctl underneath;
+# nothing polls. Full volume control without opening a TUI.
+#
+#   aura-os-volume          the menu
+#   aura-os-volume mute     toggle output mute (for a key binding)
+set -euo pipefail
+
+# brand colors (themes/aura/palette)
+TEAL='#00e5d0'; MAG='#ff6ac7'; LIME='#c6ff4d'; YEL='#ffd75e'; DIM='#565b61'; FG='#ede9e0'
+
+strip() { sed 's/<[^>]*>//g'; }
+
+bar() {   # bar <wpctl-volume-line> <muted?> — 12 cells, teal when live
+    local v cells="" i
+    v=$(printf '%s' "$1" | awk -F: -v n=12 '{printf "%d", ($2+0)*n; exit}')
+    for (( i = 0; i < 12; i++ )); do
+        if (( $2 )); then cells+="<span foreground='$MAG'>█</span>"
+        elif (( i < v )); then cells+="<span foreground='$TEAL'>█</span>"
+        else cells+="<span foreground='$DIM'>░</span>"; fi
+    done
+    printf '%s' "$cells"
+}
+
+vol() { wpctl get-volume "$1" 2>/dev/null || echo "Volume: 0.00"; }
+volnum() { awk -F: '{printf "%d", ($2+0)*100}' <<<"$(vol "$1")"; }
+muted() { [[ $(vol "$1") == *MUTED* ]] && echo 1 || echo 0; }
+
+status_line() {
+    local out in im imc imt ovn
+    out="$(vol @DEFAULT_AUDIO_SINK@)"; in="$(vol @DEFAULT_AUDIO_SOURCE@)"
+    ovn=$(volnum @DEFAULT_AUDIO_SINK@)
+    im=$(muted @DEFAULT_AUDIO_SOURCE@)
+    if [[ $im == 1 ]]; then imc=$MAG; imt=MUTED; else imc=$TEAL; imt=open; fi
+    printf "<span foreground='$FG'>󰕾 </span><span foreground='$TEAL'>output</span>  %s  <span foreground='$TEAL'>%s%%</span>\n" \
+        "$(bar "$out" "$(muted @DEFAULT_AUDIO_SINK@)")" "$ovn"
+    printf "<span foreground='$FG'>󰍬 </span><span foreground='$TEAL'>mic</span>     %s  <span foreground='%s'>%s</span>\n" \
+        "$(bar "$in" "$im")" "$imc" "$imt"
+}
+
+pick_device() {   # pick_device <kind: Sinks|Sources>
+    local section pick id
+    section="$(wpctl status 2>/dev/null | sed -n "/$1:/,/^[A-Z]/p" | sed -E 's/^\s+//; s/\s+\[vol[^]]*\]//') "
+    pick="$(grep -E '^[0-9]+\.' <<<"$section" | fuzzel --dmenu --prompt "$2 > " --width 72 --lines 10)" || return 0
+    id="${pick%%.*}"
+    [[ -n $id ]] && wpctl set-default "$id" >/dev/null
+}
+
+menu() {
+    local choice
+    status=$(status_line)
+    choice="$(printf '%s\n<b>──────────</b>\n<span foreground="%s">volume  + 5%%</span>\n<span foreground="%s">volume  − 5%%</span>\n<span foreground="%s">toggle output mute</span>\n<span foreground="%s">toggle mic mute</span>\noutput device…\nmicrophone input…\n<span foreground="%s">open wiremix (full mixer)</span>\n\n%s\n' \
+                "$status" "$TEAL" "$TEAL" "$LIME" "$LIME" "$MAG" "$status" |
+        fuzzel --dmenu --prompt 'vol > ' --width 64 --lines 12)" || return 0
+    choice="$(strip <<<"$choice")"
+    case $choice in
+        *"+ 5%"*)   wpctl set-volume -l 1.5 @DEFAULT_AUDIO_SINK@ 5%+ ;;
+        *"− 5%"*)   wpctl set-volume -l 1.5 @DEFAULT_AUDIO_SINK@ 5%- ;;
+        *mute*)     if [[ $choice == *mic* ]]; then wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle
+                    else wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle; fi ;;
+        *output*)   pick_device Sinks output ;;
+        *microphone*) pick_device Sources mic ;;
+        *wiremix*)  exec aura-os-popup wiremix ;;
+    esac
+}
+
+case "${1:-menu}" in
+    mute) wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle ;;
+    menu|"") menu ;;
+    *) echo "aura-os-volume: unknown command '${1:-}'" >&2; exit 2 ;;
+esac

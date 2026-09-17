@@ -58,6 +58,12 @@ cmd_watch() {
                 swaymsg "[con_id=$id] floating enable, move position center" >/dev/null 2>&1 || true
             fi
         fi
+        # MRU tracking for the app switcher (aura-os-switch): log every
+        # focus change so Alt+Tab sorts by most-recently-used.
+        if [[ $ev == *'"change": "focus"'* || $ev == *'"change":"focus"'* ]]; then
+            id="$(jq -r '.container.id // empty' <<<"$ev" 2>/dev/null || true)"
+            [[ -n ${id:-} ]] && aura-os-switch log "$id" 2>/dev/null &
+        fi
         sync_names
         poke
     done < <(swaymsg -t subscribe -m '["workspace", "window"]' 2>/dev/null)

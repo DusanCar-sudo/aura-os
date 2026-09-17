@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# aura-os-drift — is the running system the same as the repo?
+#
+#   tools/aura-os-drift          list every script/config that differs
+#   tools/aura-os-drift -d FILE  show the diff for one of them
+#
+# The repo is the one source of truth. Anything this lists was edited
+# on the live system (or never deployed): copy it into the repo and
+# commit, or redeploy from the repo — never leave it.
+# Checks bin/* against /usr/local/bin and ~/.local/bin, and config/*
+# against ~/.config (generated files like theme.css/look.css skipped).
+set -uo pipefail
+REPO="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+SHELL_REPO="${AURA_OS_SHELL_REPO:-/mnt/bigdata/aura-os-shell}"
+
+if [[ ${1:-} == -d ]]; then
+    f="${2:?usage: aura-os-drift -d <live path>}"
+    n="$(basename "$f")"
+    src="$REPO/bin/$n"
+    [[ $f == "$HOME/.config/"* ]] && src="$REPO/config/${f#"$HOME/.config/"}"
+    exec diff -u "$src" "$f"
+fi
+
+n_diff=0
+report() { printf '%-8s %s\n' "$1" "$2"; n_diff=$((n_diff + 1)); }
+
+for src in "$REPO"/bin/*; do
+    [[ -f $src ]] || continue
+    n="$(basename "$src")"
+    for d in /usr/local/bin "$HOME/.local/bin"; do
+        live="$d/$n"
+        [[ -e $live ]] || continue
+        if [[ -L $live ]]; then
+            [[ "$(readlink -f "$live")" == "$(readlink -f "$src")" ]] || report link "$live -> $(readlink "$live")"
+        elif ! cmp -s "$src" "$live"; then
+            if [[ $live -nt $src ]]; then report "LIVE-NEW" "$live"; else report "REPO-NEW" "$live"; fi
+        fi
+    done
+done
+
+# scripts that only exist on the live system
+for live in /usr/local/bin/aura* "$HOME"/.local/bin/aura*; do
+    [[ -e $live ]] || continue
+    n="$(basename "$live")"
+    case $n in *.bak|*.orig) report backup "$live"; continue ;; esac
+    [[ -e $REPO/bin/$n || -e $SHELL_REPO/bin/$n || -L $live ]] || report "NO-REPO" "$live"
+done
+
+cd "$REPO/config" || exit 1
+while IFS= read -r f; do
+    f="${f#./}"
+    case $f in waybar/theme.css|waybar/look.css) continue ;; esac
+    live="$HOME/.config/$f"
+    [[ -e $live ]] || continue          # system files (greetd, zram, boot) live elsewhere
+    [[ -L $live ]] && continue
+    cmp -s "$f" "$live" || { if [[ $live -nt $f ]]; then report "LIVE-NEW" "$live"; else report "REPO-NEW" "$live"; fi; }
+done < <(find . -type f)
+
+if (( n_diff == 0 )); then
+    echo "no drift: the running system matches the repo"
+else
+    echo
+    echo "$n_diff difference(s).  LIVE-NEW: bring into the repo.  REPO-NEW: redeploy."
+    echo "NO-REPO: only on this machine, add to the repo or delete.  See one: $0 -d <path>"
+fi

@@ -105,7 +105,7 @@ tagline() {
     command -v magick >/dev/null || return
     local font=/usr/share/fonts/TTF/JetBrainsMonoNerdFont-Bold.ttf
     [ -r "$font" ] || return
-    local P=20 K=3 base adv x0=4 rx cx w t='Aura adOS   Intelligence is in simplicity'
+    local P=13 K=2 base adv x0=3 rx cx w t='Aura adOS   Intelligence is in simplicity'
     base="$(magick -background none -font "$font" -pointsize $P label:AAAAAAAAAA -format %w info:)" || return
     # monospace: every glyph advances the same, so positions are arithmetic.
     read -r adv rx cx w <<<"$(awk -v b="$base" -v k=$K -v x0=$x0 -v n=${#t} 'BEGIN{
@@ -113,10 +113,10 @@ tagline() {
         printf "%.2f %.1f %.1f %d", adv, x0 + 2*adv, x0 + 38*adv - k, x0*2 + n*adv }')"
     # the underline runs from the r of "Aura" to the last c of "simplicity"
     mkdir -p "$(dirname "$out")" "$(dirname "$stamp")"
-    magick -size "${w}x34" xc:none -font "$font" -pointsize $P -kerning $K -gravity northwest \
+    magick -size "${w}x22" xc:none -font "$font" -pointsize $P -kerning $K -gravity northwest \
         -fill "$accent" -annotate "+${x0}+2" 'Aura adOS' \
         -fill "$muted" -annotate "+$(awk -v a="$adv" -v x=$x0 'BEGIN{printf "%d", x+12*a}')+2" 'Intelligence is in simplicity' \
-        -fill "$accent" -draw "rectangle $rx,29 $cx,30" \
+        -fill "$accent" -draw "rectangle $rx,18 $cx,19" \
         -rotate -90 +repage "png:$out.new" && mv "$out.new" "$out" || return
     printf '%s' "$want" > "$stamp"
     # waybar only rereads a background image on reload

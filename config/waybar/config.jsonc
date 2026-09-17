@@ -140,20 +140,20 @@
       "format-no-controller": "",
       "tooltip-format-connected": "{device_enumerate}",
       "tooltip-format-enumerate-connected": "{device_alias} {device_address}",
-      "on-click": "aura-os-settings bluetooth"
+      "on-click": "$HOME/.local/bin/aura-bluetooth"
     },
     "network": {
       "format-wifi": "wifi {essid} {signalStrength}%",
       "format-ethernet": "eth {ifname}",
       "format-disconnected": "net off",
       "tooltip-format": "{ifname} {ipaddr}/{cidr} via {gwaddr}",
-      "on-click": "aura-os-settings wifi"
+      "on-click": "$HOME/.local/bin/aura-wifi"
     },
     "wireplumber": {
       "format": "vol {volume}%",
       "format-muted": "vol mute",
       "scroll-step": 5,
-      "on-click": "aura-os-settings sound",
+      "on-click": "$HOME/.local/bin/aura-audio",
       "on-click-right": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"
     },
     "custom/clip": {
@@ -176,7 +176,7 @@
         }
       },
       "actions": { "on-scroll-up": "shift_up", "on-scroll-down": "shift_down" },
-      "on-click": "aura-term --app-id=aura-float -e aura-os-calendar"
+      "on-click": "$HOME/.local/bin/aura-calendar"
     }
   },
   {
@@ -189,9 +189,7 @@
     "modules-left": ["custom/spaces", "custom/sysgraph", "custom/procs"],
     "modules-center": ["custom/recent"],
     "modules-right": ["custom/agents", "custom/llm"],
-    // The system block: cpu, ram, gpu, temperatures, and what the
-    // machine costs to run. The only polled module in the bar — none of
-    // these have a change event — one /proc + /sys read every 3 s.
+    // The system block: cpu, ram, gpu, temperatures, power (aura-os-sysgraph).
     // Under the graphs: the running processes, pick one to end it.
     "custom/procs": {
       "format": "\u25b8 processes  (end one)",
@@ -202,13 +200,13 @@
       "on-click-right": "$HOME/.local/bin/aura-os-procs cpu"
     },
     "custom/sysgraph": {
-      "exec": "aura-os-sysgraph",
+      "exec": "$HOME/.local/bin/aura-os-sysgraph",
       "return-type": "json",
       "interval": 3,
       "escape": false,
       "align": 0,
       "justify": "left",
-      "on-click": "aura-term --app-id=aura-float -e btop"
+      "on-click": "$HOME/.local/bin/aura-os-popup btop"
     },
     // Last used anything: $ command, d folder, f file, @ address, a app.
     "custom/recent": {
@@ -230,17 +228,18 @@
       "tooltip": false
     },
     // The local model, under the agent list. Reads a cache — measuring
-    // costs tokens, so only a click does that.
+    // costs tokens, so only a click does that. Right-click picks the model.
     "custom/llm": {
-      "exec": "aura-os-llmtest status",
+      "exec": "$HOME/.local/bin/aura-os-llmtest status",
       "return-type": "json",
       "interval": 30,
       "escape": false,
       "align": 0,
       "justify": "left",
-      "on-click": "aura-term --app-id=aura-float -e sh -c 'aura-os-llmtest; printf \"\\n[any key]\"; read -rsn1'",
-      "on-click-right": "aura-os-llmtest pick"
+      "on-click": "$HOME/.local/bin/aura-os-popup bash -c '$HOME/.local/bin/aura-os-llmtest; printf \"\\n[any key]\"; read -rsn1'",
+      "on-click-right": "$HOME/.local/bin/aura-os-llmtest pick"
     },
+
     "custom/agents": {
       "align": 0,
       "justify": "left",

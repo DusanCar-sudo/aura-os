@@ -1,39 +1,181 @@
 #!/usr/bin/env bash
-# aura-os-switch — go to any open window from one list (Shift+Tab).
+# aura-os-switch — application switcher (Alt+Tab).
 #
-# sway's own focus is directional, which is fine inside one desk and
-# useless across nine. This is the flat view of everything open.
+#   aura-os-switch              fuzzel list of all windows → focus the picked one
+#   aura-os-switch last         instant switch to the most-recent window (no UI)
+#   aura-os-switch log <id>     (internal) log a focus event — called by
+#                               aura-os-status watch to build the MRU order
 #
-# Ordered by desk, not most-recently-used: sway's IPC has no global focus
-# timestamp, and the only way to get true MRU is a daemon subscribed to
-# window events — which this OS does not spend RAM on. Desk order is
-# stable, which for picking from a list beats a clever order that moves
-# under you. The window you are in is marked ▸.
-set -uo pipefail
-. "$(dirname "$(readlink -f "$0")")/aura-os-menu"
+# Windows sorted by most-recently-used. Tab names from tabs.json are shown
+# instead of bare workspace numbers. Shell + jq only, no python
+# (RAM/speed budget, AURA.md).
+set -euo pipefail
 
-command -v swaymsg >/dev/null && command -v jq >/dev/null || exit 0
+data="${XDG_DATA_HOME:-$HOME/.local/share}/aura-os"
+mru_file="$data/window-mru"
+max_mru=200
+cfg_dir="${XDG_CONFIG_HOME:-$HOME/.config}/aura-os"
+tabs_file="$cfg_dir/tabs.json"
 
-rows="$(swaymsg -t get_tree 2>/dev/null | jq -r '
-    [ .. | objects | select(.type == "workspace") ][]
-    | . as $ws
-    | [ $ws | recurse(.nodes[]?, .floating_nodes[]?)
-        | select(.name != null and (.nodes | length) == 0 and .type != "workspace") ]
-    | .[]
-    | "\($ws.name)\t\(.id)\t\(.focused)\t\(.app_id // .window_properties.class // "")\t\(.name)"
-')"
-[ -n "$rows" ] || exit 0
+# ── MRU tracking ─────────────────────────────────────────────────
 
-# Build the display rows once, keep the id alongside, pick, map back.
-table="$(while IFS=$'\t' read -r ws id focused app name; do
-             [ -n "${id:-}" ] || continue
-             printf '%s %-12s %s\t%s\n' \
-                 "$([ "$focused" = true ] && echo "▸" || echo " ")" \
-                 "${ws:0:12}" "${name:0:48}" "$id"
-         done <<<"$rows")"
+cmd_log() {
+    local id="${1:-}"
+    [[ ${id:-} =~ ^[0-9]+$ ]] || return 0
+    mkdir -p "$data"
+    printf '%s\t%s\n' "$(date +%s)" "$id" >> "$mru_file"
+    # Trim: deduplicate (keep newest per id), then cap at max_mru.
+    if [[ -f $mru_file ]] && (( $(wc -l < "$mru_file") > max_mru + 50 )); then
+        awk -F'\t' '{seen[$2] = $0} END {for (k in seen) print seen[k]}' "$mru_file" \
+            | sort -t$'\t' -k1,1nr | head -n "$max_mru" > "$mru_file.tmp"
+        mv "$mru_file.tmp" "$mru_file"
+    fi
+}
 
-pick="$(cut -f1 <<<"$table" | menu "windows")"
-[ -n "${pick:-}" ] || exit 0
+# ── window list from sway ────────────────────────────────────────
 
-id="$(grep -F "$pick"$'\t' <<<"$table" | cut -f2 | head -1)"
-[ -n "${id:-}" ] && swaymsg "[con_id=$id] focus" >/dev/null
+# Output: con_id<TAB>workspace_num<TAB>app_id<TAB>title
+all_windows() {
+    swaymsg -t get_tree | jq -r '
+        .nodes[].nodes[]
+        | select(.type == "workspace" and (.num // 0) > 0)
+        | .num as $ws
+        | [.. | objects | select(
+              (.type == "con" or .type == "floating_con")
+              and (.pid // 0) > 0
+              and (.name // "") != ""
+          )]
+        | .[]
+        | { id: .id, ws: $ws,
+            app: ((.app_id | select(. != ""))
+                  // (.window_properties.class | select(. != ""))
+                  // "?"),
+            title: .name }
+        | [.id, .ws, .app, .title] | @tsv
+    ' 2>/dev/null
+}
+
+# ── sort by MRU, focused window last ─────────────────────────────
+
+sort_mru() {
+    local wins="$1" focused_id="$2"
+    if [[ -f $mru_file ]] && [[ -s $mru_file ]]; then
+        awk -F'\t' -v fid="${focused_id:-0}" '
+            NR == FNR { last[$2] = $1; next }
+            {
+                n = split($0, a, "\t")
+                id = a[1]
+                if (id+0 == fid+0) ts = -1
+                else ts = (id in last) ? last[id] : 0
+                print ts "\t" $0
+            }' "$mru_file" <(printf '%s\n' "$wins") \
+        | sort -t$'\t' -k1,1nr -k3,3n | cut -f2-
+    else
+        printf '%s\n' "$wins" | sort -t$'\t' -k2,2n
+    fi
+}
+
+# ── get the focused window's con_id ──────────────────────────────
+
+focused_con_id() {
+    swaymsg -t get_tree | jq -r '
+        [.. | objects | select(.focused == true and (.pid // 0) > 0)]
+        | first | .id // empty' 2>/dev/null || true
+}
+
+# ── label for a workspace number ─────────────────────────────────
+
+ws_label() {
+    local n="$1" name
+    name="$(jq -r --arg n "$n" '.[$n].name // empty' "$tabs_file" 2>/dev/null || true)"
+    if [[ -n $name ]]; then
+        printf '%s %s' "$n" "$name"
+    else
+        printf '%s' "$n"
+    fi
+}
+
+# ── main: fuzzel picker ──────────────────────────────────────────
+
+cmd_switch() {
+    local wins focused_id sorted
+    wins="$(all_windows)"
+
+    if [[ -z ${wins:-} ]]; then
+        notify-send -t 1500 "Aura OS" "no windows open" 2>/dev/null || true
+        exit 0
+    fi
+
+    focused_id="$(focused_con_id)"
+    sorted="$(sort_mru "$wins" "$focused_id")"
+
+    # Format display lines: "ws_label  app — title"
+    # Use tab names from tabs.json where available.
+    local display
+    display="$(printf '%s\n' "$sorted" | while IFS=$'\t' read -r cid ws app title; do
+        label="$(ws_label "$ws")"
+        app="${app:0:16}"
+        if (( ${#title} > 50 )); then title="${title:0:47}…"; fi
+        printf '%s  %s — %s\n' "$label" "$app" "$title"
+    done)"
+
+    # Show in fuzzel (dmenu mode with index output)
+    local choice
+    choice="$(printf '%s\n' "$display" \
+        | fuzzel --dmenu --index --prompt "switch > " --width 64 --lines 15)" || exit 0
+    [[ ${choice:-} =~ ^[0-9]+$ ]] || exit 0
+
+    # Extract con_id and workspace from the sorted list.
+    local line con_id ws
+    line="$(printf '%s\n' "$sorted" | sed -n "$((choice + 1))p")"
+    con_id="$(cut -f1 <<<"$line")"
+    ws="$(cut -f2 <<<"$line")"
+
+    [[ -n ${con_id:-} ]] || exit 1
+
+    # Focus: switch workspace first, then focus the container.
+    swaymsg "workspace number $ws" >/dev/null 2>&1 || true
+    swaymsg "[con_id=$con_id]" focus >/dev/null 2>&1 || true
+
+    # Update MRU so this window tops the list next time.
+    cmd_log "$con_id"
+}
+
+# ── last: instant switch to most-recent window (no UI) ───────────
+
+cmd_last() {
+    local wins focused_id sorted line con_id ws
+    wins="$(all_windows)"
+    [[ -z ${wins:-} ]] && exit 0
+
+    focused_id="$(focused_con_id)"
+    sorted="$(sort_mru "$wins" "$focused_id")"
+
+    # First line after sorting is the most-recent non-focused window.
+    line="$(printf '%s\n' "$sorted" | head -n1)"
+    con_id="$(cut -f1 <<<"$line")"
+    ws="$(cut -f2 <<<"$line")"
+
+    [[ -n ${con_id:-} ]] || exit 0
+
+    swaymsg "workspace number $ws" >/dev/null 2>&1 || true
+    swaymsg "[con_id=$con_id]" focus >/dev/null 2>&1 || true
+    cmd_log "$con_id"
+}
+
+usage() {
+    cat >&2 <<'USAGE'
+usage: aura-os-switch [command]
+  (no args)  fuzzel list of all windows → focus the picked one
+  last       instant switch to the most-recent window (no UI)
+  log <id>   (internal) log a focus event for MRU tracking
+USAGE
+    exit 2
+}
+
+case "${1:-}" in
+    "")     cmd_switch ;;
+    last)   cmd_last ;;
+    log)    cmd_log "${2:-}" ;;
+    *)      usage ;;
+esac

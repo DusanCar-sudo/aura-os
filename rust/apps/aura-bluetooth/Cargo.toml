@@ -1,0 +1,10 @@
+[package]
+name = "aura-bluetooth"
+version = "0.1.0"
+edition = "2021"
+description = "Bluetooth for Aura OS: power, your devices, pair new ones — one click each."
+
+[dependencies]
+aura-ui = { path = "../../crates/aura-ui" }
+eframe = { workspace = true }
+egui = { workspace = true }

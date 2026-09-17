@@ -104,3 +104,36 @@ pub fn toggle_row(ui: &mut Ui, label: &str, detail: &str, on: bool) -> egui::Res
     }
     resp
 }
+
+/// A row with a small × at its right end (forget, remove, close).
+/// Returns (row clicked, × clicked) — never both.
+pub fn row_with_remove(ui: &mut Ui, icon: &str, label: &str, value: &str, remove_hint: &str) -> (bool, bool) {
+    let w = ui.available_width();
+    let (rect, resp) = ui.allocate_exact_size(vec2(w, ROW_H), Sense::click());
+    let x_rect = egui::Rect::from_min_max(egui::pos2(rect.right() - 24.0, rect.top()), rect.max);
+    let x_resp = ui.interact(x_rect, resp.id.with("remove"), Sense::click()).on_hover_text(remove_hint);
+    if resp.hovered() || x_resp.hovered() {
+        ui.painter().rect_filled(rect, theme::radius(), theme::surface0());
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+    ui.painter().text(
+        x_rect.center(),
+        egui::Align2::CENTER_CENTER,
+        "×",
+        egui::FontId::monospace(14.0),
+        if x_resp.hovered() { theme::bad() } else { theme::overlay0() },
+    );
+    let mut child = ui.new_child(
+        egui::UiBuilder::new()
+            .max_rect(egui::Rect::from_min_max(rect.min + vec2(8.0, 0.0), egui::pos2(x_rect.left() - 4.0, rect.max.y)))
+            .layout(Layout::left_to_right(Align::Center)),
+    );
+    child.label(RichText::new(icon).color(theme::accent()));
+    child.add_space(4.0);
+    child.label(RichText::new(label).color(theme::text()));
+    child.with_layout(Layout::right_to_left(Align::Center), |ui| {
+        ui.label(RichText::new(value).color(theme::subtext0()));
+    });
+    let x = x_resp.clicked();
+    (resp.clicked() && !x, x)
+}

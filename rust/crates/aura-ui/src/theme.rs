@@ -831,6 +831,9 @@ pub fn apply(ctx: &egui::Context, theme: &ThemeId) {
     style.spacing.interact_size.y = 24.0;
     // Terminals don't ease.
     style.animation_time = 0.0;
+    // Tools, not documents: text isn't selectable, so hovering a row shows
+    // the pointing hand of something you can click, never a text I-beam.
+    style.interaction.selectable_labels = false;
 
     ctx.set_style(style);
 }

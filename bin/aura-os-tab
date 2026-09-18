@@ -15,6 +15,7 @@
 # No polling: every change pokes waybar (RTMIN+8) so the labels re-run.
 # Shell + jq only, no python (RAM/speed budget, AURA.md).
 set -euo pipefail
+aura_icon="${XDG_DATA_HOME:-$HOME/.local/share}/aura-os/icons/aura.svg"   # themed by aura-os-theme
 
 cfg_dir="${XDG_CONFIG_HOME:-$HOME/.config}/aura-os"
 tabs_file="$cfg_dir/tabs.json"
@@ -88,7 +89,7 @@ cmd_new() {
     done
     if [[ -z $free ]]; then
         echo "aura-os-tab: no free tab slot (tabs 6-9 are all in use)" >&2
-        notify-send "Aura OS" "no free tab slot" 2>/dev/null || true
+        notify-send -i "$aura_icon" "Aura OS" "no free tab slot" 2>/dev/null || true
         exit 1
     fi
     swaymsg workspace number "$free" >/dev/null
@@ -122,7 +123,7 @@ cmd_close() {
           | ((.nodes // []) + (.floating_nodes // [])) ] | flatten | length')"
     if [[ ${wins:-0} -gt 0 ]]; then
         echo "aura-os-tab: tab $n has windows — close them with Super+Q first" >&2
-        notify-send "Aura OS" "tab $n has windows" 2>/dev/null || true
+        notify-send -i "$aura_icon" "Aura OS" "tab $n has windows" 2>/dev/null || true
         exit 1
     fi
     clear_tab "$n"

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-labelledby="title" color="#c9d4b8">
+  <title id="title">Settings</title>
+  <g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="square" stroke-linejoin="miter">
+    <path d="M4 7h16M4 12h16M4 17h16"/>
+    <path d="M9 5v4M15 10v4M11 15v4"/>
+  </g>
+</svg>

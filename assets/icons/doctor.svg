@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-labelledby="title" color="#c9d4b8">
+  <title id="title">System doctor</title>
+  <g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="square" stroke-linejoin="miter">
+    <path d="M12 3v8M8 7h8"/>
+    <path d="M3 17h4l2-5 3 7 2-4 2 2h5"/>
+  </g>
+</svg>

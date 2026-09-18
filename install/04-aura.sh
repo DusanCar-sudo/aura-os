@@ -31,3 +31,10 @@ for t in "$REPO"/themes/*/; do
         echo "04-aura: installed theme $t"
     fi
 done
+
+# Icons (aura-os-theme recolors copies into ~/.local/share/aura-os/icons).
+install -d /usr/share/aura-os/icons
+for i in "$REPO"/assets/icons/*.svg; do
+    cmp -s "$i" "/usr/share/aura-os/icons/$(basename "$i")" \
+        || { install -Dm644 "$i" "/usr/share/aura-os/icons/$(basename "$i")"; echo "04-aura: installed icon $(basename "$i")"; }
+done

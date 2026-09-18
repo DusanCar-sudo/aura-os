@@ -286,7 +286,130 @@ def v_minimal(W, H, title='AURA OS', tag="It's better."):
     return img
 
 
+# the brand sheet (charcoal, off-white, electric teal, soft magenta, lime):
+# g-signal's default, and what 'aura' means when themes/aura/ doesn't exist
+BRAND = {'bg': '#0b0c0e', 'bg_alt': '#14161a', 'border': '#262a2f', 'fg': '#ede9e0',
+         'fg_bright': '#ffffff', 'dim': '#565b61', 'muted': '#a7a9ac', 'accent': '#00e5d0',
+         'accent_bright': '#5ffbf1', 'red': '#ff6ac7', 'green': '#c6ff4d', 'yellow': '#ffd75e',
+         'blue': '#4da6ff', 'cyan': '#00e5d0', 'orange': '#ff9457'}
+
+
+def palette(name='aura'):
+    """themes/<name>/palette → {key: (r, g, b)}; 'aura' falls back to BRAND."""
+    f = os.path.join(REPO, 'themes', name, 'palette')
+    if name == 'aura' and not os.path.exists(f):
+        return {k: hexc(v) for k, v in BRAND.items()}
+    p = {}
+    with open(f) as f:
+        for line in f:
+            k, _, v = line.strip().partition('=')
+            if v.startswith('#'):
+                p[k] = hexc(v)
+    return p
+
+
+def mark(d, ox, oy, s, sun, ground, sw=1.8):
+    """assets/icons/aura.svg drawn at scale s (24-unit grid): square caps, no blur."""
+    w = sw * s
+    P = lambda x, y: (ox + x * s, oy + y * s)
+
+    def seg(x1, y1, x2, y2, fill):   # a line with square caps = a rotated rectangle
+        dx, dy = x2 - x1, y2 - y1
+        n = math.hypot(dx, dy)
+        ux, uy = dx / n * sw / 2, dy / n * sw / 2
+        px, py = -uy, ux
+        a, b = (x1 - ux, y1 - uy), (x2 + ux, y2 + uy)
+        d.polygon([P(a[0] + px, a[1] + py), P(b[0] + px, b[1] + py),
+                   P(b[0] - px, b[1] - py), P(a[0] - px, a[1] - py)], fill=fill)
+
+    cx, cy, r = 12, 10.5, 5.5
+    d.ellipse([*P(cx - r - sw / 2, cy - r - sw / 2), *P(cx + r + sw / 2, cy + r + sw / 2)], fill=sun)
+    d.ellipse([*P(cx - r + sw / 2, cy - r + sw / 2), *P(cx + r - sw / 2, cy + r - sw / 2)], fill=BG_SIG[0])
+    for x1, y1, x2, y2 in [(12, 2, 12, 4), (3.5, 10.5, 5.5, 10.5), (18.5, 10.5, 20.5, 10.5),
+                           (5.9, 4.4, 7.3, 5.8), (18.1, 4.4, 16.7, 5.8),
+                           (16.7, 15.2, 18.1, 16.6), (7.3, 15.2, 5.9, 16.6)]:
+        seg(x1, y1, x2, y2, sun)
+    seg(12, 17, 12, 20, sun)
+    seg(7, 18.5, 17, 18.5, ground)
+    seg(4, 21, 20, 21, ground)
+
+
+BG_SIG = [None]
+
+
+def v_signal(W, H, theme='aura'):
+    """signal: the aura.svg mark in one focused sway pane, themes/<theme> palette,
+    no blur. The bar uses the tty loading line's look (bin/aura-os-splash)."""
+    c = palette(theme)
+    BG_SIG[0] = c['bg']
+    S = 3                                    # supersample, then downscale = clean edges
+    img = Image.new('RGB', (W * S, H * S), c['bg'])
+    d = ImageDraw.Draw(img)
+    u = lambda v: int(v * S)
+    F = lambda name, px: font(name, u(px))
+
+    # dot grid: the desk under the panes
+    step = H / 25
+    for gy in range(1, 25):
+        for gx in range(1, int(W / step) + 1):
+            x, y = gx * step, gy * step
+            d.rectangle([u(x - 1), u(y - 1), u(x + 1), u(y + 1)], fill=c['border'])
+
+    # the focused pane: 2 px accent border, a text title bar, square corners
+    x0, y0, x1, y1 = W * 0.125, H * 0.17, W * 0.875, H * 0.83
+    bar = H * 0.045
+    d.rectangle([u(x0), u(y0), u(x1), u(y1)], fill=c['bg'])
+    d.rectangle([u(x0), u(y0), u(x1), u(y0 + bar)], fill=c['bg_alt'])
+    d.rectangle([u(x0), u(y0), u(x1), u(y1)], outline=c['accent'], width=u(2))
+    d.line([(u(x0), u(y0 + bar)), (u(x1), u(y0 + bar))], fill=c['border'], width=u(2))
+    small = F('ShareTech', H * 0.02)
+    d.text((u(x0 + H * 0.02), u(y0 + bar / 2)), 'aura — boot', font=small, fill=c['muted'], anchor='lm')
+    d.text((u(x1 - H * 0.02), u(y0 + bar / 2)), '[1] agent', font=small, fill=c['dim'], anchor='rm')
+
+    # the mark, left
+    ms = H * 0.25 / 24                       # big mark: thinner stroke, or it reads as a gear
+    my = y0 + bar + H * 0.06
+    mark(d, u(x0 + W * 0.05), u(my), ms * S, c['accent'], c['red'], sw=1.1)
+
+    # name, right of the mark, centred on the sun
+    tx = x0 + W * 0.05 + 24 * ms + W * 0.045
+    big = F('Audiowide', H * 0.12)
+    ty = my + 10.5 * ms - H * 0.03
+    wl = spaced(d, (u(tx), u(ty)), 'AURA', big, c['fg'], 0.04, anchor='lm')
+    spaced(d, (u(tx) + wl + u(H * 0.025), u(ty + H * 0.012)), 'adOS', F('Audiowide', H * 0.065), c['red'], 0.02, anchor='lm')
+    spaced(d, (u(tx + 4), u(ty + H * 0.1)), 'AGENT-DRIVEN OPERATING SYSTEM', F('Michroma', H * 0.019), c['muted'], 0.3, anchor='lm')
+    d.text((u(tx + 4), u(ty + H * 0.16)), 'text over icons · square panes · built by and for agents',
+           font=F('ShareTech', H * 0.022), fill=c['dim'], anchor='lm')
+
+    # boot log + the loading line, same glyphs as the tty splash
+    mono = F('ShareTech', H * 0.024)
+    lx, ly, lh = x0 + W * 0.05, y1 - H * 0.22, H * 0.04
+    for i, (mk, txt, col) in enumerate([('+', 'kernel      aura-os.efi', c['fg']),
+                                        ('+', 'desk        sway · waybar · aura-term', c['fg']),
+                                        ('>', 'Initializing agent services...', c['fg_bright'])]):
+        d.text((u(lx), u(ly + i * lh)), mk, font=mono, fill=c['accent'] if mk == '+' else c['red'], anchor='lm')
+        d.text((u(lx + H * 0.03), u(ly + i * lh)), txt, font=mono, fill=col, anchor='lm')
+    by = ly + 3 * lh + H * 0.015
+    cells, filled = 36, 12
+    cw = (x1 - lx - W * 0.055 - H * 0.12) / cells
+    d.text((u(lx), u(by)), '[', font=mono, fill=c['dim'], anchor='lm')
+    bx = lx + H * 0.018
+    for i in range(cells):
+        if i < filled:
+            col = c['accent'] if i * 2 < cells else c['red']
+            d.rectangle([u(bx + i * cw), u(by - H * 0.011), u(bx + (i + 1) * cw), u(by + H * 0.011)], fill=col)
+    d.rectangle([u(bx + filled * cw), u(by - H * 0.011), u(bx + filled * cw + cw * 0.5), u(by + H * 0.011)], fill=c['fg_bright'])
+    d.text((u(bx + cells * cw + H * 0.006), u(by)), ']', font=mono, fill=c['dim'], anchor='lm')
+    d.text((u(bx + cells * cw + H * 0.03), u(by)), ' 33%', font=mono, fill=c['dim'], anchor='lm')
+
+    # the desk's bottom edge: tab labels, like the bar that is about to appear
+    d.text((u(W * 0.125), u(H * 0.91)), '1 agent   2 code   3 web', font=small, fill=c['dim'], anchor='lm')
+    d.text((u(W * 0.875), u(H * 0.91)), 'ship it.', font=small, fill=c['green'], anchor='rm')
+    return img.resize((W, H), Image.LANCZOS)
+
+
 VARIANTS = {
+    'g-signal':       lambda W, H: v_signal(W, H),
     'a-horizon':      lambda W, H: v_horizon(W, H),
     'b-chrome':       lambda W, H: v_chrome(W, H),
     'c-mark-ados':    lambda W, H: v_mark(W, H),

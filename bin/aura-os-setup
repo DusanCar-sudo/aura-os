@@ -11,6 +11,7 @@
 # Needs sudo for language/time/name; the password is asked as a tile too
 # (aura-os-askpass). Nothing here is required: "done" is always allowed.
 set -uo pipefail
+aura_icon="${XDG_DATA_HOME:-$HOME/.local/share}/aura-os/icons/aura.svg"   # themed by aura-os-theme
 
 export SUDO_ASKPASS="$(command -v aura-os-askpass || echo "$(dirname "$0")/aura-os-askpass")"
 state_dir="${XDG_CONFIG_HOME:-$HOME/.config}/aura-os"
@@ -20,7 +21,7 @@ mkdir -p "$state_dir"
 menu() {  # menu <prompt> <lines> — fuzzel in the launcher's look
     fuzzel --dmenu --prompt "$1 > " --lines "${2:-10}" --width 60
 }
-note() { notify-send -t 2500 "Aura OS setup" "$1" 2>/dev/null || true; }
+note() { notify-send -t 2500 -i "$aura_icon" "Aura OS setup" "$1" 2>/dev/null || true; }
 root() { sudo -A "$@"; }
 
 # ---------------------------------------------------------------- now

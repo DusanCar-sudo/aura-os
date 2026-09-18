@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-labelledby="title" color="#c9d4b8">
+  <title id="title">Files</title>
+  <g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="square" stroke-linejoin="miter">
+    <path d="M6 3h8l4 4v14H6zM14 3v4h4"/>
+    <path d="M3 7v14h3M9 11h6M9 15h6M9 19h4"/>
+  </g>
+</svg>

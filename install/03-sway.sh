@@ -77,6 +77,23 @@ if [[ -e /etc/sddm.conf.d/10-aura.conf ]]; then
     echo "03-sway: removed stale /etc/sddm.conf.d/10-aura.conf (superseded by greetd)"
 fi
 
+# Boot splash: the mock's loading line, real — fills with actual boot
+# progress on tty1, then exits and greetd (ordered after it) takes over.
+if [[ -f /usr/lib/systemd/system/greetd.service ]]; then
+    splash_unit=/etc/systemd/system/aura-os-splash.service
+    if [[ "$(cat "$splash_unit" 2>/dev/null)" != "$(cat "$REPO/config/systemd/aura-os-splash.service")" ]]; then
+        install -Dm644 "$REPO/config/systemd/aura-os-splash.service" "$splash_unit"
+        systemctl daemon-reload
+        echo "03-sway: wrote $splash_unit"
+    else
+        echo "03-sway: up to date: $splash_unit"
+    fi
+    if ! systemctl is-enabled --quiet aura-os-splash 2>/dev/null; then
+        systemctl enable aura-os-splash
+        echo "03-sway: enabled aura-os-splash"
+    fi
+fi
+
 # greetd: the greeter user, the config, the service.
 if [[ -f /usr/lib/systemd/system/greetd.service ]]; then
     if ! id greeter >/dev/null 2>&1; then

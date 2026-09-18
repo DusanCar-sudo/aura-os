@@ -1,0 +1,15 @@
+[Unit]
+Description=Aura adOS boot splash — loading line on tty1
+Documentation=man:aura-os-splash(1)
+After=basic.target
+# not Requires: if the splash fails or stalls, greetd must still come up
+Before=greetd.service getty@tty1.service
+ConditionPathExists=!/etc/aura-os-firstboot.env
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/aura-os-splash
+TimeoutSec=120
+
+[Install]
+WantedBy=multi-user.target

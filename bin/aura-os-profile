@@ -6,12 +6,13 @@
 #   aura-os-profile cycle       cycle to the next profile (keybind)
 #   aura-os-profile performance|balanced|power-saver   set directly
 set -euo pipefail
+aura_icon="${XDG_DATA_HOME:-$HOME/.local/share}/aura-os/icons/aura.svg"   # themed by aura-os-theme
 
 order=(performance balanced power-saver)
 
 cur() { powerprofilesctl get; }
 
-notify() { notify-send -a "Aura" -t 1500 "Power profile: $1" 2>/dev/null || true; }
+notify() { notify-send -a "Aura" -i "$aura_icon" -t 1500 "Power profile: $1" 2>/dev/null || true; }
 
 set_profile() {
     powerprofilesctl set "$1"

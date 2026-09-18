@@ -14,12 +14,15 @@
 #   ~/.config/sway/config.d/50-theme.conf   ~/.config/waybar/theme.css
 #   ~/.config/aura-term/theme.ini           ~/.config/fuzzel/theme.ini
 #   ~/.config/aura-os/colors.sed   (sidebar scripts: purplerain hex → theme)
+#   ~/.local/share/aura-os/icons/*.svg  (fg color; aura.svg in accent)
 # Tab colors (Super+Shift+C) are fixed names and don't change with themes.
 set -euo pipefail
 
 cfg="${XDG_CONFIG_HOME:-$HOME/.config}"
 state="$cfg/aura-os/theme"
 dirs=("$cfg/aura-os/themes" /usr/share/aura-os/themes "${AURA_OS_REPO:-$HOME/aura-os}/themes")
+icon_src=(/usr/share/aura-os/icons "${AURA_OS_REPO:-$HOME/aura-os}/assets/icons")
+icon_out="${XDG_DATA_HOME:-$HOME/.local/share}/aura-os/icons"
 
 theme_dir() { local d; for d in "${dirs[@]}"; do [[ -f $d/$1/palette ]] && { echo "$d/$1"; return; }; done; return 1; }
 names() { local d; for d in "${dirs[@]}"; do [[ -d $d ]] && ls "$d"; done | sort -u; }
@@ -216,6 +219,15 @@ EOF
         fi
     fi
 
+    # icons: each SVG draws in currentColor; swap the root color="#..." only.
+    local src i c
+    for src in "${icon_src[@]}"; do [[ -d $src ]] && break; done
+    if [[ -d $src ]]; then
+        for i in "$src"/*.svg; do
+            c=$c_fg; [[ ${i##*/} == aura.svg ]] && c=$c_accent
+            sed -E "0,/color=\"#[0-9a-fA-F]{6}\"/s//color=\"$c\"/" "$i" | put "$icon_out/${i##*/}"
+        done
+    fi
     printf '%s\n' "$1" | put "$state"
 
     # live: sway colors + background, waybar CSS, sidebar labels.

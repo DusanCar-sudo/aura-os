@@ -17,6 +17,7 @@
 # Every call is logged: ~/.local/state/aura-os/mcp.log
 # (time, agent from clientInfo, tool, arguments with secrets masked, ok/error).
 set -uo pipefail
+aura_icon="${XDG_DATA_HOME:-$HOME/.local/share}/aura-os/icons/aura.svg"   # themed by aura-os-theme
 
 VERSION="0.1.0"
 PROTO_DEFAULT="2025-06-18"
@@ -238,7 +239,7 @@ t_sidebar_toggle() { aura-os-tab sidebar toggle; }
 
 t_notify() {
     local t b; t="$(arg title)"; b="$(arg body)"
-    notify-send -a "${agent}" "$t" "$b" && echo "notified"
+    notify-send -a "${agent}" -i "$aura_icon" "$t" "$b" && echo "notified"
 }
 
 # ── JSON-RPC loop ───────────────────────────────────────────────────────

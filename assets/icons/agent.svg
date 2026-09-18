@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-labelledby="title" color="#c9d4b8">
+  <title id="title">Agent</title>
+  <g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="square" stroke-linejoin="miter">
+    <rect x="5" y="7" width="14" height="12"/>
+    <path d="M9 7V5h6v2M12 3v2M3 12h2M19 12h2M8 11h2M14 11h2M9 16h6"/>
+  </g>
+</svg>

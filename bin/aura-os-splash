@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# aura-os-splash — the boot-screen mock's loading line, for real.
+#
+# A systemd oneshot on tty1 (ordered before greetd): draws the aura adOS
+# header and one loading line that fills with actual boot progress —
+# sysinit.target, basic.target, multi-user.target — then exits and hands
+# tty1 to greetd. Never blocks boot: it is only ordered before greetd,
+# not required by it, and any problem means it leaves quietly.
+# No plymouth, no daemon — a bash loop for the last seconds of boot, gone
+# after. The UKI splash (assets/splash/) covers the kernel phase before
+# this; the static bar in tools/make-splash.py stays a picture.
+set -uo pipefail
+
+[[ -e /etc/aura-os-firstboot.env ]] && exit 0   # firstboot owns tty1
+systemctl is-active --quiet greetd 2>/dev/null && exit 0
+exec >/dev/tty1 2>/dev/null </dev/null || exit 0
+setfont ter-132b 2>/dev/null || true
+dmesg -n 1 2>/dev/null   # no kernel messages over the loading line
+
+# the Linux console: 16 colors — teal ~ bright cyan, magenta ~ bright magenta
+A=$'\e[96m'; M=$'\e[95m'; F=$'\e[97m'; D=$'\e[90m'; R=$'\e[0m'; B=$'\e[1m'
+
+width=36
+# never wait on multi-user/greetd: greetd is ordered after us, so that
+# would deadlock boot until the timeout. Two real milestones, then a
+# short settle run to full while the last services start.
+milestones=(sysinit.target basic.target)
+msgs=("Initializing agent services..." "Loading system modules..." "A more capable world awaits.")
+settle_frames=13   # ~2 s of 0.15 s frames after basic.target
+
+clear
+printf '\n\n\n'
+printf '  %s%saura ad%s%sOS%s\n' "$B$F" '' "$A" "$M" "$R"
+printf '  %sAgent-Driven OS%s\n\n' "$D" "$R"
+
+frame() {   # frame <filled> <pulse-char> <msg> — one line, redrawn in place
+    local filled=$1 pc=$2 msg=$3 i
+    printf '\r\e[2K  %s%-36s%s %s[%s' "$D" "$msg" "$R" "$D" "$R"
+    for ((i = 0; i < width; i++)); do
+        if ((i < filled)); then
+            ((i * 2 < width)) && printf '%s█' "$A" || printf '%s█' "$M"
+        elif ((i == filled)); then
+            printf '%s%s' "$F" "$pc"   # the leading edge pulses
+        else
+            printf ' '
+        fi
+    done
+    printf '%s]%s %s%3d%%%s' "$D" "$R" "$D" "$((filled * 100 / width))" "$R"
+}
+
+pulse=('█' '▓' '▒' '▓')
+deadline=$((SECONDS + 110))   # boot stalls? leave anyway — never block
+frame_i=0
+settled=0
+while :; do
+    stage=0
+    for m in "${milestones[@]}"; do
+        systemctl is-active --quiet "$m" 2>/dev/null || break
+        stage=$((stage + 1))
+    done
+    if ((stage < ${#milestones[@]})); then
+        frame "$((stage * width / 3))" "${pulse[$((frame_i % 4))]}" "${msgs[$stage]}"
+    else
+        # milestones done: glide to full over the settle window, finish
+        settled=$((settled + 1))
+        from=$((2 * width / 3))
+        frame "$((from + (width - from) * settled / settle_frames))" \
+            "${pulse[$((frame_i % 4))]}" "${msgs[$stage]}"
+        if ((settled >= settle_frames)); then
+            printf '\n\n  %s+%s %sready%s\n' "$A" "$R" "$D" "$R"
+            sleep 1
+            exit 0
+        fi
+    fi
+    frame_i=$((frame_i + 1))
+    ((SECONDS >= deadline)) && exit 0
+    sleep 0.15
+done

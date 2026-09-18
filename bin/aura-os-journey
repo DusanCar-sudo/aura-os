@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# aura-os-journey — Aura's learning journey, full screen (Super+J).
+#
+#   aura-os-journey            open it in a floating aura-term window
+#   aura-os-journey --inline   run it in this terminal (what the window runs)
+#
+# The view itself is Aura Code's `aura journey` (chart of runs per day, list
+# of everything she did and learned, Enter opens one). An aura-code without
+# it would take "journey" as a task and send it to the model, so check first
+# and say what to update instead.
+set -euo pipefail
+
+has_journey() {
+    local bin
+    bin="$(readlink -f "$(command -v aura 2>/dev/null)" 2>/dev/null)" || return 1
+    [[ -f "$(dirname "$bin")/journey-view.js" ]]
+}
+
+if [[ ${1:-} != --inline ]]; then
+    exec aura-term --app-id=aura-journey "$0" --inline
+fi
+
+if ! has_journey; then
+    v="$(aura --version 2>/dev/null | head -n1 || true)"
+    printf '\n  The learning journey needs a newer Aura Code (installed: %s).\n' "${v:-none}"
+    printf '  Update with install/06-aura-code.sh once the release is out.\n\n  Press any key to close.'
+    read -rsn1 || true
+    exit 1
+fi
+exec aura journey "${AURA_JOURNEY_DAYS:-30}"

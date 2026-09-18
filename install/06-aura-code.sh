@@ -10,7 +10,7 @@ if [[ $EUID -ne 0 ]]; then
     exec sudo -E "$(readlink -f "$0")" "$@"
 fi
 
-want="${AURA_CODE_VERSION:-0.19.0}"
+want="${AURA_CODE_VERSION:-0.19.1}"
 pacman -S --needed --noconfirm nodejs npm >/dev/null
 
 have="$(npm ls -g --depth=0 --json 2>/dev/null | jq -r '.dependencies["aura-code"].version // empty')"

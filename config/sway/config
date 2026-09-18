@@ -73,13 +73,11 @@ for_window [app_id="aura-float"] floating enable, resize set 960 600, move posit
 # Aura native tools (rust/apps): float centered like popups, never shove the layout
 for_window [app_id="^aura-(optanomai|settings|bluetooth|wifi|audio|look|appearance)$"] floating enable, move position center
 
-# Keyboard: US, Serbian Latin, Serbian Cyrillic — Alt+Shift cycles.
+# Keyboard: US QWERTY only, no layout switching.
 # aura-os-setup writes config.d/60-keyboard.conf, included below, so its
 # choice wins over this default.
 input type:keyboard {
-    xkb_layout us,rs,rs
-    xkb_variant ,latin,
-    xkb_options grp:alt_shift_toggle
+    xkb_layout us
 }
 
 # Last on purpose: files in config.d override everything above.

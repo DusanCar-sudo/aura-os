@@ -125,6 +125,132 @@ fn fmt(v: f64) -> String {
     if s == "-0" { "0".into() } else { s.to_string() }
 }
 
+// ── speech → expression ─────────────────────────────────────────────────────
+
+fn small_number(w: &str) -> Option<f64> {
+    const ONES: [&str; 20] = [
+        "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+        "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen",
+    ];
+    const TENS: [&str; 8] = ["twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"];
+    if let Some(i) = ONES.iter().position(|o| *o == w) {
+        return Some(i as f64);
+    }
+    TENS.iter().position(|t| *t == w).map(|i| (i as f64 + 2.0) * 10.0)
+}
+
+/// "twelve times seven" → "12×7", "15 percent of 200" → "15%×200".
+/// Digits and symbols Whisper already wrote pass straight through.
+fn spoken_to_expr(said: &str) -> String {
+    let lower = said.to_lowercase().replace('-', " ");
+    let mut clean = String::new();
+    for c in lower.chars() {
+        // keep digits/operators glued, split everything else into words
+        if c.is_alphanumeric() || c == '.' || c == ',' || c == ' ' {
+            clean.push(c);
+        } else if "+*/×÷−^%()=x".contains(c) {
+            clean.push(' ');
+            clean.push(c);
+            clean.push(' ');
+        } else {
+            clean.push(' ');
+        }
+    }
+    let words: Vec<&str> = clean.split_whitespace().collect();
+
+    let mut out = String::new();
+    // a number being spelled out: "two hundred thirty four" → 234
+    let (mut total, mut cur, mut in_num) = (0.0_f64, 0.0_f64, false);
+    let mut decimals: Option<String> = None;
+    let flush = |out: &mut String, total: &mut f64, cur: &mut f64, in_num: &mut bool, dec: &mut Option<String>| {
+        if *in_num {
+            out.push_str(&fmt(*total + *cur));
+            if let Some(d) = dec.take() {
+                out.push('.');
+                out.push_str(&d);
+            }
+        }
+        *total = 0.0;
+        *cur = 0.0;
+        *in_num = false;
+    };
+
+    let mut i = 0;
+    while i < words.len() {
+        let w = words[i];
+        let next = words.get(i + 1).copied().unwrap_or("");
+        if let Some(d) = decimals.as_mut() {
+            if let Some(n) = small_number(w).filter(|n| *n < 10.0) {
+                d.push_str(&fmt(n));
+                i += 1;
+                continue;
+            }
+        }
+        if let Some(n) = small_number(w) {
+            cur += n;
+            in_num = true;
+        } else if w == "hundred" && in_num {
+            cur = cur.max(1.0) * 100.0;
+        } else if (w == "thousand" || w == "million") && in_num {
+            total += cur.max(1.0) * if w == "thousand" { 1e3 } else { 1e6 };
+            cur = 0.0;
+        } else if (w == "point" || w == "dot") && in_num {
+            decimals = Some(String::new());
+        } else if w == "and" && in_num && small_number(next).is_some() {
+            // "one hundred and five"
+        } else {
+            flush(&mut out, &mut total, &mut cur, &mut in_num, &mut decimals);
+            let op = match (w, next) {
+                ("plus" | "add" | "+", _) => "+",
+                ("minus" | "subtract" | "less" | "negative", _) => "−",
+                ("times" | "x" | "×" | "*", _) => "×",
+                ("multiplied" | "multiply", _) => { if next == "by" { i += 1; } "×" }
+                ("divided" | "divide", _) => { if next == "by" { i += 1; } "÷" }
+                ("over" | "/" | "÷", _) => "÷",
+                ("percent" | "%", "of") => { i += 1; "%×" }
+                ("percent" | "%", _) => "%",
+                ("squared", _) => "^2",
+                ("cubed", _) => "^3",
+                ("to", "the") if words.get(i + 2) == Some(&"power") => { i += 3; if words.get(i) == Some(&"of") { i += 1; } out.push('^'); continue; }
+                ("power" | "^", _) => { if next == "of" { i += 1; } "^" }
+                ("open" | "(", _) => { if matches!(next, "bracket" | "brackets" | "parenthesis") { i += 1; } "(" }
+                ("close" | ")", _) => { if matches!(next, "bracket" | "brackets" | "parenthesis") { i += 1; } ")" }
+                (t, _) if t.chars().next().is_some_and(|c| c.is_ascii_digit() || c == '.') => {
+                    out.push_str(&t.replace(',', ""));
+                    i += 1;
+                    continue;
+                }
+                _ => "", // "what's", "is", "equals", "of"… ignored
+            };
+            out.push_str(op);
+        }
+        i += 1;
+    }
+    flush(&mut out, &mut total, &mut cur, &mut in_num, &mut decimals);
+    out
+}
+
+/// Runs aura-calc-listen with `arg`, returns its stdout (or stderr as Err).
+fn listen(arg: &str) -> Result<String, String> {
+    let o = std::process::Command::new("aura-calc-listen")
+        .arg(arg)
+        .stdin(std::process::Stdio::null())
+        .output()
+        .map_err(|_| "aura-calc-listen is not installed".to_string())?;
+    if o.status.success() {
+        Ok(String::from_utf8_lossy(&o.stdout).trim().to_string())
+    } else {
+        Err(String::from_utf8_lossy(&o.stderr).trim().to_string())
+    }
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Mic {
+    Idle,
+    Recording,
+    Thinking,
+}
+
 // ── the window ──────────────────────────────────────────────────────────────
 
 const KEYS: [[&str; 4]; 5] = [
@@ -141,6 +267,10 @@ struct App {
     error: String,
     theme_id: theme::ThemeId,
     next_theme_check: f64,
+    mic: Mic,
+    /// what the transcriber heard, handed back from its thread
+    heard: std::sync::Arc<std::sync::Mutex<Option<Result<String, String>>>>,
+    said: String,
 }
 
 impl App {
@@ -148,7 +278,16 @@ impl App {
         theme::install_fonts(&cc.egui_ctx);
         let theme_id = theme::ThemeId::detect();
         theme::apply(&cc.egui_ctx, &theme_id);
-        Self { input: String::new(), history: Vec::new(), error: String::new(), theme_id, next_theme_check: 0.0 }
+        Self {
+            input: String::new(),
+            history: Vec::new(),
+            error: String::new(),
+            theme_id,
+            next_theme_check: 0.0,
+            mic: Mic::Idle,
+            heard: Default::default(),
+            said: String::new(),
+        }
     }
 
     fn equals(&mut self) {
@@ -171,6 +310,44 @@ impl App {
             "⌫" => { self.input.pop(); }
             "=" => self.equals(),
             k => self.input.push_str(k),
+        }
+    }
+
+    /// Mic: first click records, second click transcribes and solves.
+    fn toggle_mic(&mut self, ctx: &egui::Context) {
+        match self.mic {
+            Mic::Idle => match listen("start") {
+                Ok(_) => { self.mic = Mic::Recording; self.error.clear(); self.said.clear(); }
+                Err(e) => self.error = e,
+            },
+            Mic::Recording => {
+                self.mic = Mic::Thinking;
+                let (slot, ctx) = (self.heard.clone(), ctx.clone());
+                std::thread::spawn(move || {
+                    *slot.lock().unwrap() = Some(listen("stop"));
+                    ctx.request_repaint();
+                });
+            }
+            Mic::Thinking => {}
+        }
+    }
+
+    fn take_heard(&mut self) {
+        let Some(res) = self.heard.lock().unwrap().take() else { return };
+        self.mic = Mic::Idle;
+        match res {
+            Ok(text) if !text.is_empty() => {
+                self.said = text.clone();
+                let expr = spoken_to_expr(&text);
+                if expr.is_empty() {
+                    self.error = "didn't hear a calculation".into();
+                } else {
+                    self.input = expr;
+                    self.equals();
+                }
+            }
+            Ok(_) => self.error = "didn't hear anything".into(),
+            Err(e) => self.error = if e.is_empty() { "microphone failed".into() } else { e },
         }
     }
 
@@ -209,6 +386,11 @@ impl eframe::App for App {
             ctx.request_repaint_after(std::time::Duration::from_secs(2));
         }
 
+        self.take_heard();
+        if self.mic == Mic::Recording {
+            ctx.request_repaint_after(std::time::Duration::from_millis(250)); // blink
+        }
+
         // Keyboard: typing goes straight into the expression.
         let (text, enter, back, esc, del) = ctx.input(|i| {
             let mut t = String::new();
@@ -226,6 +408,7 @@ impl eframe::App for App {
         if back { self.press("⌫"); }
         if del { self.press("C"); }
         if enter || text.contains('=') { self.equals(); }
+        if text.contains(' ') { self.toggle_mic(ctx); }
         if esc {
             if self.input.is_empty() {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -237,7 +420,7 @@ impl eframe::App for App {
         egui::CentralPanel::default()
             .frame(Frame::new().fill(theme::base()).inner_margin(Margin::same(12)))
             .show(ctx, |ui| {
-                widgets::header(ui, "calc", "type or click · enter = · esc clears");
+                widgets::header(ui, "calc", "type, click or speak · space = mic");
                 widgets::hairline(ui);
 
                 // Display: the expression, and a live preview of the answer.
@@ -256,6 +439,30 @@ impl eframe::App for App {
                     });
                 });
                 ui.add_space(10.0);
+
+                // Mic bar: full width, above the keys.
+                let (label, fill, fg) = match self.mic {
+                    Mic::Idle => ("🎤  speak a calculation", theme::surface0(), theme::accent()),
+                    Mic::Recording => {
+                        let on = (ui.input(|i| i.time) * 2.0) as i64 % 2 == 0;
+                        ("●  listening… click to solve", if on { theme::bad() } else { theme::dim(theme::bad(), 160) }, theme::base())
+                    }
+                    Mic::Thinking => ("…  working it out", theme::surface1(), theme::subtext0()),
+                };
+                let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 40.0), Sense::click());
+                let fill = if resp.hovered() && self.mic == Mic::Idle { theme::surface1() } else { fill };
+                ui.painter().rect(rect, theme::radius(), fill, Stroke::NONE, egui::StrokeKind::Inside);
+                ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, label, egui::FontId::new(15.0, theme::MONO), fg);
+                if resp.hovered() {
+                    ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                }
+                if resp.clicked() {
+                    self.toggle_mic(ctx);
+                }
+                if !self.said.is_empty() {
+                    ui.label(RichText::new(format!("heard: “{}”", self.said)).size(11.0).color(theme::overlay0()));
+                }
+                ui.add_space(6.0);
 
                 // Keypad fills the width; 4 columns, 6 px gaps.
                 let gap = 6.0;
@@ -324,6 +531,20 @@ mod tests {
         assert_eq!(e("50%"), "0.5");
         assert_eq!(e("200×15%"), "30");
         assert_eq!(e("1,5+1"), "2.5");
+    }
+
+    #[test]
+    fn speech() {
+        let s = |t: &str| e(&spoken_to_expr(t));
+        assert_eq!(s("twelve times seven"), "84");
+        assert_eq!(s("What's 100 divided by 8?"), "12.5");
+        assert_eq!(s("two hundred and thirty four plus six"), "240");
+        assert_eq!(s("15 percent of 200"), "30");
+        assert_eq!(s("three point five minus one"), "2.5");
+        assert_eq!(s("2 to the power of 10"), "1024");
+        assert_eq!(s("open bracket two plus three close bracket times four"), "20");
+        assert_eq!(s("five squared"), "25");
+        assert_eq!(s("one thousand five hundred multiplied by 2"), "3000");
     }
 
     #[test]

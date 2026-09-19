@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# aura-calc-listen — the calculator's microphone.
+#
+#   aura-calc-listen start   record from the default mic (background)
+#   aura-calc-listen stop    stop, transcribe, print the text on stdout
+#
+# Groq Whisper when GROQ_API_KEY is set (owner's keys, same files as
+# aura-dic), else local whisper.cpp. English prompt biased to arithmetic.
+set -uo pipefail
+
+dir="${XDG_RUNTIME_DIR:-/tmp}/aura-calc"; mkdir -p "$dir"
+wav="$dir/say.wav"; pid="$dir/rec.pid"
+for env in "$HOME/.config/environment.d/dic-stt.conf" "$HOME/.aura/.env"; do
+    [[ -r $env ]] && { set -a; . "$env"; set +a; }
+done
+WHISPER_BIN=/mnt/bigdata/projects/voice/whisper.cpp/build/bin/whisper-cli
+WHISPER_MODEL=/mnt/bigdata/projects/voice/whisper.cpp/models/ggml-small.bin
+hint="A calculation, like: 12 plus 7, 3 times 4, 100 divided by 8, 15 percent of 200."
+
+case "${1:-}" in
+start)
+    [[ -f $pid ]] && kill "$(cat "$pid")" 2>/dev/null
+    rm -f "$wav"
+    parecord --channels=1 --rate=16000 --file-format=wav "$wav" & echo $! > "$pid"
+    ;;
+stop)
+    [[ -f $pid ]] && { kill -INT "$(cat "$pid")" 2>/dev/null; rm -f "$pid"; sleep 0.3; }
+    [[ -s $wav ]] || { echo "no recording" >&2; exit 1; }
+    if [[ -n ${GROQ_API_KEY:-} ]]; then
+        curl -sS --max-time 20 https://api.groq.com/openai/v1/audio/transcriptions \
+            -H "Authorization: Bearer $GROQ_API_KEY" \
+            -F model=whisper-large-v3-turbo -F language=en -F response_format=text \
+            -F "prompt=$hint" -F "file=@$wav" && exit 0
+    fi
+    [[ -x $WHISPER_BIN ]] || { echo "no speech engine (set GROQ_API_KEY)" >&2; exit 1; }
+    "$WHISPER_BIN" -m "$WHISPER_MODEL" -l en -nt --prompt "$hint" -f "$wav" 2>/dev/null \
+        | sed -E 's/\[[^]]*\]|\([^)]*\)//g' | tr -s ' \n' ' '
+    ;;
+*) echo "usage: aura-calc-listen start|stop" >&2; exit 2 ;;
+esac

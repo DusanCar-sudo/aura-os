@@ -23,6 +23,9 @@ use egui::{pos2, vec2, Align2, Color32, FontId, Frame, Key, Margin, Rect, RichTe
 
 const HISTORY: usize = 150; // samples, one a second
 const ALERT: f32 = 0.80;
+/// graph heights: cpu, memory, graphics+temps, network+disk, electricity
+const DEFAULT_H: [f32; 5] = [110.0, 36.0, 96.0, 110.0, 128.0];
+const MIN_H: [f32; 5] = [40.0, 0.0, 64.0, 50.0, 96.0];
 
 // ── reading the machine ─────────────────────────────────────────────────────
 
@@ -272,6 +275,9 @@ struct Settings {
     extra_w: f64,     // screen, disk, wifi… added to the chip's own reading
     /// width of the process pane — drag the divider, it sticks
     split: f32,
+    /// graph heights, drag the handle under each section: cpu, memory,
+    /// graphics+temps, network+disk, electricity
+    heights: [f32; 5],
 }
 
 fn settings_path() -> PathBuf {
@@ -281,13 +287,18 @@ fn settings_path() -> PathBuf {
 }
 
 fn load_settings() -> Settings {
-    let mut s = Settings { price: 0.15, currency: "€".into(), extra_w: 8.0, split: 560.0 };
+    let mut s = Settings { price: 0.15, currency: "€".into(), extra_w: 8.0, split: 560.0, heights: DEFAULT_H };
     for l in read(settings_path()).lines() {
         match l.split_once('=') {
             Some(("price", v)) => s.price = v.trim().parse().unwrap_or(s.price),
             Some(("currency", v)) => s.currency = v.trim().to_string(),
             Some(("extra_watts", v)) => s.extra_w = v.trim().parse().unwrap_or(s.extra_w),
             Some(("process_pane_width", v)) => s.split = v.trim().parse().unwrap_or(s.split),
+            Some(("heights", v)) => {
+                for (h, x) in s.heights.iter_mut().zip(v.split(',')) {
+                    *h = x.trim().parse().unwrap_or(*h);
+                }
+            }
             _ => {}
         }
     }
@@ -298,8 +309,9 @@ fn save_settings(s: &Settings) {
     let p = settings_path();
     let _ = std::fs::create_dir_all(p.parent().unwrap());
     let _ = std::fs::write(p, format!(
-        "# aura-sysmon — electricity price per kWh, and watts the chip's own\n# reading can't see (screen, disk, wifi); used only when plugged in.\nprice={}\ncurrency={}\nextra_watts={}\nprocess_pane_width={}\n",
-        s.price, s.currency, s.extra_w, s.split.round()
+        "# aura-sysmon — electricity price per kWh, and watts the chip's own\n# reading can't see (screen, disk, wifi); used only when plugged in.\nprice={}\ncurrency={}\nextra_watts={}\nprocess_pane_width={}\nheights={}\n",
+        s.price, s.currency, s.extra_w, s.split.round(),
+        s.heights.iter().map(|h| h.round().to_string()).collect::<Vec<_>>().join(",")
     ));
 }
 
@@ -555,6 +567,26 @@ fn panel(ui: &mut Ui, title: &str, right: &str, h: f32) -> Rect {
     rect.shrink2(vec2(10.0, 12.0))
 }
 
+/// A drag handle under a section (herdr-style split): drag it up or down to
+/// resize the section above. Returns true when a drag just ended (save).
+fn splitter(ui: &mut Ui, id: &str, h: &mut f32, min: f32) -> bool {
+    let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 8.0), Sense::drag());
+    let resp = resp.on_hover_cursor(egui::CursorIcon::ResizeVertical);
+    let _ = id;
+    if resp.dragged() {
+        *h = (*h + resp.drag_delta().y).clamp(min, 900.0);
+    }
+    let hot = resp.hovered() || resp.dragged();
+    let p = ui.painter();
+    if hot {
+        p.hline(rect.x_range(), rect.center().y, Stroke::new(2.0_f32, theme::accent()));
+    }
+    for dx in [-8.0_f32, 0.0, 8.0] {
+        p.circle_filled(pos2(rect.center().x + dx, rect.center().y), 1.6, if hot { theme::accent() } else { theme::surface2() });
+    }
+    resp.drag_stopped()
+}
+
 fn text(ui: &Ui, at: egui::Pos2, align: Align2, s: &str, c: Color32) {
     ui.painter().text(at, align, s, FontId::monospace(12.0), c);
 }
@@ -702,8 +734,9 @@ impl App {
             right += &format!("  ·  {t:.0} °C");
         }
         let cores_rows = s.cores.len().div_ceil(2) as f32;
-        let r = panel(ui, "cpu", &right, 150.0 + cores_rows * 16.0);
-        let g = Rect::from_min_size(r.min, vec2(r.width(), 110.0));
+        let hs = self.edit.heights;
+        let r = panel(ui, "cpu", &right, hs[0] + 40.0 + cores_rows * 16.0);
+        let g = Rect::from_min_size(r.min, vec2(r.width(), hs[0]));
         btop_graph(ui, g, &s.cpu, heat(), false);
         let half = (r.width() - 16.0) / 2.0;
         for (i, c) in s.cores.iter().enumerate() {
@@ -716,6 +749,9 @@ impl App {
             text(ui, pos2(o.x + half, o.y), Align2::RIGHT_TOP, &pct(v), theme::text());
         }
 
+        if splitter(ui, "h0", &mut self.edit.heights[0], MIN_H[0]) {
+            save_settings(&self.edit);
+        }
         // Memory: stacked bar by type, then the list
         let mi = &s.mem_info;
         let kb = |k: &str| mi.get(k).copied().unwrap_or(0) * 1024;
@@ -729,7 +765,7 @@ impl App {
             ("free", kb("MemFree"), theme::surface1(), "not used at all"),
         ];
         let used = total.saturating_sub(kb("MemAvailable"));
-        let r = panel(ui, "memory", &format!("{} used of {}  ·  {}", size(used), size(total), pct(used as f32 / total as f32)), 238.0);
+        let r = panel(ui, "memory", &format!("{} used of {}  ·  {}", size(used), size(total), pct(used as f32 / total as f32)), 202.0 + hs[1]);
         let bar = Rect::from_min_size(r.min, vec2(r.width(), 14.0));
         let mut x = bar.left();
         for (_, b, c, _) in &kinds {
@@ -760,12 +796,15 @@ impl App {
             meter(ui, Rect::from_min_size(pos2(r.left() + 110.0, y + 4.0), vec2(r.width() - 290.0, 8.0)), u as f32 / t.max(1) as f32);
             text(ui, pos2(r.right(), y), Align2::RIGHT_TOP, &format!("{} / {}{gtt}", size(u), size(t)), theme::subtext0());
         }
-        let mg = Rect::from_min_max(pos2(r.left(), r.bottom() - 36.0), r.max);
+        let mg = Rect::from_min_max(pos2(r.left(), r.bottom() - hs[1]), r.max);
         btop_graph(ui, mg, &s.mem, [theme::accent2(), theme::accent(), theme::bad()], false);
 
+        if splitter(ui, "h1", &mut self.edit.heights[1], MIN_H[1]) {
+            save_settings(&self.edit);
+        }
         // GPU + temperatures
         let gb = last(&s.gpu);
-        let r = panel(ui, "graphics + temperatures", &format!("gpu {}{}", pct(gb), sen.gpu.map(|t| format!("  ·  {t:.0} °C")).unwrap_or_default()), 96.0);
+        let r = panel(ui, "graphics + temperatures", &format!("gpu {}{}", pct(gb), sen.gpu.map(|t| format!("  ·  {t:.0} °C")).unwrap_or_default()), hs[2]);
         let g = Rect::from_min_size(r.min, vec2(r.width() * 0.55, r.height()));
         btop_graph(ui, g, &s.gpu, heat(), false);
         let mut y = r.top();
@@ -780,16 +819,19 @@ impl App {
             }
         }
 
+        if splitter(ui, "h2", &mut self.edit.heights[2], MIN_H[2]) {
+            save_settings(&self.edit);
+        }
         // Network + disk, each up/down mirrored like btop
         ui.columns(2, |cols| {
             let rx_max = max_of(&s.net_rx).max(max_of(&s.net_tx)).max(64.0 * 1024.0);
-            let r = panel(&mut cols[0], "network", &format!("↓ {}  ↑ {}", speed(last(&s.net_rx)), speed(last(&s.net_tx))), 110.0);
+            let r = panel(&mut cols[0], "network", &format!("↓ {}  ↑ {}", speed(last(&s.net_rx)), speed(last(&s.net_tx))), hs[3]);
             let (top, bot) = r.split_top_bottom_at_fraction(0.5);
             btop_graph(&cols[0], top, &s.net_rx.iter().map(|v| v / rx_max).collect(), [theme::accent3(), theme::accent(), theme::accent2()], false);
             btop_graph(&cols[0], bot, &s.net_tx.iter().map(|v| v / rx_max).collect(), [theme::accent3(), theme::accent(), theme::accent2()], true);
             let d_max = max_of(&s.disk_r).max(max_of(&s.disk_w)).max(1024.0 * 1024.0);
             let df = s.disk_used as f32 / s.disk_total.max(1) as f32;
-            let r = panel(&mut cols[1], "disk", &format!("{} used · {}", pct(df), size(s.disk_total)), 110.0);
+            let r = panel(&mut cols[1], "disk", &format!("{} used · {}", pct(df), size(s.disk_total)), hs[3]);
             let (top, bot) = r.split_top_bottom_at_fraction(0.5);
             btop_graph(&cols[1], top, &s.disk_r.iter().map(|v| v / d_max).collect(), [theme::ok(), theme::warn(), theme::bad()], false);
             btop_graph(&cols[1], bot, &s.disk_w.iter().map(|v| v / d_max).collect(), [theme::ok(), theme::warn(), theme::bad()], true);
@@ -797,10 +839,13 @@ impl App {
             text(&cols[1], bot.left_bottom(), Align2::LEFT_BOTTOM, &format!("write {}", speed(last(&s.disk_w))), theme::text());
         });
 
+        if splitter(ui, "h3", &mut self.edit.heights[3], MIN_H[3]) {
+            save_settings(&self.edit);
+        }
         // Electricity
         let w = last(&s.watts);
         let src = if s.on_battery { "battery reading" } else { "chip reading + other parts" };
-        let r = panel(ui, "electricity", &format!("{w:.1} W  ·  {src}"), 128.0);
+        let r = panel(ui, "electricity", &format!("{w:.1} W  ·  {src}"), hs[4]);
         let g = Rect::from_min_size(r.min, vec2(r.width() * 0.45, r.height()));
         let wmax = max_of(&s.watts).max(30.0);
         btop_graph(ui, g, &s.watts.iter().map(|v| v / wmax).collect(), heat(), false);
@@ -829,6 +874,9 @@ impl App {
         child.label(RichText::new("+ other").size(12.0).color(theme::subtext0()))
             .on_hover_text("watts the chip's reading can't see — screen, SSD, wifi. Used when plugged in; on battery the battery reports the whole laptop.");
         child.add(egui::DragValue::new(&mut self.edit.extra_w).speed(0.5).range(0.0..=200.0).suffix(" W"));
+        if splitter(ui, "h4", &mut self.edit.heights[4], MIN_H[4]) {
+            save_settings(&self.edit);
+        }
         if *self.settings.lock().unwrap() != self.edit {
             *self.settings.lock().unwrap() = self.edit.clone();
             save_settings(&self.edit);
@@ -837,16 +885,17 @@ impl App {
 
     fn right(&mut self, ui: &mut Ui, s: &Snapshot) {
         ui.horizontal(|ui| {
-            if ui.selectable_label(self.tab == Tab::Procs, format!("processes ({})", s.procs.len())).clicked() {
+            if ui.selectable_label(self.tab == Tab::Procs, format!("processes {}", s.procs.len())).clicked() {
                 self.tab = Tab::Procs;
             }
             let models = s.files.iter().filter(|f| f.model).count();
-            let label = if models > 0 { format!("files in memory · {models} AI model") } else { "files in memory".into() };
+            let label = if models > 0 { format!("files · {models} AI") } else { "files".into() };
             if ui.selectable_label(self.tab == Tab::Files, label).clicked() {
                 self.tab = Tab::Files;
             }
-            ui.add(egui::TextEdit::singleline(&mut self.filter).hint_text("filter").desired_width(ui.available_width()));
         });
+        // own row, and it never asks for more width than the pane has
+        ui.add(egui::TextEdit::singleline(&mut self.filter).hint_text("filter").desired_width(ui.available_width()).min_size(vec2(0.0, 0.0)));
         widgets::hairline(ui);
         let f = self.filter.to_lowercase();
         match self.tab {
@@ -860,10 +909,16 @@ impl App {
                 }
                 // columns anchored to the right edge, so the name gets what's left
                 let w = ui.available_width();
-                let (x_cpu, x_mem) = (w - 270.0, w - 150.0);
-                let cols = [(Sort::Pid, "pid", 0.0), (Sort::Name, "program", 64.0), (Sort::Cpu, "cpu", x_cpu), (Sort::Mem, "memory", x_mem)];
+                // narrow pane: drop pid, state and nice; keep name, cpu, memory
+                let compact = w < 460.0;
+                let x0 = if compact { -64.0 } else { 0.0 };
+                let (x_cpu, x_mem) = if compact { (w - 190.0, w - 70.0) } else { (w - 270.0, w - 150.0) };
+                let cols = [(Sort::Pid, "pid", if compact { -999.0 } else { 0.0 }), (Sort::Name, "program", 64.0 + x0), (Sort::Cpu, "cpu", x_cpu), (Sort::Mem, "memory", x_mem)];
                 let (hr, _) = ui.allocate_exact_size(vec2(w, 18.0), Sense::hover());
                 for (k, label, x) in cols {
+                    if x < 0.0 {
+                        continue; // column hidden in the narrow layout
+                    }
                     let r = Rect::from_min_size(hr.min + vec2(x, 0.0), vec2(90.0, 18.0));
                     let resp = ui.interact(r, ui.id().with(label), Sense::click());
                     let c = if self.sort == k { theme::accent() } else { theme::subtext0() };
@@ -872,7 +927,9 @@ impl App {
                         self.sort = k;
                     }
                 }
-                text(ui, pos2(hr.right(), hr.center().y), Align2::RIGHT_CENTER, "state  nice", theme::subtext0());
+                if !compact {
+                    text(ui, pos2(hr.right(), hr.center().y), Align2::RIGHT_CENTER, "state  nice", theme::subtext0());
+                }
                 ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
                     for p in procs.iter().take(200) {
                         let (row, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 18.0), Sense::click());
@@ -880,13 +937,20 @@ impl App {
                             ui.painter().rect_filled(row, 0.0, theme::surface0());
                         }
                         let dimc = if p.mine { theme::text() } else { theme::overlay0() };
-                        text(ui, row.left_center(), Align2::LEFT_CENTER, &p.pid.to_string(), theme::subtext0());
-                        let fit = ((x_cpu - 72.0) / 7.5).max(4.0) as usize;
-                        text(ui, row.left_center() + vec2(64.0, 0.0), Align2::LEFT_CENTER, &p.name.chars().take(fit).collect::<String>(), dimc);
+                        if !compact {
+                            text(ui, row.left_center(), Align2::LEFT_CENTER, &p.pid.to_string(), theme::subtext0());
+                        }
+                        let fit = ((x_cpu - 72.0 - x0) / 7.5).max(4.0) as usize;
+                        text(ui, row.left_center() + vec2(64.0 + x0, 0.0), Align2::LEFT_CENTER, &p.name.chars().take(fit).collect::<String>(), dimc);
                         let cf = (p.cpu / 100.0).min(1.0);
                         meter(ui, Rect::from_min_size(row.left_center() + vec2(x_cpu, -4.0), vec2(50.0, 8.0)), cf);
                         text(ui, row.left_center() + vec2(x_cpu + 95.0, 0.0), Align2::RIGHT_CENTER, &format!("{:.0}%", p.cpu), grad(heat(), cf));
                         text(ui, row.left_center() + vec2(x_mem + 70.0, 0.0), Align2::RIGHT_CENTER, &size(p.rss), theme::text());
+                        if compact {
+                            let p = (*p).clone();
+                            resp.on_hover_text(format!("pid {} · {} threads · nice {} · right-click for actions", p.pid, p.threads, p.nice)).context_menu(|ui| self.proc_menu(ui, &p));
+                            continue;
+                        }
                         let st = match p.state { 'R' => "run", 'S' => "sleep", 'D' => "disk", 'T' => "paused", 'Z' => "zombie", 'I' => "idle", _ => "?" };
                         text(ui, pos2(row.right() - 40.0, row.center().y), Align2::RIGHT_CENTER, st, if p.state == 'T' { theme::warn() } else { theme::subtext0() });
                         text(ui, pos2(row.right(), row.center().y), Align2::RIGHT_CENTER, &p.nice.to_string(), theme::subtext0());

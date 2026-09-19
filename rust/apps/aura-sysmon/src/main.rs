@@ -270,6 +270,8 @@ struct Settings {
     price: f64,       // per kWh
     currency: String,
     extra_w: f64,     // screen, disk, wifi… added to the chip's own reading
+    /// width of the process pane — drag the divider, it sticks
+    split: f32,
 }
 
 fn settings_path() -> PathBuf {
@@ -279,12 +281,13 @@ fn settings_path() -> PathBuf {
 }
 
 fn load_settings() -> Settings {
-    let mut s = Settings { price: 0.15, currency: "€".into(), extra_w: 8.0 };
+    let mut s = Settings { price: 0.15, currency: "€".into(), extra_w: 8.0, split: 560.0 };
     for l in read(settings_path()).lines() {
         match l.split_once('=') {
             Some(("price", v)) => s.price = v.trim().parse().unwrap_or(s.price),
             Some(("currency", v)) => s.currency = v.trim().to_string(),
             Some(("extra_watts", v)) => s.extra_w = v.trim().parse().unwrap_or(s.extra_w),
+            Some(("process_pane_width", v)) => s.split = v.trim().parse().unwrap_or(s.split),
             _ => {}
         }
     }
@@ -295,8 +298,8 @@ fn save_settings(s: &Settings) {
     let p = settings_path();
     let _ = std::fs::create_dir_all(p.parent().unwrap());
     let _ = std::fs::write(p, format!(
-        "# aura-sysmon — electricity price per kWh, and watts the chip's own\n# reading can't see (screen, disk, wifi); used only when plugged in.\nprice={}\ncurrency={}\nextra_watts={}\n",
-        s.price, s.currency, s.extra_w
+        "# aura-sysmon — electricity price per kWh, and watts the chip's own\n# reading can't see (screen, disk, wifi); used only when plugged in.\nprice={}\ncurrency={}\nextra_watts={}\nprocess_pane_width={}\n",
+        s.price, s.currency, s.extra_w, s.split.round()
     ));
 }
 
@@ -349,7 +352,9 @@ fn sampler(shared: Arc<Mutex<Snapshot>>, settings: Arc<Mutex<Settings>>, ctx: eg
     let mut last_disk = disk_io(&read("/proc/diskstats"));
     let mut last_net = net_io(&read("/proc/net/dev"));
     let mut last_t = Instant::now();
-    let (mut swap_warned, mut disk_warned) = (false, false);
+    // already over the line when the window opens? you can see it — warn only
+    // when it crosses while the monitor is running
+    let (mut swap_warned, mut disk_warned) = (true, true);
     let mut seen_models: HashSet<String> = HashSet::new();
     let mut first_files = true;
     let mut tick = 0u64;
@@ -594,6 +599,7 @@ struct App {
     tab: Tab,
     filter: String,
     status: String,
+    dragging_split: bool,
     theme_id: theme::ThemeId,
     next_theme_check: f64,
 }
@@ -621,7 +627,7 @@ impl App {
         let settings = Arc::new(Mutex::new(s.clone()));
         let (d, st, ctx) = (data.clone(), settings.clone(), cc.egui_ctx.clone());
         std::thread::spawn(move || sampler(d, st, ctx));
-        Self { data, settings, edit: s, sort: Sort::Mem, tab: Tab::Procs, filter: String::new(), status: String::new(), theme_id, next_theme_check: 0.0 }
+        Self { data, settings, edit: s, sort: Sort::Mem, tab: Tab::Procs, filter: String::new(), status: String::new(), dragging_split: false, theme_id, next_theme_check: 0.0 }
     }
 
     fn signal(&mut self, p: &Proc, sig: &str, done: &str) {
@@ -954,16 +960,52 @@ impl eframe::App for App {
                     ui.label(RichText::new(&self.status).size(11.0).color(theme::subtext0()));
                 });
         }
-        egui::SidePanel::right("procs")
-            .resizable(true)
-            .default_width(560.0)
-            .min_width(480.0)
+        // The divider between graphs and processes, driven here rather than
+        // by egui's panel memory (which kept the width of the window's first,
+        // tiny frame): an 8 px grab area, a line that lights up on hover, and
+        // the width you leave it at is saved.
+        let screen = ctx.screen_rect();
+        let max_w = (screen.width() - 380.0).max(320.0);
+        let width = self.edit.split.clamp(320.0, max_w);
+        let x = screen.right() - width;
+        let pointer = ctx.pointer_hover_pos();
+        let near = pointer.is_some_and(|p| (p.x - x).abs() <= 8.0);
+        let (pressed, down, released) = ctx.input(|i| (i.pointer.primary_pressed(), i.pointer.primary_down(), i.pointer.primary_released()));
+        if pressed && near {
+            self.dragging_split = true;
+        }
+        if self.dragging_split && down {
+            if let Some(p) = ctx.input(|i| i.pointer.interact_pos()) {
+                self.edit.split = (screen.right() - p.x).clamp(320.0, max_w);
+            }
+        }
+        if released && self.dragging_split {
+            self.dragging_split = false;
+            *self.settings.lock().unwrap() = self.edit.clone();
+            save_settings(&self.edit);
+        }
+        let pane = egui::SidePanel::right("procs")
+            .resizable(false)
+            .show_separator_line(false)
+            .exact_width(self.edit.split.clamp(320.0, max_w))
             .frame(Frame::new().fill(theme::base()).inner_margin(Margin::same(12)))
             .show(ctx, |ui| {
                 if s.ready {
                     self.right(ui, &s);
                 }
             });
+        let r = pane.response.rect;
+        let x = r.left();
+        let hot = near || self.dragging_split;
+        let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("split")));
+        painter.line_segment([pos2(x, r.top()), pos2(x, r.bottom())], Stroke::new(if hot { 2.0_f32 } else { 1.0_f32 }, if hot { theme::accent() } else { theme::surface1() }));
+        // a small grip in the middle so it reads as draggable
+        for dy in [-8.0_f32, 0.0, 8.0] {
+            painter.circle_filled(pos2(x, r.center().y + dy), 2.0, if hot { theme::accent() } else { theme::overlay0() });
+        }
+        if hot {
+            ctx.set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+        }
         egui::CentralPanel::default()
             .frame(Frame::new().fill(theme::base()).inner_margin(Margin::same(12)))
             .show(ctx, |ui| {

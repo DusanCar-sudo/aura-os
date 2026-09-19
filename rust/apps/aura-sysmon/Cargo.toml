@@ -8,3 +8,4 @@ description = "System monitor for Aura OS: live CPU, memory, swap, disk and temp
 aura-ui = { path = "../../crates/aura-ui" }
 eframe = { workspace = true }
 egui = { workspace = true }
+libc = "0.2"

@@ -24,7 +24,7 @@ use egui::{pos2, vec2, Align2, Color32, FontId, Frame, Key, Margin, Rect, RichTe
 const HISTORY: usize = 150; // samples, one a second
 const ALERT: f32 = 0.80;
 /// graph heights: cpu, memory, graphics+temps, network+disk, electricity
-const DEFAULT_H: [f32; 5] = [110.0, 36.0, 96.0, 110.0, 128.0];
+const DEFAULT_H: [f32; 5] = [110.0, 90.0, 96.0, 110.0, 128.0];
 const MIN_H: [f32; 5] = [40.0, 0.0, 64.0, 50.0, 96.0];
 
 // ── reading the machine ─────────────────────────────────────────────────────
@@ -224,8 +224,94 @@ fn is_model(path: &str, size: u64) -> bool {
 struct MemFile {
     path: String,
     size: u64,
+    /// how much of it sits in RAM right now (page cache), bytes
+    cached: u64,
     model: bool,
+    kind: Kind,
     who: Vec<String>, // program names
+}
+
+/// What the file cache is holding, by kind of file.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+enum Kind {
+    Model,
+    Library,
+    Program,
+    Media,
+    Font,
+    Other,
+}
+
+impl Kind {
+    const ALL: [Kind; 6] = [Kind::Model, Kind::Library, Kind::Program, Kind::Media, Kind::Font, Kind::Other];
+
+    fn of(path: &str, size: u64) -> Kind {
+        let name = path.rsplit('/').next().unwrap_or(path).to_lowercase();
+        let ext = name.rsplit_once('.').map(|(_, e)| e.to_string()).unwrap_or_default();
+        if is_model(path, size) {
+            Kind::Model
+        } else if name.contains(".so") {
+            Kind::Library
+        } else if matches!(ext.as_str(), "ttf" | "otf" | "woff" | "woff2" | "pcf") {
+            Kind::Font
+        } else if matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "webp" | "gif" | "mp4" | "mkv" | "webm" | "mov" | "mp3" | "flac" | "wav" | "ogg" | "opus") {
+            Kind::Media
+        } else if ext.is_empty() || matches!(ext.as_str(), "appimage" | "exe" | "bin" | "pak" | "asar" | "dat") || path.contains("/bin/") {
+            Kind::Program
+        } else {
+            Kind::Other
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Kind::Model => "AI models",
+            Kind::Library => "libraries",
+            Kind::Program => "programs' files",
+            Kind::Media => "images · video · audio",
+            Kind::Font => "fonts",
+            Kind::Other => "other open files",
+        }
+    }
+
+    /// Fixed, clearly different hues (btop-style) — a theme's own accents
+    /// are often one family (purplerain: three purples), which made kinds
+    /// impossible to tell apart.
+    fn color(self) -> Color32 {
+        match self {
+            Kind::Model => Color32::from_rgb(0xf3, 0x5b, 0x7a),   // red: stands out
+            Kind::Library => Color32::from_rgb(0x5c, 0x9d, 0xf5), // blue
+            Kind::Program => Color32::from_rgb(0x7d, 0xd8, 0x7d), // green
+            Kind::Media => Color32::from_rgb(0xf2, 0xc9, 0x4c),   // yellow
+            Kind::Font => Color32::from_rgb(0x4f, 0xd1, 0xc5),    // teal
+            Kind::Other => Color32::from_rgb(0xc7, 0x9b, 0xf2),   // lavender
+        }
+    }
+}
+
+/// Bytes of `path` resident in the page cache, asked of the kernel with
+/// mincore (works on any readable file, unlike cachestat/fincore).
+fn resident(path: &str, size: u64) -> u64 {
+    use std::os::unix::io::AsRawFd;
+    if size == 0 {
+        return 0;
+    }
+    let Ok(f) = std::fs::File::open(path) else { return 0 };
+    let page = 4096usize;
+    let len = size as usize;
+    unsafe {
+        let addr = libc::mmap(std::ptr::null_mut(), len, libc::PROT_READ, libc::MAP_SHARED, f.as_raw_fd(), 0);
+        if addr == libc::MAP_FAILED {
+            return 0;
+        }
+        let mut vec = vec![0u8; len.div_ceil(page)];
+        let ok = libc::mincore(addr, len, vec.as_mut_ptr()) == 0;
+        libc::munmap(addr, len);
+        if !ok {
+            return 0;
+        }
+        vec.iter().filter(|b| **b & 1 == 1).count() as u64 * page as u64
+    }
 }
 
 /// Files mapped into (or held open by) running programs, ≥ 1 MB, biggest first.
@@ -257,13 +343,76 @@ fn files_in_memory(procs: &HashMap<u32, RawProc>) -> Vec<MemFile> {
             (size >= 1 << 20).then(|| {
                 let mut who: Vec<String> = who.into_iter().collect();
                 who.sort();
-                MemFile { model: is_model(&path, size), path, size, who }
+                MemFile { model: is_model(&path, size), kind: Kind::of(&path, size), cached: resident(&path, size), path, size, who }
             })
         })
         .collect();
     v.sort_by(|a, b| b.model.cmp(&a.model).then(b.size.cmp(&a.size)));
     v.truncate(300);
     v
+}
+
+// ── memory, split by what it holds ──────────────────────────────────────────
+
+/// programs · file cache by kind (6) · cache of closed files · shared · kernel
+const SEGS: usize = 10;
+
+/// Bytes per segment. The file cache is split by what the running programs
+/// have open or mapped (measured with mincore); the rest of the cache is
+/// files that were read earlier and closed.
+fn mem_segments(mi: &HashMap<String, u64>, by_kind: &HashMap<Kind, u64>) -> [u64; SEGS] {
+    let kb = |k: &str| mi.get(k).copied().unwrap_or(0) * 1024;
+    let shmem = kb("Shmem");
+    let cache = kb("Cached").saturating_sub(shmem) + kb("Buffers");
+    let known: u64 = Kind::ALL.iter().map(|k| by_kind.get(k).copied().unwrap_or(0)).sum();
+    // open files can be counted twice (shared pages); never exceed the cache
+    let scale = if known > cache { cache as f64 / known as f64 } else { 1.0 };
+    let mut out = [0u64; SEGS];
+    out[0] = kb("AnonPages");
+    let mut sum = 0;
+    for (i, k) in Kind::ALL.iter().enumerate() {
+        let v = (by_kind.get(k).copied().unwrap_or(0) as f64 * scale) as u64;
+        out[1 + i] = v;
+        sum += v;
+    }
+    out[7] = cache.saturating_sub(sum);
+    out[8] = shmem;
+    out[9] = kb("Slab") + kb("KernelStack") + kb("PageTables");
+    out
+}
+
+/// (label, color, hint, is it part of the file cache)
+fn seg_meta(i: usize) -> (&'static str, Color32, &'static str, bool) {
+    match i {
+        0 => ("programs", theme::accent(), "memory programs asked for (their own data)", false),
+        1..=6 => {
+            let k = Kind::ALL[i - 1];
+            (k.label(), k.color(), "part of the file cache: files running programs have open", true)
+        }
+        7 => ("closed files", Color32::from_rgb(0x3f, 0x6e, 0x8c), "files read earlier, kept in RAM in case they're needed again — freed on demand", true),
+        8 => ("shared / tmpfs", Color32::from_rgb(0xf5, 0x9e, 0x6b), "shared memory and RAM disks (/tmp, GPU buffers)", false),
+        _ => ("kernel", Color32::from_rgb(0x8a, 0x8f, 0xa3), "the kernel's own tables and caches", false),
+    }
+}
+
+/// Stacked columns: each sample split into its segments, bottom up, as a
+/// share of all RAM — the colors show what the memory held over time.
+fn stacked_graph(ui: &Ui, rect: Rect, data: &VecDeque<([u64; SEGS], u64)>) {
+    let p = ui.painter();
+    let col_w = rect.width() / HISTORY as f32;
+    let start = HISTORY - data.len().min(HISTORY);
+    let colors: Vec<Color32> = (0..SEGS).map(|i| seg_meta(i).1).collect();
+    for (i, (segs, total)) in data.iter().enumerate() {
+        let x = rect.left() + (start + i) as f32 * col_w;
+        let mut y = rect.bottom();
+        for (j, b) in segs.iter().enumerate() {
+            let h = rect.height() * *b as f32 / (*total).max(1) as f32;
+            if h > 0.0 {
+                p.rect_filled(Rect::from_min_max(pos2(x, y - h), pos2(x + (col_w - 0.6).max(0.8), y)), 0.0, colors[j]);
+            }
+            y -= h;
+        }
+    }
 }
 
 // ── settings (electricity) ──────────────────────────────────────────────────
@@ -341,6 +490,7 @@ struct Snapshot {
     started: Option<Instant>,
     procs: Vec<Proc>,
     files: Vec<MemFile>,
+    mem_stack: VecDeque<([u64; SEGS], u64)>,
     new_models: Vec<String>,
     ready: bool,
 }
@@ -369,6 +519,7 @@ fn sampler(shared: Arc<Mutex<Snapshot>>, settings: Arc<Mutex<Settings>>, ctx: eg
     let (mut swap_warned, mut disk_warned) = (true, true);
     let mut seen_models: HashSet<String> = HashSet::new();
     let mut first_files = true;
+    let mut by_kind: HashMap<Kind, u64> = HashMap::new();
     let mut tick = 0u64;
     let (mut du, mut dt) = disk_usage();
     shared.lock().unwrap().started = Some(Instant::now());
@@ -427,6 +578,10 @@ fn sampler(shared: Arc<Mutex<Snapshot>>, settings: Arc<Mutex<Settings>>, ctx: eg
         let mut new_models = Vec::new();
         if tick % 5 == 0 {
             let f = files_in_memory(&raw);
+            by_kind.clear();
+            for m in &f {
+                *by_kind.entry(m.kind).or_default() += m.cached;
+            }
             for m in f.iter().filter(|m| m.model) {
                 if seen_models.insert(m.path.clone()) && !first_files {
                     let name = Path::new(&m.path).file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
@@ -460,6 +615,10 @@ fn sampler(shared: Arc<Mutex<Snapshot>>, settings: Arc<Mutex<Settings>>, ctx: eg
                 push(q, *v);
             }
             push(&mut s.mem, (mt - ma) as f32 / mt.max(1) as f32);
+            if s.mem_stack.len() == HISTORY {
+                s.mem_stack.pop_front();
+            }
+            s.mem_stack.push_back((mem_segments(&mi, &by_kind), mt));
             push(&mut s.swap, swap_frac);
             push(&mut s.gpu, sens.gpu_busy.unwrap_or(0.0));
             push(&mut s.net_rx, nr);
@@ -756,33 +915,41 @@ impl App {
         let mi = &s.mem_info;
         let kb = |k: &str| mi.get(k).copied().unwrap_or(0) * 1024;
         let total = kb("MemTotal").max(1);
-        let shmem = kb("Shmem");
-        let kinds: Vec<(&str, u64, Color32, &str)> = vec![
-            ("programs", kb("AnonPages"), theme::accent(), "memory programs asked for"),
-            ("file cache", kb("Cached").saturating_sub(shmem) + kb("Buffers"), theme::ok(), "recently read files, freed on demand"),
-            ("shared / tmpfs", shmem, theme::accent2(), "shared memory and RAM disks (/tmp, GPU buffers)"),
-            ("kernel", kb("Slab") + kb("KernelStack") + kb("PageTables"), theme::warn(), "the kernel's own tables and caches"),
-            ("free", kb("MemFree"), theme::surface1(), "not used at all"),
-        ];
+        let segs = s.mem_stack.back().map(|x| x.0).unwrap_or([0; SEGS]);
+        let free = kb("MemFree");
+        let cache_total: u64 = segs[1..8].iter().sum();
         let used = total.saturating_sub(kb("MemAvailable"));
-        let r = panel(ui, "memory", &format!("{} used of {}  ·  {}", size(used), size(total), pct(used as f32 / total as f32)), 202.0 + hs[1]);
+        let r = panel(ui, "memory", &format!("{} used of {}  ·  {}", size(used), size(total), pct(used as f32 / total as f32)), 290.0 + hs[1]);
+        // one bar, every segment in its color, free last
         let bar = Rect::from_min_size(r.min, vec2(r.width(), 14.0));
         let mut x = bar.left();
-        for (_, b, c, _) in &kinds {
+        for (i, b) in segs.iter().enumerate().chain(std::iter::once((SEGS, &free))) {
             let w = bar.width() * *b as f32 / total as f32;
-            ui.painter().rect_filled(Rect::from_min_size(pos2(x, bar.top()), vec2(w, bar.height())), 0.0, *c);
+            let c = if i == SEGS { theme::surface1() } else { seg_meta(i).1 };
+            ui.painter().rect_filled(Rect::from_min_size(pos2(x, bar.top()), vec2(w, bar.height())), 0.0, c);
             x += w;
         }
         let mut y = bar.bottom() + 8.0;
-        for (name, b, c, hint) in &kinds {
-            let row = Rect::from_min_size(pos2(r.left(), y), vec2(r.width(), 16.0));
-            ui.painter().rect_filled(Rect::from_min_size(row.min + vec2(0.0, 4.0), vec2(8.0, 8.0)), 0.0, *c);
-            text(ui, row.min + vec2(14.0, 0.0), Align2::LEFT_TOP, name, theme::text());
-            text(ui, pos2(row.right() - 60.0, y), Align2::RIGHT_TOP, &size(*b), theme::text());
-            text(ui, pos2(row.right(), y), Align2::RIGHT_TOP, &pct(*b as f32 / total as f32), theme::subtext0());
-            ui.interact(row, ui.id().with(name), Sense::hover()).on_hover_text(*hint);
+        let mut row = |ui: &mut Ui, name: &str, b: u64, c: Option<Color32>, hint: &str, indent: f32, strong: bool| {
+            let rr = Rect::from_min_size(pos2(r.left(), y), vec2(r.width(), 16.0));
+            if let Some(c) = c {
+                ui.painter().rect_filled(Rect::from_min_size(rr.min + vec2(indent, 4.0), vec2(8.0, 8.0)), 0.0, c);
+            }
+            let tc = if strong { theme::text() } else { theme::subtext0() };
+            text(ui, rr.min + vec2(indent + 14.0, 0.0), Align2::LEFT_TOP, name, tc);
+            text(ui, pos2(rr.right() - 60.0, y), Align2::RIGHT_TOP, &size(b), tc);
+            text(ui, pos2(rr.right(), y), Align2::RIGHT_TOP, &pct(b as f32 / total as f32), theme::subtext0());
+            ui.interact(rr, ui.id().with(("mem", name)), Sense::hover()).on_hover_text(hint);
             y += 17.0;
+        };
+        for i in 0..SEGS {
+            if i == 1 {
+                row(ui, "file cache", cache_total, None, "files kept in RAM — split by kind below; freed on demand", 0.0, true);
+            }
+            let (name, c, hint, sub) = seg_meta(i);
+            row(ui, name, segs[i], Some(c), hint, if sub { 16.0 } else { 0.0 }, !sub);
         }
+        row(ui, "free", free, Some(theme::surface1()), "not used at all", 0.0, true);
         let (st, sf) = (kb("SwapTotal"), kb("SwapFree"));
         let swap_f = if st > 0 { (st - sf) as f32 / st as f32 } else { 0.0 };
         text(ui, pos2(r.left(), y + 2.0), Align2::LEFT_TOP, "swap", if swap_f > ALERT { theme::bad() } else { theme::text() });
@@ -797,7 +964,7 @@ impl App {
             text(ui, pos2(r.right(), y), Align2::RIGHT_TOP, &format!("{} / {}{gtt}", size(u), size(t)), theme::subtext0());
         }
         let mg = Rect::from_min_max(pos2(r.left(), r.bottom() - hs[1]), r.max);
-        btop_graph(ui, mg, &s.mem, [theme::accent2(), theme::accent(), theme::bad()], false);
+        stacked_graph(ui, mg, &s.mem_stack);
 
         if splitter(ui, "h1", &mut self.edit.heights[1], MIN_H[1]) {
             save_settings(&self.edit);
@@ -978,7 +1145,9 @@ impl App {
                             x = tr.right() + 6.0;
                         }
                         text(ui, pos2(x, row.top() + 2.0), Align2::LEFT_TOP, &name, if m.model { theme::accent() } else { theme::text() });
-                        text(ui, pos2(row.right(), row.top() + 2.0), Align2::RIGHT_TOP, &size(m.size), theme::text());
+                        text(ui, pos2(row.right(), row.top() + 2.0), Align2::RIGHT_TOP, &format!("{} in RAM of {}", size(m.cached), size(m.size)), theme::text());
+                        // kind swatch, same color as in the memory graph
+                        ui.painter().rect_filled(Rect::from_min_size(pos2(row.right() - 8.0, row.top() + 20.0), vec2(8.0, 8.0)), 0.0, m.kind.color());
                         let dir = Path::new(&m.path).parent().map(|d| d.to_string_lossy().to_string()).unwrap_or_default();
                         text(ui, pos2(row.left() + 4.0, row.top() + 18.0), Align2::LEFT_TOP, &format!("{dir}  ·  {}", m.who.join(", ")), theme::overlay0());
                         let path = m.path.clone();
@@ -1133,6 +1302,17 @@ mod tests {
         assert!(raw.contains_key(&std::process::id()));
         assert!(!files_in_memory(&raw).is_empty());
         assert!(disk_usage().1 > 1);
+    }
+
+    #[test]
+    fn kinds_and_residency() {
+        assert_eq!(Kind::of("/usr/lib/libc.so.6", 2 << 20), Kind::Library);
+        assert_eq!(Kind::of("/m/q.gguf", 4 << 30), Kind::Model);
+        assert_eq!(Kind::of("/usr/share/fonts/a.ttf", 1 << 20), Kind::Font);
+        // this test binary is running, so at least part of it is in RAM
+        let me = std::env::current_exe().unwrap();
+        let len = std::fs::metadata(&me).unwrap().len();
+        assert!(resident(&me.to_string_lossy(), len) > 0);
     }
 
     #[test]

@@ -6,3 +6,4 @@ description = "The shared look of every Aura OS tool: theme, fonts, widgets."
 
 [dependencies]
 egui = { workspace = true }
+egui_extras = { workspace = true }

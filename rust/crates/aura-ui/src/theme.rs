@@ -718,6 +718,7 @@ pub fn bold() -> FontFamily {
 /// `AURA_OPTANOMAI_FONT=/path/to/font.ttf` replaces the regular face. Call this
 /// once at startup.
 pub fn install_fonts(ctx: &egui::Context) {
+    crate::icons::install(ctx);
     let regular = match std::env::var("AURA_OPTANOMAI_FONT") {
         Ok(path) => match std::fs::read(&path) {
             Ok(bytes) => egui::FontData::from_owned(bytes),

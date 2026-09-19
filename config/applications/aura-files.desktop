@@ -2,8 +2,8 @@
 Type=Application
 Name=Files
 GenericName=File manager
-Comment=File manager with clickable icons — list view, sorting, copy and paste
-Exec=aura-term --app-id=aura-files -e $HOME/.local/bin/aura-files %f
+Comment=File manager with the Aura icons — icons or list, sorting, copy and paste
+Exec=$HOME/.local/bin/aura-files-rs %f
 Icon=system-file-manager
 Terminal=false
 Categories=System;FileTools;FileManager;

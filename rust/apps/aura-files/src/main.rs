@@ -14,8 +14,8 @@ use std::process::{Command, Stdio};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex};
 
-use aura_ui::{theme, widgets};
-use egui::{Align, Frame, Key, Layout, Margin, Modifiers, RichText, ScrollArea, Sense, TextEdit, Vec2, vec2};
+use aura_ui::{icons, theme, widgets};
+use egui::{Align, Frame, Key, Layout, Margin, Modifiers, Rect, RichText, ScrollArea, Sense, TextEdit, Vec2, vec2};
 
 #[derive(Clone, PartialEq)]
 struct Entry {
@@ -111,21 +111,23 @@ fn places() -> Vec<(String, PathBuf)> {
     v
 }
 
+/// The Aura pack icon (aura_ui::icons) for an entry.
 fn icon_for(e: &Entry) -> &'static str {
     if e.is_dir {
-        return "▸";
+        return "files";
     }
     let n = e.name.to_lowercase();
     let ext = n.rsplit_once('.').map(|(_, x)| x.to_string()).unwrap_or_default();
     match ext.as_str() {
-        "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "bmp" => "▣",
-        "mp4" | "mkv" | "webm" | "mov" | "avi" => "▶",
-        "mp3" | "flac" | "wav" | "ogg" | "opus" => "♪",
-        "pdf" => "▤",
-        "zip" | "gz" | "xz" | "zst" | "tar" | "7z" | "rar" => "◰",
-        "rs" | "py" | "sh" | "js" | "ts" | "c" | "h" | "go" | "toml" | "json" | "yaml" | "yml" => "◇",
-        "md" | "txt" | "log" | "conf" | "ini" | "csv" => "≡",
-        _ => "·",
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "bmp" => "file-image",
+        "mp4" | "mkv" | "webm" | "mov" | "avi" => "media",
+        "mp3" | "flac" | "wav" | "ogg" | "opus" => "audio",
+        "pdf" => "file-pdf",
+        "zip" | "gz" | "xz" | "zst" | "tar" | "7z" | "rar" | "deb" | "pkg" => "package",
+        "rs" | "py" | "sh" | "js" | "ts" | "c" | "h" | "go" | "toml" | "json" | "yaml" | "yml" => "code",
+        "md" | "txt" | "log" | "conf" | "ini" | "csv" => "file-text",
+        "appimage" | "exe" | "bin" | "run" => "file-exec",
+        _ => "file-plain",
     }
 }
 
@@ -696,7 +698,7 @@ impl App {
                                         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
                                     }
                                     let colour = if e.hidden { theme::overlay0() } else if e.is_dir { theme::accent() } else { theme::text() };
-                                    ui.painter().text(rect.center() - vec2(0.0, 16.0), egui::Align2::CENTER_CENTER, icon_for(e), egui::FontId::monospace(26.0), colour);
+                                    icons::paint(ui, icon_for(e), Rect::from_center_size(rect.center() - vec2(0.0, 12.0), vec2(34.0, 34.0)), colour);
                                     let mut label = e.name.clone();
                                     if label.chars().count() > 14 {
                                         label = format!("{}…", label.chars().take(13).collect::<String>());
@@ -717,8 +719,8 @@ impl App {
                                 ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
                             }
                             let colour = if e.hidden { theme::overlay0() } else if e.is_dir { theme::accent() } else { theme::text() };
+                            icons::paint(ui, icon_for(e), Rect::from_center_size(rect.left_center() + vec2(16.0, 0.0), vec2(16.0, 16.0)), colour);
                             let p = ui.painter();
-                            p.text(rect.left_center() + vec2(8.0, 0.0), egui::Align2::LEFT_CENTER, icon_for(e), egui::FontId::monospace(13.0), colour);
                             p.text(rect.left_center() + vec2(28.0, 0.0), egui::Align2::LEFT_CENTER, &e.name, egui::FontId::monospace(13.0), theme::text());
                             p.text(rect.right_center() - vec2(8.0, 0.0), egui::Align2::RIGHT_CENTER, when(e.modified), egui::FontId::monospace(12.0), theme::overlay0());
                             p.text(rect.right_center() - vec2(150.0, 0.0), egui::Align2::RIGHT_CENTER, if e.is_dir { String::new() } else { human(e.size) }, egui::FontId::monospace(12.0), theme::subtext0());

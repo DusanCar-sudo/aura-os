@@ -8,6 +8,7 @@ members = ["crates/aura-ui", "apps/*"]
 [workspace.dependencies]
 eframe = { version = "0.31.1", default-features = false, features = ["glow", "wayland", "x11", "default_fonts"] }
 egui = "0.31.1"
+egui_extras = { version = "0.31.1", default-features = false, features = ["svg"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 

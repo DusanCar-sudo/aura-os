@@ -1,0 +1,10 @@
+[package]
+name = "aura-tree"
+version = "0.1.0"
+edition = "2021"
+description = "The desktop file tree: a pane on the right edge that slides in and out."
+
+[dependencies]
+aura-ui = { path = "../../crates/aura-ui" }
+eframe = { workspace = true }
+egui = { workspace = true }

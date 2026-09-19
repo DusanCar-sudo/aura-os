@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# aura-tree-toggle — slide the desktop file tree in and out on the right.
+#
+#   aura-tree-toggle [toggle|show|hide]
+#
+# The tree (aura-tree, a Rust window) lives in sway's scratchpad when
+# hidden. Shown, it's floating + sticky, full height under the top bar,
+# pinned to the right edge of the focused screen. First use starts it.
+set -uo pipefail
+W=${AURA_TREE_WIDTH:-340}
+BAR=26
+sel='[app_id="aura-tree"]'
+
+# "hidden" | "shown" | "none"
+state() {
+    swaymsg -t get_tree | python3 -c '
+import json, sys
+def walk(n, ws=None):
+    if n.get("type") == "workspace": ws = n.get("name")
+    if n.get("app_id") == "aura-tree":
+        print("hidden" if ws == "__i3_scratch" else "shown"); sys.exit()
+    for c in n.get("nodes", []) + n.get("floating_nodes", []): walk(c, ws)
+walk(json.load(sys.stdin)); print("none")'
+}
+
+place() {
+    read -r x y w h < <(swaymsg -t get_outputs | python3 -c '
+import json, sys
+o = next(o for o in json.load(sys.stdin) if o.get("focused"))
+r = o["rect"]; print(r["x"], r["y"], r["width"], r["height"])')
+    swaymsg "$sel floating enable, sticky enable, border pixel 1, resize set $W $((h - BAR)), move absolute position $((x + w - W)) $((y + BAR))" >/dev/null
+}
+
+show() {
+    case "$(state)" in
+    none)
+        setsid -f aura-tree >/dev/null 2>&1
+        for _ in $(seq 40); do [[ $(state) != none ]] && break; sleep 0.05; done
+        place ;;
+    hidden) swaymsg "$sel scratchpad show" >/dev/null; place ;;
+    shown) place ;;
+    esac
+}
+hide() { [[ $(state) == shown ]] && swaymsg "$sel move scratchpad" >/dev/null; true; }
+
+case "${1:-toggle}" in
+show) show ;;
+hide) hide ;;
+toggle) if [[ $(state) == shown ]]; then hide; else show; fi ;;
+*) echo "usage: aura-tree-toggle [toggle|show|hide]" >&2; exit 2 ;;
+esac

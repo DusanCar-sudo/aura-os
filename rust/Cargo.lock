@@ -199,6 +199,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "aura-sysmon"
+version = "0.1.0"
+dependencies = [
+ "aura-ui",
+ "eframe",
+ "egui",
+]
+
+[[package]]
 name = "aura-tree"
 version = "0.1.0"
 dependencies = [

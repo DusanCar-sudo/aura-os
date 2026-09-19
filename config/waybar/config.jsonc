@@ -42,7 +42,8 @@
       "format-plugged": "bat {capacity}% =",
       "format-full": "bat full",
       "tooltip-format": "{timeTo} · {power:.1f} W",
-      "on-click": "$HOME/.local/bin/aura-os-popup btop"
+      "on-click": "$HOME/.local/bin/aura-sysmon",
+      "on-click-right": "$HOME/.local/bin/aura-os-popup btop"
     },
     "custom/tab1": {
       "exec": "aura-os-tab label 1",
@@ -224,7 +225,8 @@
       "escape": false,
       "align": 0,
       "justify": "left",
-      "on-click": "$HOME/.local/bin/aura-os-popup btop"
+      "on-click": "$HOME/.local/bin/aura-sysmon",
+      "on-click-right": "$HOME/.local/bin/aura-os-popup btop"
     },
     // Last used anything: $ command, d folder, f file, @ address, a app.
     "custom/recent": {

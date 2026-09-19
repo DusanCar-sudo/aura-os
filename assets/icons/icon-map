@@ -6,7 +6,7 @@ terminal       utilities-terminal foot footclient org.codeberg.dnkl.foot aura-te
 files          system-file-manager org.kde.dolphin folder aura-files aura-os-files
 code           accessories-text-editor gvim zed text-editor aura-edit
 settings       preferences-desktop preferences-system applications-system-symbolic aura-os-settings
-system         utilities-system-monitor btop htop
+system         utilities-system-monitor btop htop aura-sysmon
 network        network-wired preferences-system-network nm-applet
 audio          preferences-desktop-sound pavucontrol aura-audio
 bluetooth      preferences-system-bluetooth bluetooth blueman

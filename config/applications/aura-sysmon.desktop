@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=System Monitor
+Comment=CPU, memory by type, temperatures, power cost, processes and AI models in memory
+Exec=$HOME/.local/bin/aura-sysmon
+Icon=aura-sysmon
+Terminal=false
+Categories=System;Monitor;
+Keywords=system;monitor;task;manager;processes;btop;memory;power;

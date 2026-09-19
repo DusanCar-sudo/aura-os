@@ -1,0 +1,10 @@
+[package]
+name = "aura-sysmon"
+version = "0.1.0"
+edition = "2021"
+description = "System monitor for Aura OS: live CPU, memory, swap, disk and temperature, top processes."
+
+[dependencies]
+aura-ui = { path = "../../crates/aura-ui" }
+eframe = { workspace = true }
+egui = { workspace = true }

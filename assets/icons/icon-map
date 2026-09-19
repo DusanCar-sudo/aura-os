@@ -1,0 +1,37 @@
+# Aura icon theme map — aura-os-theme builds ~/.local/share/icons/Aura from
+# this. Each line: <aura icon file (no .svg)>  <icon names it answers to...>
+# Names are the Icon= values in .desktop files. Anything not listed falls
+# back to breeze-dark (index.theme Inherits).
+terminal       utilities-terminal foot footclient org.codeberg.dnkl.foot aura-term
+files          system-file-manager org.kde.dolphin folder aura-files aura-os-files
+code           accessories-text-editor gvim zed text-editor aura-edit
+settings       preferences-desktop preferences-system applications-system-symbolic aura-os-settings
+system         utilities-system-monitor btop htop
+network        network-wired preferences-system-network nm-applet
+audio          preferences-desktop-sound pavucontrol aura-audio
+bluetooth      preferences-system-bluetooth bluetooth blueman
+keyboard       preferences-desktop-keyboard input-keyboard
+lock           dialog-password kwalletmanager pinentry system-lock-screen
+calculator     accessories-calculator aura-calc
+calendar       x-office-calendar aura-calendar
+media          vlc multimedia-video-player
+snapshot       org.flameshot.Flameshot flameshot
+package        ark system-software-install
+display        preferences-desktop-display qv4l2 qvidcap
+gamepad        godot applications-games
+agent          claude-desktop aura-agent
+aura           aura aura-pulse
+browser        brave-desktop brave-browser map-globe web-browser
+app-firefox    firefox
+app-chrome     google-chrome chromium
+app-vscode     code com.visualstudio.code.oss visual-studio-code
+app-chatgpt    chatgpt
+app-discord    discord
+app-obs        com.obsproject.Studio obs
+app-steam      steam
+app-spotify    spotify
+app-docker     docker-desktop
+app-github     github-desktop
+app-slack      slack
+app-unity      unityhub
+app-figma      figma-linux

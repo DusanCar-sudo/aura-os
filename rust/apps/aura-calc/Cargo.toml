@@ -1,0 +1,10 @@
+[package]
+name = "aura-calc"
+version = "0.1.0"
+edition = "2021"
+description = "Calculator for Aura OS: type or click, history below, follows the theme."
+
+[dependencies]
+aura-ui = { path = "../../crates/aura-ui" }
+eframe = { workspace = true }
+egui = { workspace = true }

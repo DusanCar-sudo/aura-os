@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Calculator
+Comment=Type or click, history below, follows the theme
+Exec=$HOME/.local/bin/aura-calc
+Icon=aura-calc
+Terminal=false
+Categories=Utility;Calculator;
+Keywords=calculator;math;calc;

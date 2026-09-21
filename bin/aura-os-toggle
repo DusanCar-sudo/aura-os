@@ -64,6 +64,13 @@ do_hotspot() {
         wifi="$(nmcli -t -f NAME,DEVICE connection show --active |
             awk -F: '$2 ~ /^wl/ {print $1; exit}')"
         [ -n "$wifi" ] && nmcli connection down "$wifi" >/dev/null 2>&1
+        # needs dnsmasq installed (NM runs it for the shared IP) — say so
+        # instead of a bare "could not start"
+        if ! command -v dnsmasq >/dev/null; then
+            notify "Hotspot" "needs dnsmasq:  sudo pacman -S dnsmasq"
+            [ -n "$wifi" ] && nmcli connection up "$wifi" >/dev/null 2>&1
+            return 1
+        fi
         if nmcli device wifi hotspot ssid "Aura" password "aura12345" >/dev/null 2>&1; then
             [ -n "$wifi" ] && echo "$wifi" > "$state/hotspot.wifi"
             notify "Hotspot" "Aura · aura12345 (wifi paused)"

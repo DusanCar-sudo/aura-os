@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# aura-os-layout — the tile-layout button in the middle of the top bar.
+# Shows the focused container's layout, one click cycles it:
+#   ⇄ splith   ⇅ splitv   ▤ tabbed   ▥ stacking
+# Also pokes the bar (RTMIN+12) so the icon re-renders.
+#
+#   aura-os-layout         cycle to the next layout
+#   aura-os-layout label   waybar label (json): {text, class}
+#   aura-os-layout <name>  set exactly (splith|splitv|tabbed|stacking)
+set -uo pipefail
+poke() { pkill -RTMIN+12 -x waybar 2>/dev/null || true; }
+
+# layout of the container that owns the focused window (its direct parent)
+cur() {
+    swaymsg -t get_tree 2>/dev/null | jq -r '
+        .. | select(.nodes? != null and any(.nodes[]?; .focused)) | .layout' \
+        | head -n1
+}
+
+icon_for() {
+    case "$1" in
+        splith)   echo "⇄" ;;
+        splitv)   echo "⇅" ;;
+        tabbed)   echo "▤" ;;
+        stacking) echo "▥" ;;
+        *)        echo "⇄" ;;
+    esac
+}
+
+next_for() {
+    case "$1" in
+        splith)   echo "splitv" ;;
+        splitv)   echo "tabbed" ;;
+        tabbed)   echo "stacking" ;;
+        stacking) echo "splith" ;;
+        *)        echo "splith" ;;
+    esac
+}
+
+cur="$(cur)"; cur="${cur:-splith}"
+case "${1:-cycle}" in
+    label)
+        printf '{"text": "%s", "class": "%s"}' "$(icon_for "$cur")" "$cur" ;;
+    cycle) swaymsg layout "$(next_for "$cur")" >/dev/null 2>&1; poke ;;
+    splith|splitv|tabbed|stacking)
+        swaymsg layout "$1" >/dev/null 2>&1; poke ;;
+    *) echo "usage: aura-os-layout [label|cycle|splith|splitv|tabbed|stacking]" >&2; exit 2 ;;
+esac

@@ -18,7 +18,7 @@
       "custom/tab9", "custom/tabplus", "sway/mode", "sway/window"
     ],
     "modules-center": ["custom/toggle-silent", "custom/toggle-hotspot",
-                     "custom/toggle-record", "custom/toggle-cast"],
+                     "custom/toggle-record", "custom/toggle-cast", "custom/layout"],
     "modules-right": ["bluetooth", "network", "wireplumber", "custom/clip", "battery", "clock", "custom/settings", "custom/tree"],
     // Quick toggles, centre of the top bar (aura-os-toggle): silent,
     // hotspot, screen record, screen cast. Click toggles, state colors it.
@@ -37,6 +37,12 @@
     "custom/toggle-cast": {
       "exec": "aura-os-toggle cast label", "return-type": "json", "signal": 12,
       "tooltip-format": "screen casting (vnc :5900)"
+    },
+    // Tile-layout button: shows the focused container's layout, one click
+    // cycles splith -> splitv -> tabbed -> stacking (aura-os-layout).
+    "custom/layout": {
+      "exec": "aura-os-layout label", "return-type": "json", "signal": 12,
+      "tooltip-format": "tiles: {icon}  (click to change)"
     },
     // Settings cog, far right of the top bar, after the clock: opens the settings hub.
     "custom/settings": {

@@ -144,13 +144,15 @@ window#waybar.top #custom-settings:hover { color: @fg; background: @bg_alt; }
 window#waybar.top #custom-toggle-silent,
 window#waybar.top #custom-toggle-hotspot,
 window#waybar.top #custom-toggle-record,
-window#waybar.top #custom-toggle-cast {
+window#waybar.top #custom-toggle-cast,
+window#waybar.top #custom-layout {
     color: @dim; padding: 0 12px; font-size: 15px;
 }
 window#waybar.top #custom-toggle-silent:hover,
 window#waybar.top #custom-toggle-hotspot:hover,
 window#waybar.top #custom-toggle-record:hover,
-window#waybar.top #custom-toggle-cast:hover { color: @fg; background: @bg_alt; }
+window#waybar.top #custom-toggle-cast:hover,
+window#waybar.top #custom-layout:hover { color: @fg; background: @bg_alt; }
 window#waybar.top #custom-toggle-silent.on,
 window#waybar.top #custom-toggle-hotspot.on,
 window#waybar.top #custom-toggle-record.on,

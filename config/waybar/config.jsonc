@@ -26,26 +26,31 @@
     // hotspot, screen record, screen cast. Click toggles, state colors it.
     "custom/toggle-silent": {
       "exec": "aura-os-toggle silent label", "return-type": "json", "signal": 12,
-      "tooltip-format": "silent mode"
+      "tooltip-format": "silent mode (mute + do not disturb)",
+      "on-click": "aura-os-toggle silent"
     },
     "custom/toggle-hotspot": {
       "exec": "aura-os-toggle hotspot label", "return-type": "json", "signal": 12,
-      "tooltip-format": "hotspot"
+      "tooltip-format": "hotspot (Aura / aura12345; wifi pauses while it is up)",
+      "on-click": "aura-os-toggle hotspot"
     },
     "custom/toggle-record": {
       "exec": "aura-os-toggle record label", "return-type": "json", "signal": 12,
-      "tooltip-format": "record screen"
+      "tooltip-format": "record the focused screen to ~/Videos",
+      "on-click": "aura-os-toggle record"
     },
     "custom/toggle-cast": {
       "exec": "aura-os-toggle cast label", "return-type": "json", "signal": 12,
-      "tooltip-format": "screen casting (vnc :5900)"
+      "tooltip-format": "screen cast over VNC, port 5900",
+      "on-click": "aura-os-toggle cast"
     },
     // Tile-layout button (aura-os-layout): arranges the focused
     // workspace into Dusan's three drawn layouts, one click cycles
     // bottom -> top -> left. Focused window becomes the master tile.
     "custom/layout": {
       "exec": "aura-os-layout label", "return-type": "json", "signal": 12,
-      "tooltip-format": "tiles: {icon}  (click to change)"
+      "tooltip-format": "tiles: {icon}  (click to change)",
+      "on-click": "aura-os-layout cycle"
     },
     // Settings cog, far right of the top bar, after the clock: opens the settings hub.
     "custom/settings": {
@@ -241,26 +246,31 @@
     // hotspot, screen record, screen cast. Click toggles, state colors it.
     "custom/toggle-silent": {
       "exec": "aura-os-toggle silent label", "return-type": "json", "signal": 12,
-      "tooltip-format": "silent mode"
+      "tooltip-format": "silent mode (mute + do not disturb)",
+      "on-click": "aura-os-toggle silent"
     },
     "custom/toggle-hotspot": {
       "exec": "aura-os-toggle hotspot label", "return-type": "json", "signal": 12,
-      "tooltip-format": "hotspot"
+      "tooltip-format": "hotspot (Aura / aura12345; wifi pauses while it is up)",
+      "on-click": "aura-os-toggle hotspot"
     },
     "custom/toggle-record": {
       "exec": "aura-os-toggle record label", "return-type": "json", "signal": 12,
-      "tooltip-format": "record screen"
+      "tooltip-format": "record the focused screen to ~/Videos",
+      "on-click": "aura-os-toggle record"
     },
     "custom/toggle-cast": {
       "exec": "aura-os-toggle cast label", "return-type": "json", "signal": 12,
-      "tooltip-format": "screen casting (vnc :5900)"
+      "tooltip-format": "screen cast over VNC, port 5900",
+      "on-click": "aura-os-toggle cast"
     },
     // Tile-layout button (aura-os-layout): arranges the focused
     // workspace into Dusan's three drawn layouts, one click cycles
     // bottom -> top -> left. Focused window becomes the master tile.
     "custom/layout": {
       "exec": "aura-os-layout label", "return-type": "json", "signal": 12,
-      "tooltip-format": "tiles: {icon}  (click to change)"
+      "tooltip-format": "tiles: {icon}  (click to change)",
+      "on-click": "aura-os-layout cycle"
     },
     // Settings cog, far right of the top bar, after the clock: opens the settings hub.
     "custom/settings": {

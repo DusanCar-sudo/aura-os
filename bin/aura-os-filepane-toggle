@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# aura-filepane-toggle — slide the file pane in and out on the right.
+#
+#   aura-filepane-toggle [toggle|show|hide]
+#
+# The pane is aura-os-files in pane mode, running in its own aura-term
+# (app_id aura-files-pane) that lives in sway's scratchpad when hidden.
+# Shown, it tiles on the right of the focused output at 22% width.
+# Same mechanics as aura-tree-toggle, tiled instead of floating.
+set -uo pipefail
+sel='[app_id="aura-files-pane"]'
+PCT=${AURA_FILEPANE_PCT:-22}
+
+# "hidden" | "shown" | "none"
+state() {
+    swaymsg -t get_tree | python3 -c '
+import json, sys
+def walk(n, ws=None):
+    if n.get("type") == "workspace": ws = n.get("name")
+    if n.get("app_id") == "aura-files-pane":
+        print("hidden" if ws == "__i3_scratch" else "shown"); sys.exit()
+    for c in n.get("nodes", []) + n.get("floating_nodes", []): walk(c, ws)
+walk(json.load(sys.stdin)); print("none")'
+}
+
+place() {
+    # Tile it on the right: float, pin to the right edge of the focused
+    # output, 22% of its width, full height under the top bar. A tiled
+    # pane would reshuffle the layout of whatever is open; this never
+    # moves another window.
+    local out
+    out=$(swaymsg -t get_outputs | python3 -c '
+import json, sys
+o = next(o for o in json.load(sys.stdin) if o.get("focused"))
+r = o["rect"]; print(r["x"], r["y"], r["width"], r["height"])')
+    read -r x y w h <<<"$out"
+    local W=$(( w * PCT / 100 )) H=$(( h - 26 ))
+    swaymsg "$sel floating enable, sticky enable, border pixel 1, resize set $W $H, move absolute position $(( x + w - W )) $(( y + 26 ))" >/dev/null
+}
+
+start() {
+    setsid -f aura-term --app-id=aura-files-pane \
+        aura-os-files pane "${AURA_FILEPANE_DIR:-$HOME}" >/dev/null 2>&1
+    for _ in $(seq 40); do [[ $(state) != none ]] && return 0; sleep 0.05; done
+    return 1
+}
+
+show() {
+    case "$(state)" in
+    none)   start || return 1 ;;
+    hidden) swaymsg "$sel scratchpad show" >/dev/null ;;
+    esac
+    place
+}
+hide() { [[ $(state) == shown ]] && swaymsg "$sel move scratchpad" >/dev/null; true; }
+
+case "${1:-toggle}" in
+show)   show ;;
+hide)   hide ;;
+toggle) if [[ $(state) == shown ]]; then hide; else show; fi ;;
+*)      echo "usage: aura-filepane-toggle [toggle|show|hide]" >&2; exit 2 ;;
+esac

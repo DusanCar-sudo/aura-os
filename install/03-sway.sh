@@ -42,6 +42,8 @@ put "$REPO/config/sway/config.d/05-aura-term.conf" "$cfg/sway/config.d/05-aura-t
 put "$REPO/config/sway/config.d/20-dusan-apps.conf" "$cfg/sway/config.d/20-dusan-apps.conf"
 put "$REPO/config/sway/config.d/20-mouse.conf" "$cfg/sway/config.d/20-mouse.conf"
 put "$REPO/config/sway/config.d/30-idle.conf" "$cfg/sway/config.d/30-idle.conf"
+put "$REPO/config/sway/config.d/80-journey.conf" "$cfg/sway/config.d/80-journey.conf"
+put "$REPO/config/sway/config.d/82-filepane.conf" "$cfg/sway/config.d/82-filepane.conf"
 put "$REPO/config/waybar/config.jsonc" "$cfg/waybar/config.jsonc"
 put "$REPO/config/waybar/style.css" "$cfg/waybar/style.css"
 install -d -o "$user" -g "$user" "$cfg/waybar/assets"

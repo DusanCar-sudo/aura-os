@@ -1,0 +1,324 @@
+#!/usr/bin/env bash
+# aura-os-files — the file manager: two panes, keyboard first.
+#
+# Dolphin's useful half without a toolkit. Left pane and right pane, Tab
+# between them, arrows to move, Enter to open. Copy and move always go
+# *to the other pane*, which is the whole point of two panes and the
+# reason this is not a list with a destination prompt.
+#
+#   ↑ ↓        move          Tab    other pane        Enter  open
+#   ← / h      up a level    Space  select            Ins/v  select + down
+#   F5 / c     copy          F6 / m move              F7 / n new folder
+#   F8 / d     delete        F2 / r rename            F3     view
+#   /          filter        .      hidden files      g / G  top / bottom
+#   q          quit
+#
+# Nothing here shells out to a file manager; it is cp, mv, mkdir and rm,
+# so what it does is exactly what the same command would do in a terminal.
+#
+# `aura-os-files pane [dir]` runs single-pane — the listing the file pane
+# (Super+F, aura-filepane-toggle) shows on the right edge. Same keys minus
+# Tab and F5/F6 (no other pane to go to).
+set -uo pipefail
+
+# ── state ────────────────────────────────────────────────────────────────────
+PANE=0
+if [ "${1:-}" = pane ]; then PANE=1; shift; fi
+declare -a DIR=("${1:-$PWD}" "${2:-$HOME}")   # one cwd per pane
+declare -a CUR=(0 0)                          # cursor index per pane
+declare -a TOP=(0 0)                          # first visible row per pane
+declare -a NAMES_0=() NAMES_1=()
+declare -A MARKED=()                          # "pane:path" -> 1
+ACTIVE=0
+SHOW_HIDDEN=0
+FILTER=""
+STATUS=""
+
+for i in 0 1; do DIR[$i]="$(cd "${DIR[$i]}" 2>/dev/null && pwd || echo "$HOME")"; done
+
+# ── colours, from the theme ──────────────────────────────────────────────────
+# aura-os-theme writes colors.sed; we only need a few roles, and we degrade
+# to plain attributes if it is not there.
+C_RESET=$'\e[0m'; C_DIM=$'\e[2m'; C_REV=$'\e[7m'; C_B=$'\e[1m'
+C_DIRC=$'\e[38;5;81m'; C_EXE=$'\e[38;5;114m'; C_MARK=$'\e[38;5;213m'
+C_HEAD=$'\e[38;5;245m'
+
+cleanup() { printf '\e[?1049l\e[?25h'; stty echo 2>/dev/null; }
+trap cleanup EXIT INT TERM
+
+rows() { local r; r=$(tput lines 2>/dev/null || echo 24); echo $(( r - 4 )); }
+cols() { tput cols 2>/dev/null || echo 80; }
+
+# ── reading a directory ──────────────────────────────────────────────────────
+load() { # load <pane>
+    local p="$1"
+    local d="${DIR[$p]}"
+    local -a out=() entries=()
+    shopt -s nullglob dotglob
+    local f
+    for f in "$d"/*; do entries+=("$(basename "$f")"); done
+    shopt -u dotglob
+    shopt -u nullglob
+
+    local -a dirs=() files=()
+    for f in "${entries[@]}"; do
+        [ "$SHOW_HIDDEN" = 0 ] && [[ $f == .* ]] && continue
+        [ -n "$FILTER" ] && [[ ${f,,} != *${FILTER,,}* ]] && continue
+        if [ -d "$d/$f" ]; then dirs+=("$f"); else files+=("$f"); fi
+    done
+    [ "${#dirs[@]}"  -gt 0 ] && mapfile -t dirs  < <(printf '%s\n' "${dirs[@]}"  | LC_ALL=C sort)
+    [ "${#files[@]}" -gt 0 ] && mapfile -t files < <(printf '%s\n' "${files[@]}" | LC_ALL=C sort)
+    out=("..")
+    for f in "${dirs[@]}";  do [ -n "$f" ] && out+=("$f"); done
+    for f in "${files[@]}"; do [ -n "$f" ] && out+=("$f"); done
+    if [ "$p" = 0 ]; then NAMES_0=("${out[@]}"); else NAMES_1=("${out[@]}"); fi
+}
+
+name_at() { if [ "$1" = 0 ]; then printf '%s' "${NAMES_0[$2]:-}"; else printf '%s' "${NAMES_1[$2]:-}"; fi; }
+count_of() { if [ "$1" = 0 ]; then echo "${#NAMES_0[@]}"; else echo "${#NAMES_1[@]}"; fi; }
+path_at() { local p="$1" i="$2" n; n="$(name_at "$p" "$i")"; [ -n "$n" ] && printf '%s/%s' "${DIR[$p]}" "$n"; }
+
+human() { # bytes -> 1.2M
+    awk -v b="${1:-0}" 'BEGIN{
+        split("B K M G T", u, " "); i=1
+        while (b >= 1024 && i < 5) { b/=1024; i++ }
+        printf (i==1 ? "%d%s" : "%.1f%s"), b, u[i] }'
+}
+
+# ── drawing ──────────────────────────────────────────────────────────────────
+draw_pane() { # draw_pane <pane> <x> <w> <h>
+    local p="$1" x="$2" w="$3" h="$4" i n full line disp meta
+    local total; total="$(count_of "$p")"
+
+    # keep the cursor on screen
+    (( CUR[p] >= total )) && CUR[p]=$(( total > 0 ? total - 1 : 0 ))
+    (( CUR[p] < 0 )) && CUR[p]=0
+    (( CUR[p] < TOP[p] )) && TOP[p]=${CUR[p]}
+    (( CUR[p] >= TOP[p] + h )) && TOP[p]=$(( CUR[p] - h + 1 ))
+
+    # header: which directory, shortened from the left so the tail shows
+    local hdr="${DIR[$p]/#$HOME/\~}"
+    (( ${#hdr} > w - 2 )) && hdr="…${hdr: -$(( w - 3 ))}"
+    printf '\e[1;%dH' "$x"
+    if [ "$p" = "$ACTIVE" ]; then printf '%s%-*s%s' "$C_B" "$w" "${hdr:0:$w}" "$C_RESET"
+    else printf '%s%-*s%s' "$C_HEAD" "$w" "${hdr:0:$w}" "$C_RESET"; fi
+
+    for (( i=0; i<h; i++ )); do
+        local idx=$(( TOP[p] + i ))
+        printf '\e[%d;%dH' $(( i + 2 )) "$x"
+        if (( idx >= total )); then printf '%-*s' "$w" ""; continue; fi
+        n="$(name_at "$p" "$idx")"; full="${DIR[$p]}/$n"
+        meta=""
+        if [ "$n" = ".." ]; then disp="..";
+        elif [ -d "$full" ]; then disp="$n/"; meta="dir"
+        else disp="$n"; meta="$(human "$(stat -c %s "$full" 2>/dev/null || echo 0)")"; fi
+
+        local mw=$(( w - ${#meta} - 2 ))
+        (( mw < 4 )) && mw=4
+        (( ${#disp} > mw )) && disp="${disp:0:$(( mw - 1 ))}…"
+        line="$(printf ' %-*s %s' "$mw" "$disp" "$meta")"
+        line="${line:0:$w}"
+
+        local colour=""
+        [ -d "$full" ] && colour="$C_DIRC"
+        [ -f "$full" ] && [ -x "$full" ] && colour="$C_EXE"
+        [ -n "${MARKED[$p:$full]:-}" ] && colour="$C_MARK"
+
+        if (( idx == CUR[p] )) && [ "$p" = "$ACTIVE" ]; then
+            printf '%s%-*s%s' "$C_REV" "$w" "$line" "$C_RESET"
+        elif (( idx == CUR[p] )); then
+            printf '%s%s%-*s%s' "$C_DIM" "$colour" "$w" "$line" "$C_RESET"
+        else
+            printf '%s%-*s%s' "$colour" "$w" "$line" "$C_RESET"
+        fi
+    done
+}
+
+draw() {
+    local W H PW
+    W="$(cols)"; H="$(rows)"; PW=$(( (W - 1) / 2 ))
+    printf '\e[H\e[J'
+    if [ "$PANE" = 1 ]; then
+        draw_pane 0 1 "$W" "$H"
+    else
+        draw_pane 0 1 "$PW" "$H"
+        draw_pane 1 $(( PW + 2 )) "$PW" "$H"
+
+        # vertical rule between the panes
+        local i
+        for (( i=0; i<H+1; i++ )); do printf '\e[%d;%dH%s│%s' $(( i + 1 )) $(( PW + 1 )) "$C_DIM" "$C_RESET"; done
+    fi
+
+    local marks=${#MARKED[@]}
+    printf '\e[%d;1H%s%-*s%s' $(( H + 2 )) "$C_DIM" "$W" \
+        "$( [ -n "$FILTER" ] && printf 'filter:%s  ' "$FILTER"
+            [ "$marks" -gt 0 ] && printf '%d selected  ' "$marks"
+            printf '%s' "${STATUS}" )" "$C_RESET"
+    if [ "$PANE" = 1 ]; then
+        printf '\e[%d;1H%s%-*s%s' $(( H + 3 )) "$C_HEAD" "$W" \
+            " Enter open  F7 mkdir  F8 delete  F2 rename  / filter  q quit" "$C_RESET"
+    else
+        printf '\e[%d;1H%s%-*s%s' $(( H + 3 )) "$C_HEAD" "$W" \
+            " Tab pane  Enter open  F5 copy  F6 move  F7 mkdir  F8 delete  F2 rename  / filter  q quit" "$C_RESET"
+    fi
+}
+
+# ── prompts ──────────────────────────────────────────────────────────────────
+ask() { # ask <label> [preset] -> stdout
+    local label="$1" preset="${2:-}" reply
+    printf '\e[%d;1H\e[K%s%s%s' $(( $(rows) + 2 )) "$C_B" "$label" "$C_RESET"
+    stty echo 2>/dev/null; printf '\e[?25h'
+    IFS= read -r -e -i "$preset" reply
+    stty -echo 2>/dev/null; printf '\e[?25l'
+    printf '%s' "$reply"
+}
+
+confirm() { # confirm <question> -> 0 yes
+    local q="$1" k
+    printf '\e[%d;1H\e[K%s%s [y/N]%s ' $(( $(rows) + 2 )) "$C_B" "$q" "$C_RESET"
+    read -rsn1 k
+    [ "${k,,}" = y ]
+}
+
+# Everything the current action applies to: the marked files, or if none
+# are marked, the one under the cursor. Never both.
+targets() {
+    local p="$ACTIVE" k found=0
+    for k in "${!MARKED[@]}"; do
+        [[ $k == $p:* ]] && { printf '%s\n' "${k#$p:}"; found=1; }
+    done
+    if [ "$found" = 0 ]; then
+        local n; n="$(name_at "$p" "${CUR[$p]}")"
+        [ "$n" = ".." ] || path_at "$p" "${CUR[$p]}"
+    fi
+}
+
+other() { echo $(( 1 - ACTIVE )); }
+
+refresh() { load 0; [ "$PANE" = 0 ] && load 1; true; }
+
+# ── actions ──────────────────────────────────────────────────────────────────
+do_transfer() { # do_transfer cp|mv
+    local how="$1"
+    local dest="${DIR[$(other)]}"
+    local -a list=()
+    mapfile -t list < <(targets)
+    [ "${#list[@]}" -gt 0 ] || { STATUS="nothing selected"; return; }
+    local word; [ "$how" = cp ] && word=Copy || word=Move
+    confirm "$word ${#list[@]} item(s) to ${dest/#$HOME/\~}?" || { STATUS="cancelled"; return; }
+    local f ok=0 fail=0
+    for f in "${list[@]}"; do
+        if [ "$how" = cp ]; then cp -a -- "$f" "$dest/" 2>/dev/null && ok=$((ok+1)) || fail=$((fail+1))
+        else                     mv -- "$f" "$dest/" 2>/dev/null && ok=$((ok+1)) || fail=$((fail+1)); fi
+    done
+    MARKED=()
+    STATUS="$word: $ok done${fail:+, $fail failed}"
+    refresh
+}
+
+do_delete() {
+    local -a list=(); mapfile -t list < <(targets)
+    [ "${#list[@]}" -gt 0 ] || { STATUS="nothing selected"; return; }
+    confirm "Delete ${#list[@]} item(s) permanently?" || { STATUS="cancelled"; return; }
+    local f ok=0 fail=0
+    for f in "${list[@]}"; do rm -rf -- "$f" 2>/dev/null && ok=$((ok+1)) || fail=$((fail+1)); done
+    MARKED=(); STATUS="deleted $ok${fail:+, $fail failed}"; refresh
+}
+
+do_mkdir() {
+    local n; n="$(ask 'new folder: ')"
+    [ -n "$n" ] || { STATUS=""; return; }
+    mkdir -p -- "${DIR[$ACTIVE]}/$n" 2>/dev/null && STATUS="made $n" || STATUS="could not make $n"
+    refresh
+}
+
+do_rename() {
+    local old; old="$(name_at "$ACTIVE" "${CUR[$ACTIVE]}")"
+    [ "$old" = ".." ] && return
+    local new; new="$(ask 'rename to: ' "$old")"
+    [ -n "$new" ] && [ "$new" != "$old" ] || { STATUS=""; return; }
+    mv -n -- "${DIR[$ACTIVE]}/$old" "${DIR[$ACTIVE]}/$new" 2>/dev/null &&
+        STATUS="renamed to $new" || STATUS="could not rename"
+    refresh
+}
+
+open_entry() {
+    local p="$ACTIVE" n full
+    n="$(name_at "$p" "${CUR[$p]}")"; [ -n "$n" ] || return
+    if [ "$n" = ".." ]; then
+        DIR[$p]="$(dirname "${DIR[$p]}")"; CUR[$p]=0; TOP[$p]=0; FILTER=""; load "$p"; return
+    fi
+    full="${DIR[$p]}/$n"
+    if [ -d "$full" ]; then
+        DIR[$p]="$full"; CUR[$p]=0; TOP[$p]=0; FILTER=""; load "$p"
+    else
+        cleanup
+        if [ -n "${AURA_FILES_OPENER:-}" ]; then "$AURA_FILES_OPENER" "$full"
+        elif command -v xdg-open >/dev/null; then setsid xdg-open "$full" >/dev/null 2>&1 &
+        fi
+        printf '\e[?1049h\e[?25l'
+        STATUS="opened $n"
+    fi
+}
+
+view_entry() {
+    local full; full="$(path_at "$ACTIVE" "${CUR[$ACTIVE]}")"
+    [ -f "$full" ] || return
+    cleanup
+    ${PAGER:-less} -- "$full"
+    printf '\e[?1049h\e[?25l'
+}
+
+toggle_mark() {
+    local full; full="$(path_at "$ACTIVE" "${CUR[$ACTIVE]}")"
+    [ -n "$full" ] && [ "$(name_at "$ACTIVE" "${CUR[$ACTIVE]}")" != ".." ] || return
+    local k="$ACTIVE:$full"
+    [ -n "${MARKED[$k]:-}" ] && unset 'MARKED[$k]' || MARKED[$k]=1
+}
+
+# ── main loop ────────────────────────────────────────────────────────────────
+printf '\e[?1049h\e[?25l'; stty -echo 2>/dev/null
+refresh
+
+while :; do
+    draw
+    IFS= read -rsn1 key || break
+    # escape sequences: arrows and function keys
+    if [ "$key" = $'\e' ]; then
+        read -rsn2 -t 0.01 rest || rest=""
+        case "$rest" in
+            '[A') key=up ;; '[B') key=down ;; '[C') key=right ;; '[D') key=left ;;
+            '[1'|'[2') read -rsn2 -t 0.01 more || more=""
+                       case "$rest$more" in
+                           '[15~') key=f5 ;; '[17~') key=f6 ;; '[18~') key=f7 ;;
+                           '[20~') key=f8 ;; '[12~') key=f2 ;; '[13~') key=f3 ;;
+                           '[2~')  key=mark ;; *) key=esc ;;
+                       esac ;;
+            'OP') key=f1 ;; 'OQ') key=f2 ;; 'OR') key=f3 ;; 'OS') key=f4 ;;
+            *) key=esc ;;
+        esac
+    fi
+    STATUS=""
+    case "$key" in
+        q)            break ;;
+        $'\t')        [ "$PANE" = 0 ] && ACTIVE=$(( 1 - ACTIVE )) ;;
+        up|k)         CUR[$ACTIVE]=$(( CUR[ACTIVE] - 1 )) ;;
+        down|j)       CUR[$ACTIVE]=$(( CUR[ACTIVE] + 1 )) ;;
+        g)            CUR[$ACTIVE]=0 ;;
+        G)            CUR[$ACTIVE]=$(( $(count_of "$ACTIVE") - 1 )) ;;
+        left|h)       DIR[$ACTIVE]="$(dirname "${DIR[$ACTIVE]}")"; CUR[$ACTIVE]=0; TOP[$ACTIVE]=0
+                      FILTER=""; load "$ACTIVE" ;;
+        right|l|"")   open_entry ;;
+        ' '|mark|v)   toggle_mark; CUR[$ACTIVE]=$(( CUR[ACTIVE] + 1 )) ;;
+        f5|c)         if [ "$PANE" = 0 ]; then do_transfer cp; else STATUS="no other pane"; fi ;;
+        f6|m)         if [ "$PANE" = 0 ]; then do_transfer mv; else STATUS="no other pane"; fi ;;
+        f7|n)         do_mkdir ;;
+        f8|d)         do_delete ;;
+        f2|r)         do_rename ;;
+        f3)           view_entry ;;
+        .)            SHOW_HIDDEN=$(( 1 - SHOW_HIDDEN )); refresh ;;
+        /)            FILTER="$(ask 'filter: ' "$FILTER")"; CUR[$ACTIVE]=0; TOP[$ACTIVE]=0; refresh ;;
+        esc)          FILTER=""; MARKED=(); refresh ;;
+        $'\x0c')      refresh ;;                      # ctrl-l
+    esac
+done

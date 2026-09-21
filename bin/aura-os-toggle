@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # aura-os-toggle — the quick toggles living in the middle of the top bar:
-#   silent  mute/unmute the default sink
+#   silent  silent mode: mute sound + do-not-disturb for notifications
 #   hotspot Wi-Fi hotspot up/down
 #   record  wf-recorder screen recording, click again to stop
 #   cast    wayvnc screen sharing (VNC), click again to stop
@@ -28,19 +28,49 @@ hotspot_on() { nmcli -t -f NAME,DEVICE connection show --active 2>/dev/null | gr
 
 silent_on() { wpctl get-volume @DEFAULT_AUDIO_SINK@ 2>/dev/null | grep -q MUTED; }
 
+dnd_on() { makoctl mode 2>/dev/null | grep -q do-not-disturb; }
+
+# mako drops a mode change that lands too close behind another makoctl
+# call (the dnd_on check) — give it a beat first
+dnd() { sleep 0.25; makoctl mode "$@" >/dev/null 2>&1; }
+
 do_silent() {
-    wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
-    if silent_on; then notify "Silent" "sound off"; else notify "Silent" "sound on"; fi
+    if silent_on || dnd_on; then
+        # silent mode off: sound back, notifications back
+        wpctl set-mute @DEFAULT_AUDIO_SINK@ 0
+        dnd -r do-not-disturb
+        notify "Silent" "sound on · notifications on"
+    else
+        # silent mode on: muted and no notifications
+        wpctl set-mute @DEFAULT_AUDIO_SINK@ 1
+        dnd -a do-not-disturb
+        notify "Silent" "sound off · notifications off"
+    fi
 }
 
 do_hotspot() {
     if hotspot_on; then
         nmcli connection down "$(nmcli -t -f NAME,DEVICE connection show --active |
             awk -F: 'tolower($1) ~ /hotspot/ {print $1; exit}')" >/dev/null 2>&1
+        # put the wifi back on whatever network it used before
+        [ -f "$state/hotspot.wifi" ] && {
+            nmcli connection up "$(cat "$state/hotspot.wifi")" >/dev/null 2>&1
+            rm -f "$state/hotspot.wifi"
+        }
         notify "Hotspot" "off"
     else
-        nmcli device wifi hotspot ssid "Aura" password "aura12345" >/dev/null 2>&1 &&
-            notify "Hotspot" "Aura · aura12345" || notify "Hotspot" "could not start"
+        # the card can't do station + AP at once: drop wifi first,
+        # remember it, restore it when the hotspot goes down
+        wifi="$(nmcli -t -f NAME,DEVICE connection show --active |
+            awk -F: '$2 ~ /^wl/ {print $1; exit}')"
+        [ -n "$wifi" ] && nmcli connection down "$wifi" >/dev/null 2>&1
+        if nmcli device wifi hotspot ssid "Aura" password "aura12345" >/dev/null 2>&1; then
+            [ -n "$wifi" ] && echo "$wifi" > "$state/hotspot.wifi"
+            notify "Hotspot" "Aura · aura12345 (wifi paused)"
+        else
+            [ -n "$wifi" ] && nmcli connection up "$wifi" >/dev/null 2>&1
+            notify "Hotspot" "could not start"
+        fi
     fi
 }
 
@@ -79,7 +109,7 @@ do_cast() {
 case "${2:-}" in
     label)
         case "${1:-}" in
-            silent)  silent_on  && t="on" || t="off"; printf '{"text": "\\uf0f3", "class": "%s"}' "$t" ;;
+            silent)  { silent_on || dnd_on; } && t="on" || t="off"; printf '{"text": "\\uf0f3", "class": "%s"}' "$t" ;;
             hotspot) hotspot_on && t="on" || t="off"; printf '{"text": "\\ue1ce", "class": "%s"}' "$t" ;;
             record)  pid_of record && t="on" || t="off"; printf '{"text": "\\uf192", "class": "%s"}' "$t" ;;
             cast)    pid_of cast   && t="on" || t="off"; printf '{"text": "\\uf26c", "class": "%s"}' "$t" ;;

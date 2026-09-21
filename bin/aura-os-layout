@@ -1,48 +1,136 @@
 #!/usr/bin/env bash
 # aura-os-layout — the tile-layout button in the middle of the top bar.
-# Shows the focused container's layout, one click cycles it:
-#   ⇄ splith   ⇅ splitv   ▤ tabbed   ▥ stacking
-# Also pokes the bar (RTMIN+12) so the icon re-renders.
+# One click arranges the workspace into the next of the three layouts
+# Dusan drew (~/Pictures/rasp.jpg):
 #
-#   aura-os-layout         cycle to the next layout
-#   aura-os-layout label   waybar label (json): {text, class}
-#   aura-os-layout <name>  set exactly (splith|splitv|tabbed|stacking)
+#   bottom   two tiles on top, the master below
+#   top      the master on top, two tiles below
+#   left     two tiles stacked left, the master right
+#
+# The focused window becomes the master (the big tile). The next two
+# windows in focus order take the small tiles; any further windows stay
+# where they are and re-flow around the three.
+#
+#   aura-os-layout [bottom|top|left]   arrange now
+#   aura-os-layout cycle               next arrangement
+#   aura-os-layout label               waybar label (json)
+#
+# How: the chosen windows are moved to a scratch workspace and back so
+# they arrive as one flat row (moving containers between workspaces
+# flattens them — that is what makes this deterministic), then the
+# arrangement is built in place with sway move commands tested live
+# against this exact sway build. Replaces the splith/splitv/tabbed
+# cycler (028f61f2); that history is in git.
 set -uo pipefail
+state="${XDG_STATE_HOME:-$HOME/.local/state}/aura-os"
+mkdir -p "$state"
 poke() { pkill -RTMIN+12 -x waybar 2>/dev/null || true; }
+cur_name() { cat "$state/layout" 2>/dev/null || echo bottom; }
+TMP=__layout_tmp
 
-# layout of the container that owns the focused window (its direct parent)
-cur() {
-    swaymsg -t get_tree 2>/dev/null | jq -r '
-        .. | select(.nodes? != null and any(.nodes[]?; .focused)) | .layout' \
-        | head -n1
-}
+# The focused window's workspace (first line), then that workspace's
+# tiled windows: the focused window first, the rest in tree order.
+# ONLY that workspace — one tree read decides both, and nothing from
+# any other workspace is ever touched.
+ws_and_tiled() { swaymsg -t get_tree | python3 -c '
+import json, sys
+st = {"ws": None, "focus": None, "ids": []}
+def locate(n, cur):
+    if n.get("type") == "workspace":
+        cur = n["name"]
+    if n.get("focused"):
+        st["focus"] = n["id"]; st["ws"] = cur
+        return True
+    return any(locate(ch, cur) for ch in n.get("nodes", []))
+def collect(n):
+    if n.get("type") == "floating_con": return
+    if n.get("app_id") or n.get("window_properties") or n.get("pid"):
+        st["ids"].append(n["id"])
+    for ch in n.get("nodes", []): collect(ch)
+def walk(n):
+    for ws in n.get("nodes", []):
+        if ws.get("type") == "workspace" and locate(ws, ws["name"]):
+            collect(ws); return True
+        if walk(ws): return True
+    return False
+walk(json.load(sys.stdin))
+if not st["ws"] or not st["focus"]:
+    sys.exit(1)
+rest = [i for i in st["ids"] if i != st["focus"]]
+print(st["ws"]); print(st["focus"]); print("\n".join(map(str, rest)))'; }
 
-icon_for() {
-    case "$1" in
-        splith)   echo "⇄" ;;
-        splitv)   echo "⇅" ;;
-        tabbed)   echo "▤" ;;
-        stacking) echo "▥" ;;
-        *)        echo "⇄" ;;
+apply() {
+    local lay="$1" orig
+    local reads
+    reads="$(ws_and_tiled)" || { notify-send "Tiles" "focus a window first"; return 1; }
+    mapfile -t wins <<< "$reads"
+    orig="${wins[0]}"
+    if ((${#wins[@]} < 3)); then notify-send "Tiles" "need at least 2 tiled windows"; return 1; fi
+    # con_ids are stable across workspace moves; marks are not — use ids.
+    local ids=("${wins[@]:1}")
+    sel() { echo "[con_id=${ids[$1]}]"; }
+    local three=0
+    ((${#ids[@]} >= 3)) && three=1
+
+    # flatten the chosen windows: away, then back in layout order
+    swaymsg "$(sel 0) move to workspace $TMP" >/dev/null
+    swaymsg "$(sel 1) move to workspace $TMP" >/dev/null
+    ((three)) && swaymsg "$(sel 2) move to workspace $TMP" >/dev/null
+    swaymsg "$(sel 0) move to workspace \"$orig\"" >/dev/null
+    swaymsg "$(sel 1) move to workspace \"$orig\"" >/dev/null
+    ((three)) && swaymsg "$(sel 2) move to workspace \"$orig\"" >/dev/null
+
+    # canonicalize the container that holds the three: the top container
+    # keeps its old orientation across the flatten, and the recipes below
+    # assume a known one.
+    swaymsg "$(sel 0) focus" >/dev/null; swaymsg "focus parent" >/dev/null
+    case "$lay" in
+        left) swaymsg "layout splitv"  >/dev/null ;;
+        *)    swaymsg "layout splith" >/dev/null ;;
     esac
-}
 
-next_for() {
-    case "$1" in
-        splith)   echo "splitv" ;;
-        splitv)   echo "tabbed" ;;
-        tabbed)   echo "stacking" ;;
-        stacking) echo "splith" ;;
-        *)        echo "splith" ;;
+    case "$lay" in
+    bottom) # pair top, master below
+        swaymsg "$(sel 0) focus" >/dev/null; swaymsg "move down" >/dev/null
+        ;;
+    top)    # master above, pair below
+        swaymsg "$(sel 0) focus" >/dev/null; swaymsg "move down" >/dev/null
+        swaymsg "$(sel 1) focus" >/dev/null; swaymsg "focus parent" >/dev/null
+        swaymsg "move down" >/dev/null
+        ;;
+    left)   # pair stacked left, master right
+        swaymsg "$(sel 0) focus" >/dev/null; swaymsg "move right" >/dev/null
+        ;;
+    *) return 1 ;;
     esac
+    # the master takes roughly two thirds — the drawings show it dominant
+    swaymsg "$(sel 0) focus" >/dev/null
+    case "$lay" in
+        bottom|top) swaymsg "resize set height 66 ppt" >/dev/null ;;
+        left)       swaymsg "resize set width 66 ppt"  >/dev/null ;;
+    esac
+    swaymsg "$(sel 0) focus" >/dev/null
+    echo "$lay" > "$state/layout"
+    notify-send "Tiles" "$lay"
+    poke
 }
 
-cur="$(cur)"; cur="${cur:-splith}"
+cycle() {
+    local next
+    case "$(cur_name)" in
+        bottom) next=top ;; top) next=left ;; *) next=bottom ;;
+    esac
+    apply "$next"
+}
+
+label() {
+    printf '{"text": "\\uf00a", "class": "layout-%s", "tooltip": "tiles: %s (click to change)"}' \
+        "$(cur_name)" "$(cur_name)"
+}
+
 case "${1:-cycle}" in
-    label)
-        printf '{"text": "%s", "class": "%s"}' "$(icon_for "$cur")" "$cur" ;;
-    cycle) swaymsg layout "$(next_for "$cur")" >/dev/null 2>&1; poke ;;
-    splith|splitv|tabbed|stacking)
-        swaymsg layout "$1" >/dev/null 2>&1; poke ;;
-    *) echo "usage: aura-os-layout [label|cycle|splith|splitv|tabbed|stacking]" >&2; exit 2 ;;
+    label)            label ;;
+    cycle)            cycle ;;
+    bottom|top|left)  apply "$1" ;;
+    *) echo "usage: aura-os-layout [bottom|top|left|cycle|label]" >&2; exit 2 ;;
 esac

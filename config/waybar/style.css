@@ -84,9 +84,12 @@ window#waybar.top .tab.focused.c-gray   { background: #7f849c; }
 
 /* ── top bar: window title + clock ───────────────────────────── */
 
-/* focused window title: hidden until you hover the top-left area */
-window#waybar.top #window { color: transparent; padding: 0 16px; min-width: 360px; }
-window#waybar.top #window:hover { color: @fg; background: @bg_alt; }
+/* focused window title: hidden until you hover the top-left area.
+ * Zero footprint until hover — its requested width would push the
+ * centre toggles off-centre (waybar's centre widget yields to the
+ * left box's minimum size). */
+window#waybar.top #window { color: transparent; padding: 0; min-width: 0; font-size: 0; }
+window#waybar.top #window:hover { color: @fg; background: @bg_alt; padding: 0 16px; min-width: 360px; font-size: 13px; }
 window#waybar.top #clock  { color: @accent; padding: 0 12px; }
 
 /* ── left sidebar ────────────────────────────────────────────── */
@@ -168,3 +171,156 @@ window#waybar.top #battery.critical:not(.charging) { color: @bg; background: @re
 /* minimized windows (aura-os-minimize) */
 window#waybar.left #custom-minimized { padding: 6px 10px 2px; }
 window#waybar.left #custom-minimized:hover { background: @bg_alt; }
+
+/* the eDP-1 top bar is a separate bar (top-edp) — same rules, second window name */
+/* Colors come from theme.css (aura-os-theme); default purplerain is shipped. */
+@import "theme.css";
+/* glass or fill, from aura-look (Settings → Glass, borders & animations) */
+@import "look.css";
+
+/* Aura OS — waybar, Aura OS bars (task 003).
+ * Square, one font. Panels are glass or a fill colour (look.css).
+ * Two bars: window#waybar.top-edp (tabs) and window#waybar.left (sidebar). */
+
+* {
+    font-family: "JetBrainsMono Nerd Font", monospace;
+    font-size: 13px;
+    min-height: 0;
+    border-radius: 0;
+}
+
+
+/* the sidebar keeps its vertical tagline watermark; the top bar lost its
+ * wordmark — the quick toggles live in the middle now */
+window#waybar.top-edp {
+    border-bottom: 1px solid @border;
+}
+
+
+window#waybar.top-edp .tab.focused {
+    color: @bg;
+    background: @accent;
+    /* the focused tile owns the bar: it stretches wider than its siblings */
+    padding: 0 26px;
+    margin: 0 4px;
+}
+
+
+window#waybar.top-edp .tab:hover { color: @fg; }
+
+window#waybar.top-edp .tab.focused:hover { color: @bg; }
+
+
+/* per-tab colors (aura-os-tab color): the tab only, never the screen */
+window#waybar.top-edp .c-purple { color: #8b7cf6; }
+
+window#waybar.top-edp .c-blue   { color: #6ea8fe; }
+
+window#waybar.top-edp .c-cyan   { color: #5de4c7; }
+
+window#waybar.top-edp .c-green  { color: #83e6a0; }
+
+window#waybar.top-edp .c-yellow { color: #f9e2af; }
+
+window#waybar.top-edp .c-orange { color: #f5a97f; }
+
+window#waybar.top-edp .c-red    { color: #f38ba8; }
+
+window#waybar.top-edp .c-gray   { color: #7f849c; }
+
+
+/* focused + colored: fill with the tab's color */
+window#waybar.top-edp .tab.focused.c-purple { background: #8b7cf6; }
+
+window#waybar.top-edp .tab.focused.c-blue   { background: #6ea8fe; }
+
+window#waybar.top-edp .tab.focused.c-cyan   { background: #5de4c7; }
+
+window#waybar.top-edp .tab.focused.c-green  { background: #83e6a0; }
+
+window#waybar.top-edp .tab.focused.c-yellow { background: #f9e2af; }
+
+window#waybar.top-edp .tab.focused.c-orange { background: #f5a97f; }
+
+window#waybar.top-edp .tab.focused.c-red    { background: #f38ba8; }
+
+window#waybar.top-edp .tab.focused.c-gray   { background: #7f849c; }
+
+
+/* ── top bar: window title + clock ───────────────────────────── */
+
+/* focused window title: hidden until you hover the top-left area */
+window#waybar.top-edp #window { color: transparent; padding: 0; min-width: 0; font-size: 0; }
+
+window#waybar.top-edp #window:hover { color: @fg; background: @bg_alt; padding: 0 16px; min-width: 360px; font-size: 13px; }
+
+window#waybar.top-edp #clock  { color: @accent; padding: 0 12px; }
+
+
+/* ── top bar: system items (bt, wifi, vol, clip), plain text ─── */
+
+window#waybar.top-edp #bluetooth,
+window#waybar.top-edp #network,
+window#waybar.top-edp #wireplumber,
+window#waybar.top-edp #custom-clip { color: @muted; padding: 0 10px; }
+
+window#waybar.top-edp #bluetooth:hover,
+window#waybar.top-edp #network:hover,
+window#waybar.top-edp #wireplumber:hover,
+window#waybar.top-edp #custom-clip:hover,
+window#waybar.top-edp #clock:hover { color: @fg; background: @bg_alt; }
+
+window#waybar.top-edp #network.disconnected,
+window#waybar.top-edp #wireplumber.muted,
+window#waybar.top-edp #bluetooth.off { color: @red; }
+
+
+/* sidebar toggle (top-left) and the sidebar's RAM line */
+window#waybar.top-edp #custom-sidebar { color: @dim; padding: 0 10px; }
+
+window#waybar.top-edp #custom-sidebar:hover { color: @fg; background: @bg_alt; }
+
+
+/* active sway mode (Super+R → resize) */
+window#waybar.top-edp #mode { color: @bg; background: @accent; padding: 0 8px; }
+
+window#waybar.top-edp #custom-settings { color: @accent; padding: 0 12px; font-size: 19px; }
+
+window#waybar.top-edp #custom-settings:hover { color: @fg; background: @bg_alt; }
+
+
+/* ── top bar: quick toggles (silent, hotspot, record, cast) ──── */
+
+window#waybar.top-edp #custom-toggle-silent,
+window#waybar.top-edp #custom-toggle-hotspot,
+window#waybar.top-edp #custom-toggle-record,
+window#waybar.top-edp #custom-toggle-cast,
+window#waybar.top-edp #custom-layout {
+    color: @dim; padding: 0 12px; font-size: 15px;
+}
+
+window#waybar.top-edp #custom-toggle-silent:hover,
+window#waybar.top-edp #custom-toggle-hotspot:hover,
+window#waybar.top-edp #custom-toggle-record:hover,
+window#waybar.top-edp #custom-toggle-cast:hover,
+window#waybar.top-edp #custom-layout:hover { color: @fg; background: @bg_alt; }
+
+window#waybar.top-edp #custom-toggle-silent.on,
+window#waybar.top-edp #custom-toggle-hotspot.on,
+window#waybar.top-edp #custom-toggle-record.on,
+window#waybar.top-edp #custom-toggle-cast.on { color: @accent; }
+
+window#waybar.top-edp #custom-toggle-record.on { color: @red; }
+
+window#waybar.top-edp #custom-tree { color: @accent; padding: 0 12px; }
+
+window#waybar.top-edp #custom-tree:hover { color: @fg; background: @bg_alt; }
+
+/* battery, left of the clock */
+window#waybar.top-edp #battery { color: @muted; padding: 0 10px; }
+
+window#waybar.top-edp #battery.charging, window#waybar.top-edp #battery.plugged { color: @green; }
+
+window#waybar.top-edp #battery.warning:not(.charging) { color: @yellow; }
+
+window#waybar.top-edp #battery.critical:not(.charging) { color: @bg; background: @red; }

@@ -9,7 +9,9 @@
     "layer": "top",
     "position": "top",
     "height": 32,
+    "output": "HDMI-A-1",
     "spacing": 0,
+    "fixed-center": true,
     "on-sigusr1": "noop",
     "modules-left": [
       "custom/sidebar",
@@ -38,8 +40,224 @@
       "exec": "aura-os-toggle cast label", "return-type": "json", "signal": 12,
       "tooltip-format": "screen casting (vnc :5900)"
     },
-    // Tile-layout button: shows the focused container's layout, one click
-    // cycles splith -> splitv -> tabbed -> stacking (aura-os-layout).
+    // Tile-layout button (aura-os-layout): arranges the focused
+    // workspace into Dusan's three drawn layouts, one click cycles
+    // bottom -> top -> left. Focused window becomes the master tile.
+    "custom/layout": {
+      "exec": "aura-os-layout label", "return-type": "json", "signal": 12,
+      "tooltip-format": "tiles: {icon}  (click to change)"
+    },
+    // Settings cog, far right of the top bar, after the clock: opens the settings hub.
+    "custom/settings": {
+      "format": "\u2699",
+      "tooltip-format": "settings",
+      "on-click": "$HOME/.local/bin/aura-settings",
+      "on-click-right": "$HOME/.local/bin/aura-menu"
+    },
+    // File tree toggle, the very right edge — the pane slides in under it.
+    "custom/tree": {
+      "format": "\uf0e8",
+      "tooltip-format": "file tree (Super+.)",
+      "on-click": "$HOME/.local/bin/aura-tree-toggle"
+    },
+    // Battery, left of the clock: percent, charging mark, time left on hover.
+    "battery": {
+      "bat": "BAT0",
+      "interval": 30,
+      "states": { "warning": 25, "critical": 10 },
+      "format": "⚡ {capacity}%",
+      "format-charging": "⚡ {capacity}% +",
+      "format-plugged": "⚡ {capacity}% =",
+      "format-full": "⚡ full",
+      "tooltip-format": "{timeTo} · {power:.1f} W",
+      "on-click": "$HOME/.local/bin/aura-sysmon",
+      "on-click-right": "$HOME/.local/bin/aura-os-popup btop"
+    },
+    "custom/tab1": {
+      "exec": "aura-os-tab label 1",
+      "return-type": "json",
+      "signal": 8,
+      "tooltip": false,
+      "on-click": "swaymsg workspace number 1",
+      "on-click-middle": "aura-os-tab rename 1",
+      "on-click-right": "aura-os-tab send 1"
+    },
+    "custom/tab2": {
+      "exec": "aura-os-tab label 2",
+      "return-type": "json",
+      "signal": 8,
+      "tooltip": false,
+      "on-click": "swaymsg workspace number 2",
+      "on-click-middle": "aura-os-tab rename 2",
+      "on-click-right": "aura-os-tab send 2"
+    },
+    "custom/tab3": {
+      "exec": "aura-os-tab label 3",
+      "return-type": "json",
+      "signal": 8,
+      "tooltip": false,
+      "on-click": "swaymsg workspace number 3",
+      "on-click-middle": "aura-os-tab rename 3",
+      "on-click-right": "aura-os-tab send 3"
+    },
+    "custom/tab4": {
+      "exec": "aura-os-tab label 4",
+      "return-type": "json",
+      "signal": 8,
+      "tooltip": false,
+      "on-click": "swaymsg workspace number 4",
+      "on-click-middle": "aura-os-tab rename 4",
+      "on-click-right": "aura-os-tab send 4"
+    },
+    "custom/tab5": {
+      "exec": "aura-os-tab label 5",
+      "return-type": "json",
+      "signal": 8,
+      "tooltip": false,
+      "on-click": "swaymsg workspace number 5",
+      "on-click-middle": "aura-os-tab rename 5",
+      "on-click-right": "aura-os-tab send 5"
+    },
+    "custom/tab6": {
+      "exec": "aura-os-tab label 6",
+      "return-type": "json",
+      "signal": 8,
+      "tooltip": false,
+      "on-click": "swaymsg workspace number 6",
+      "on-click-middle": "aura-os-tab rename 6",
+      "on-click-right": "aura-os-tab send 6"
+    },
+    "custom/tab7": {
+      "exec": "aura-os-tab label 7",
+      "return-type": "json",
+      "signal": 8,
+      "tooltip": false,
+      "on-click": "swaymsg workspace number 7",
+      "on-click-middle": "aura-os-tab rename 7",
+      "on-click-right": "aura-os-tab send 7"
+    },
+    "custom/tab8": {
+      "exec": "aura-os-tab label 8",
+      "return-type": "json",
+      "signal": 8,
+      "tooltip": false,
+      "on-click": "swaymsg workspace number 8",
+      "on-click-middle": "aura-os-tab rename 8",
+      "on-click-right": "aura-os-tab send 8"
+    },
+    "custom/tab9": {
+      "exec": "aura-os-tab label 9",
+      "return-type": "json",
+      "signal": 8,
+      "tooltip": false,
+      "on-click": "swaymsg workspace number 9",
+      "on-click-middle": "aura-os-tab rename 9",
+      "on-click-right": "aura-os-tab send 9"
+    },
+    "custom/sidebar": {
+      "format": "\u2261",
+      "tooltip-format": "hide/show sidebar (Super+B)",
+      "on-click": "aura-os-tab sidebar toggle"
+    },
+    "custom/tabplus": {
+      "format": "+",
+      "tooltip": false,
+      "on-click": "aura-os-tab new"
+    },
+    "sway/mode": { "format": " {} ", "tooltip": false },
+    "sway/window": { "max-length": 60, "tooltip": false },
+    // Classic system items, plain text. Click → a floating
+    // TUI in aura-term (app_id aura-float, see sway config).
+    "bluetooth": {
+      "format": "\uf293",
+      "format-connected": "\uf293",
+      "format-off": "\uf293",
+      "format-disabled": "\uf293",
+      "format-no-controller": "",
+      "tooltip-format-connected": "{device_enumerate}",
+      "tooltip-format": "bluetooth",
+      "tooltip-format-enumerate-connected": "{device_alias} {device_address}",
+      "on-click": "$HOME/.local/bin/aura-bluetooth"
+    },
+    "network": {
+      "format-wifi": "\uf1eb",
+      "format-ethernet": "\uf796",
+      "format-disconnected": "\uf1eb",
+      "tooltip-format": "{essid} {ipaddr}/{cidr}",
+      "on-click": "$HOME/.local/bin/aura-wifi"
+    },
+    "wireplumber": {
+      "format": "\uf028 {volume}%",
+      "format-muted": "\uf026",
+      "scroll-step": 5,
+      "on-click": "$HOME/.local/bin/aura-audio",
+      "on-click-right": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"
+    },
+    "custom/clip": {
+      "format": "\uf0ea",
+      "tooltip-format": "clipboard",
+      "exec": "aura-os-clip label",
+      "return-type": "json",
+      "signal": 9,
+      "on-click": "aura-os-clip pick",
+      "on-click-right": "aura-os-clip clear"
+    },
+    "clock": {
+      "format": "{:%d.%b  %H:%M}",
+      "tooltip-format": "<tt>{calendar}</tt>",
+      "calendar": {
+        "mode": "month",
+        "weeks-pos": "left",
+        "on-scroll": 1,
+        "format": {
+          "today": "<span color='#8b7cf6'><b>{}</b></span>",
+          "weeks": "<span color='#5c5f77'>{}</span>"
+        }
+      },
+      "actions": { "on-scroll-up": "shift_up", "on-scroll-down": "shift_down" },
+      "on-click": "$HOME/.local/bin/aura-calendar"
+    }
+  },
+{
+    "name": "top-edp",
+    "layer": "top",
+    "position": "top",
+    "height": 32,
+    "output": "eDP-1",
+    "width": 1920,
+    "spacing": 0,
+    "fixed-center": true,
+    "on-sigusr1": "noop",
+    "modules-left": [
+      "custom/sidebar",
+      "custom/tab1", "custom/tab2", "custom/tab3", "custom/tab4",
+      "custom/tab5", "custom/tab6", "custom/tab7", "custom/tab8",
+      "custom/tab9", "custom/tabplus", "sway/mode", "sway/window"
+    ],
+    "modules-center": ["custom/toggle-silent", "custom/toggle-hotspot",
+                     "custom/toggle-record", "custom/toggle-cast", "custom/layout"],
+    "modules-right": ["bluetooth", "network", "wireplumber", "custom/clip", "battery", "clock", "custom/settings", "custom/tree"],
+    // Quick toggles, centre of the top bar (aura-os-toggle): silent,
+    // hotspot, screen record, screen cast. Click toggles, state colors it.
+    "custom/toggle-silent": {
+      "exec": "aura-os-toggle silent label", "return-type": "json", "signal": 12,
+      "tooltip-format": "silent mode"
+    },
+    "custom/toggle-hotspot": {
+      "exec": "aura-os-toggle hotspot label", "return-type": "json", "signal": 12,
+      "tooltip-format": "hotspot"
+    },
+    "custom/toggle-record": {
+      "exec": "aura-os-toggle record label", "return-type": "json", "signal": 12,
+      "tooltip-format": "record screen"
+    },
+    "custom/toggle-cast": {
+      "exec": "aura-os-toggle cast label", "return-type": "json", "signal": 12,
+      "tooltip-format": "screen casting (vnc :5900)"
+    },
+    // Tile-layout button (aura-os-layout): arranges the focused
+    // workspace into Dusan's three drawn layouts, one click cycles
+    // bottom -> top -> left. Focused window becomes the master tile.
     "custom/layout": {
       "exec": "aura-os-layout label", "return-type": "json", "signal": 12,
       "tooltip-format": "tiles: {icon}  (click to change)"

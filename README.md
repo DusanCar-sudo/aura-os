@@ -13,6 +13,22 @@ everything you run today — browsers, dev tools, media, games — on a
 bare desktop under 350 MB. If it doesn't help you ship, it isn't on
 screen.
 
+## Screenshots
+
+The top bar: desktop tabs, the centre toggles (silent · hotspot ·
+record · cast · tiles), system tray. Text, one font, no icons wasted.
+
+![top bar](docs/img/topbar.png)
+
+The left sidebar: every workspace, live cpu/ram/gpu/power, minimized
+windows, the last things used, and each agent's latest step.
+
+![sidebar](docs/img/sidebar.png)
+
+Same bar, laptop panel (1920px, centre pinned to true centre):
+
+![top bar laptop](docs/img/topbar-laptop.png)
+
 ## Two projects in one
 
 1. **The OS** — a layer on Arch Linux: install script,

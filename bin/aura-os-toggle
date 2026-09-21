@@ -50,7 +50,11 @@ do_record() {
         notify "Record" "saved to ~/Videos"
     elif command -v wf-recorder >/dev/null; then
         mkdir -p "$HOME/Videos"
-        nohup wf-recorder -a -f "$HOME/Videos/aura-$(date +%Y%m%d-%H%M%S).mp4" \
+        # two monitors? record the focused one
+        out="$(swaymsg -t get_outputs 2>/dev/null | jq -r '
+            .[] | select(.focused) | .name' | head -n1)"
+        [ -n "$out" ] && out="-o $out"
+        nohup wf-recorder -a $out -f "$HOME/Videos/aura-$(date +%Y%m%d-%H%M%S).mp4" \
             >/dev/null 2>&1 &
         echo $! > "$state/record.pid"
         notify "Record" "recording…"

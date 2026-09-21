@@ -20,14 +20,10 @@ window#waybar {
     border: none;
 }
 
-/* wordmark watermark, sits behind every module - see the watermark PNGs in
- * the assets folder (regenerate with ImageMagick, JetBrainsMonoNerdFont-Light,
- * fill rgba(146,131,116,0.55), if the text or theme changes) */
+/* the sidebar keeps its vertical tagline watermark; the top bar lost its
+ * wordmark — the quick toggles live in the middle now */
 window#waybar.top {
     border-bottom: 1px solid @border;
-    background-image: url("assets/top-watermark.png");
-    background-repeat: no-repeat;
-    background-position: center center;
 }
 window#waybar.left {
     border-right: 1px solid @border;
@@ -137,8 +133,26 @@ window#waybar.left #custom-procs:hover { background: @bg_alt; }
 button, label, #custom-recent, #custom-agents, #custom-procs, .tab {
     transition: background-color 160ms ease-in-out, color 160ms ease-in-out;
 }
-window#waybar.top #custom-settings { color: @accent; padding: 0 12px; }
+window#waybar.top #custom-settings { color: @accent; padding: 0 12px; font-size: 19px; }
 window#waybar.top #custom-settings:hover { color: @fg; background: @bg_alt; }
+
+/* ── top bar: quick toggles (silent, hotspot, record, cast) ──── */
+
+window#waybar.top #custom-toggle-silent,
+window#waybar.top #custom-toggle-hotspot,
+window#waybar.top #custom-toggle-record,
+window#waybar.top #custom-toggle-cast {
+    color: @dim; padding: 0 12px; font-size: 15px;
+}
+window#waybar.top #custom-toggle-silent:hover,
+window#waybar.top #custom-toggle-hotspot:hover,
+window#waybar.top #custom-toggle-record:hover,
+window#waybar.top #custom-toggle-cast:hover { color: @fg; background: @bg_alt; }
+window#waybar.top #custom-toggle-silent.on,
+window#waybar.top #custom-toggle-hotspot.on,
+window#waybar.top #custom-toggle-record.on,
+window#waybar.top #custom-toggle-cast.on { color: @accent; }
+window#waybar.top #custom-toggle-record.on { color: @red; }
 window#waybar.top #custom-tree { color: @accent; padding: 0 12px; }
 window#waybar.top #custom-tree:hover { color: @fg; background: @bg_alt; }
 /* battery, left of the clock */

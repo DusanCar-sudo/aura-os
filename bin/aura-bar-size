@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# aura-bar-size — the user owns the top bar height. Edits the height line
+# in ~/.config/waybar/config.jsonc and restarts waybar (aura-os-bar brings
+# it back up in 1 s). Bounds 24..64, default 32.
+#
+#   aura-bar-size +    taller by 2
+#   aura-bar-size -    shorter by 2
+#   aura-bar-size N    set exactly
+#   aura-bar-size      show current
+set -uo pipefail
+cfg="$HOME/.config/waybar/config.jsonc"
+min=24 max=64 def=32
+cur=$(sed -n 's/.*"height": \([0-9]*\).*/\1/p' "$cfg" | head -1); cur=${cur:-$def}
+case "${1:-}" in
+    +) n=$(( cur + 2 )) ;;
+    -) n=$(( cur - 2 )) ;;
+    ''|show|status) echo "bar height: $cur"; exit 0 ;;
+    ''*) n=${1:-$def} ;;
+esac
+(( n < min )) && n=$min; (( n > max )) && n=$max
+sed -i "s/\"height\": [0-9]*/\"height\": $n/" "$cfg"
+pkill -x waybar 2>/dev/null || true   # aura-os-bar restarts it
+echo "bar height: $n"

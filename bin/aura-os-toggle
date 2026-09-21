@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+# aura-os-toggle — the quick toggles living in the middle of the top bar:
+#   silent  mute/unmute the default sink
+#   hotspot Wi-Fi hotspot up/down
+#   record  wf-recorder screen recording, click again to stop
+#   cast    wayvnc screen sharing (VNC), click again to stop
+# One script, four buttons. Each click pokes waybar (RTMIN+12) so every
+# icon re-renders with its new state.
+#
+#   aura-os-toggle <name>          toggle
+#   aura-os-toggle <name> label    waybar label (json): {text, class}
+set -uo pipefail
+# notify: desktop notification when available, plain line otherwise
+notify() { command -v notify-send >/dev/null && notify-send -a "Aura" -t 2500 "$1" "${2:-}" || printf '%s: %s\n' "$1" "${2:-}" >&2; }
+
+poke() { pkill -RTMIN+12 -x waybar 2>/dev/null || true; }
+
+state="${XDG_STATE_HOME:-$HOME/.local/state}/aura-os"
+mkdir -p "$state"
+
+pid_of() { # pid_of <name> — pid from the state dir, only if still alive
+    local f="$state/$1.pid" p
+    [ -f "$f" ] || return 1
+    p=$(cat "$f" 2>/dev/null) && kill -0 "$p" 2>/dev/null
+}
+
+hotspot_on() { nmcli -t -f NAME,DEVICE connection show --active 2>/dev/null | grep -qi hotspot; }
+
+silent_on() { wpctl get-volume @DEFAULT_AUDIO_SINK@ 2>/dev/null | grep -q MUTED; }
+
+do_silent() {
+    wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+    if silent_on; then notify "Silent" "sound off"; else notify "Silent" "sound on"; fi
+}
+
+do_hotspot() {
+    if hotspot_on; then
+        nmcli connection down "$(nmcli -t -f NAME,DEVICE connection show --active |
+            awk -F: 'tolower($1) ~ /hotspot/ {print $1; exit}')" >/dev/null 2>&1
+        notify "Hotspot" "off"
+    else
+        nmcli device wifi hotspot ssid "Aura" password "aura12345" >/dev/null 2>&1 &&
+            notify "Hotspot" "Aura · aura12345" || notify "Hotspot" "could not start"
+    fi
+}
+
+do_record() {
+    if pid_of record; then
+        kill -INT "$(cat "$state/record.pid")"; rm -f "$state/record.pid"
+        notify "Record" "saved to ~/Videos"
+    elif command -v wf-recorder >/dev/null; then
+        mkdir -p "$HOME/Videos"
+        nohup wf-recorder -a -f "$HOME/Videos/aura-$(date +%Y%m%d-%H%M%S).mp4" \
+            >/dev/null 2>&1 &
+        echo $! > "$state/record.pid"
+        notify "Record" "recording…"
+    else
+        notify "Record" "wf-recorder is not installed"
+    fi
+}
+
+do_cast() {
+    if pid_of cast; then
+        kill "$(cat "$state/cast.pid")"; rm -f "$state/cast.pid"
+        notify "Cast" "stopped"
+    elif command -v wayvnc >/dev/null; then
+        nohup wayvnc 0.0.0.0 5900 >/dev/null 2>&1 &
+        echo $! > "$state/cast.pid"
+        notify "Cast" "vnc on :5900"
+    else
+        notify "Cast" "wayvnc is not installed"
+    fi
+}
+
+case "${2:-}" in
+    label)
+        case "${1:-}" in
+            silent)  silent_on  && t="on" || t="off"; printf '{"text": "\\uf0f3", "class": "%s"}' "$t" ;;
+            hotspot) hotspot_on && t="on" || t="off"; printf '{"text": "\\ue1ce", "class": "%s"}' "$t" ;;
+            record)  pid_of record && t="on" || t="off"; printf '{"text": "\\uf192", "class": "%s"}' "$t" ;;
+            cast)    pid_of cast   && t="on" || t="off"; printf '{"text": "\\uf26c", "class": "%s"}' "$t" ;;
+            *) echo '{}' ;;
+        esac
+        ;;
+    "")
+        case "${1:-}" in
+            silent)  do_silent;  poke ;;
+            hotspot) do_hotspot; poke ;;
+            record)  do_record;  poke ;;
+            cast)    do_cast;    poke ;;
+            *) echo "usage: aura-os-toggle <silent|hotspot|record|cast> [label]" >&2; exit 2 ;;
+        esac ;;
+    *) echo "usage: aura-os-toggle <silent|hotspot|record|cast> [label]" >&2; exit 2 ;;
+esac

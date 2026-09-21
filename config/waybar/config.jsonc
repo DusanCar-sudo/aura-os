@@ -8,7 +8,7 @@
     "name": "top",
     "layer": "top",
     "position": "top",
-    "height": 26,
+    "height": 32,
     "spacing": 0,
     "on-sigusr1": "noop",
     "modules-left": [
@@ -17,8 +17,27 @@
       "custom/tab5", "custom/tab6", "custom/tab7", "custom/tab8",
       "custom/tab9", "custom/tabplus", "sway/mode", "sway/window"
     ],
-    "modules-center": [],
+    "modules-center": ["custom/toggle-silent", "custom/toggle-hotspot",
+                     "custom/toggle-record", "custom/toggle-cast"],
     "modules-right": ["bluetooth", "network", "wireplumber", "custom/clip", "battery", "clock", "custom/settings", "custom/tree"],
+    // Quick toggles, centre of the top bar (aura-os-toggle): silent,
+    // hotspot, screen record, screen cast. Click toggles, state colors it.
+    "custom/toggle-silent": {
+      "exec": "aura-os-toggle silent label", "return-type": "json", "signal": 12,
+      "tooltip-format": "silent mode"
+    },
+    "custom/toggle-hotspot": {
+      "exec": "aura-os-toggle hotspot label", "return-type": "json", "signal": 12,
+      "tooltip-format": "hotspot"
+    },
+    "custom/toggle-record": {
+      "exec": "aura-os-toggle record label", "return-type": "json", "signal": 12,
+      "tooltip-format": "record screen"
+    },
+    "custom/toggle-cast": {
+      "exec": "aura-os-toggle cast label", "return-type": "json", "signal": 12,
+      "tooltip-format": "screen casting (vnc :5900)"
+    },
     // Settings cog, far right of the top bar, after the clock: opens the settings hub.
     "custom/settings": {
       "format": "\u2699",
@@ -37,10 +56,10 @@
       "bat": "BAT0",
       "interval": 30,
       "states": { "warning": 25, "critical": 10 },
-      "format": "bat {capacity}%",
-      "format-charging": "bat {capacity}% +",
-      "format-plugged": "bat {capacity}% =",
-      "format-full": "bat full",
+      "format": "⚡ {capacity}%",
+      "format-charging": "⚡ {capacity}% +",
+      "format-plugged": "⚡ {capacity}% =",
+      "format-full": "⚡ full",
       "tooltip-format": "{timeTo} · {power:.1f} W",
       "on-click": "$HOME/.local/bin/aura-sysmon",
       "on-click-right": "$HOME/.local/bin/aura-os-popup btop"
@@ -141,30 +160,33 @@
     // Classic system items, plain text. Click → a floating
     // TUI in aura-term (app_id aura-float, see sway config).
     "bluetooth": {
-      "format": "bt {status}",
-      "format-connected": "bt {device_alias}",
-      "format-off": "bt off",
-      "format-disabled": "bt off",
+      "format": "\uf293",
+      "format-connected": "\uf293",
+      "format-off": "\uf293",
+      "format-disabled": "\uf293",
       "format-no-controller": "",
       "tooltip-format-connected": "{device_enumerate}",
+      "tooltip-format": "bluetooth",
       "tooltip-format-enumerate-connected": "{device_alias} {device_address}",
       "on-click": "$HOME/.local/bin/aura-bluetooth"
     },
     "network": {
-      "format-wifi": "wifi {essid} {signalStrength}%",
-      "format-ethernet": "eth {ifname}",
-      "format-disconnected": "net off",
-      "tooltip-format": "{ifname} {ipaddr}/{cidr} via {gwaddr}",
+      "format-wifi": "\uf1eb",
+      "format-ethernet": "\uf796",
+      "format-disconnected": "\uf1eb",
+      "tooltip-format": "{essid} {ipaddr}/{cidr}",
       "on-click": "$HOME/.local/bin/aura-wifi"
     },
     "wireplumber": {
-      "format": "vol {volume}%",
-      "format-muted": "vol mute",
+      "format": "\uf028 {volume}%",
+      "format-muted": "\uf026",
       "scroll-step": 5,
       "on-click": "$HOME/.local/bin/aura-audio",
       "on-click-right": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"
     },
     "custom/clip": {
+      "format": "\uf0ea",
+      "tooltip-format": "clipboard",
       "exec": "aura-os-clip label",
       "return-type": "json",
       "signal": 9,
@@ -172,7 +194,7 @@
       "on-click-right": "aura-os-clip clear"
     },
     "clock": {
-      "format": "{:%a %d %b  %H:%M}",
+      "format": "{:%d.%b  %H:%M}",
       "tooltip-format": "<tt>{calendar}</tt>",
       "calendar": {
         "mode": "month",

@@ -15,6 +15,8 @@ REPO="${REPO_DIR:-$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)}"
 packages=(
     sway                     # the compositor
     waybar                   # status bar
+    wf-recorder              # screen record (top bar toggle)
+    wayvnc                   # screen cast: vnc server on :5900 (top bar toggle)
     fuzzel                   # launcher (Super+D)
     foot                     # terminal (Super+Return)
     swaybg                   # solid theme background (sway `output bg`), ~3 MB

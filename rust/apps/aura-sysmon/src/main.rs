@@ -395,26 +395,6 @@ fn seg_meta(i: usize) -> (&'static str, Color32, &'static str, bool) {
     }
 }
 
-/// Stacked columns: each sample split into its segments, bottom up, as a
-/// share of all RAM — the colors show what the memory held over time.
-fn stacked_graph(ui: &Ui, rect: Rect, data: &VecDeque<([u64; SEGS], u64)>) {
-    let p = ui.painter();
-    let col_w = rect.width() / HISTORY as f32;
-    let start = HISTORY - data.len().min(HISTORY);
-    let colors: Vec<Color32> = (0..SEGS).map(|i| seg_meta(i).1).collect();
-    for (i, (segs, total)) in data.iter().enumerate() {
-        let x = rect.left() + (start + i) as f32 * col_w;
-        let mut y = rect.bottom();
-        for (j, b) in segs.iter().enumerate() {
-            let h = rect.height() * *b as f32 / (*total).max(1) as f32;
-            if h > 0.0 {
-                p.rect_filled(Rect::from_min_max(pos2(x, y - h), pos2(x + (col_w - 0.6).max(0.8), y)), 0.0, colors[j]);
-            }
-            y -= h;
-        }
-    }
-}
-
 // ── settings (electricity) ──────────────────────────────────────────────────
 
 #[derive(Clone, PartialEq)]
@@ -479,9 +459,13 @@ struct Snapshot {
     disk_w: VecDeque<f32>,
     watts: VecDeque<f32>,
     temp_cpu: VecDeque<f32>,
+    temp_gpu: VecDeque<f32>,
+    temp_nvme: VecDeque<f32>,
     mhz: Option<f32>,
     sensors: Sensors,
     mem_info: HashMap<String, u64>,
+    /// latest memory breakdown (bytes per segment) for the bar
+    mem_segs: [u64; SEGS],
     disk_used: u64,
     disk_total: u64,
     on_battery: bool,
@@ -490,7 +474,6 @@ struct Snapshot {
     started: Option<Instant>,
     procs: Vec<Proc>,
     files: Vec<MemFile>,
-    mem_stack: VecDeque<([u64; SEGS], u64)>,
     new_models: Vec<String>,
     ready: bool,
 }
@@ -615,10 +598,6 @@ fn sampler(shared: Arc<Mutex<Snapshot>>, settings: Arc<Mutex<Settings>>, ctx: eg
                 push(q, *v);
             }
             push(&mut s.mem, (mt - ma) as f32 / mt.max(1) as f32);
-            if s.mem_stack.len() == HISTORY {
-                s.mem_stack.pop_front();
-            }
-            s.mem_stack.push_back((mem_segments(&mi, &by_kind), mt));
             push(&mut s.swap, swap_frac);
             push(&mut s.gpu, sens.gpu_busy.unwrap_or(0.0));
             push(&mut s.net_rx, nr);
@@ -629,10 +608,13 @@ fn sampler(shared: Arc<Mutex<Snapshot>>, settings: Arc<Mutex<Settings>>, ctx: eg
             if let Some(t) = sens.cpu {
                 push(&mut s.temp_cpu, t);
             }
+            push(&mut s.temp_gpu, sens.gpu.unwrap_or(0.0));
+            push(&mut s.temp_nvme, sens.nvme.unwrap_or(0.0));
             s.wh += watts as f64 * dt_s as f64 / 3600.0;
             s.on_battery = bat.is_some();
             s.mhz = cpu_mhz();
             s.sensors = sens;
+            s.mem_segs = mem_segments(&mi, &by_kind);
             s.mem_info = mi;
             (s.disk_used, s.disk_total) = (du, dt);
             s.procs = procs;
@@ -793,6 +775,7 @@ struct App {
     dragging_split: bool,
     theme_id: theme::ThemeId,
     next_theme_check: f64,
+    mem_open: bool, // memory breakdown tree open? closed = the graph gets the space
 }
 
 fn open_folder(path: &Path) {
@@ -818,7 +801,7 @@ impl App {
         let settings = Arc::new(Mutex::new(s.clone()));
         let (d, st, ctx) = (data.clone(), settings.clone(), cc.egui_ctx.clone());
         std::thread::spawn(move || sampler(d, st, ctx));
-        Self { data, settings, edit: s, sort: Sort::Mem, tab: Tab::Procs, filter: String::new(), status: String::new(), dragging_split: false, theme_id, next_theme_check: 0.0 }
+        Self { data, settings, edit: s, sort: Sort::Mem, tab: Tab::Procs, filter: String::new(), status: String::new(), dragging_split: false, theme_id, next_theme_check: 0.0, mem_open: false }
     }
 
     fn signal(&mut self, p: &Proc, sig: &str, done: &str) {
@@ -915,11 +898,15 @@ impl App {
         let mi = &s.mem_info;
         let kb = |k: &str| mi.get(k).copied().unwrap_or(0) * 1024;
         let total = kb("MemTotal").max(1);
-        let segs = s.mem_stack.back().map(|x| x.0).unwrap_or([0; SEGS]);
+        let segs = s.mem_segs;
         let free = kb("MemFree");
         let cache_total: u64 = segs[1..8].iter().sum();
         let used = total.saturating_sub(kb("MemAvailable"));
-        let r = panel(ui, "memory", &format!("{} used of {}  ·  {}", size(used), size(total), pct(used as f32 / total as f32)), 290.0 + hs[1]);
+        // collapsed tree shrinks the whole panel: the rows' height is given
+        // back and everything below moves up
+        let rows_h = 17.0 * (SEGS as f32 + 1.0);
+        let mem_h = 290.0 + hs[1] - if self.mem_open { 0.0 } else { rows_h };
+        let r = panel(ui, "memory", &format!("{} used of {}  ·  {}", size(used), size(total), pct(used as f32 / total as f32)), mem_h);
         // one bar, every segment in its color, free last
         let bar = Rect::from_min_size(r.min, vec2(r.width(), 14.0));
         let mut x = bar.left();
@@ -930,6 +917,16 @@ impl App {
             x += w;
         }
         let mut y = bar.bottom() + 8.0;
+        // the breakdown is a collapsible tree: click the header to fold the
+        // per-kind rows away and let the ram/swap graph take the space
+        let arrow = if self.mem_open { "▾" } else { "▸" };
+        let hdr = Rect::from_min_size(pos2(r.left(), y), vec2(r.width(), 16.0));
+        if ui.interact(hdr, ui.id().with("mem-tree"), Sense::click()).clicked() {
+            self.mem_open = !self.mem_open;
+        }
+        text(ui, hdr.min, Align2::LEFT_TOP, &format!("{arrow} breakdown"), theme::text());
+        text(ui, pos2(hdr.right(), y), Align2::RIGHT_TOP, &format!("{} segments", SEGS + 1), theme::subtext0());
+        y += 17.0;
         let mut row = |ui: &mut Ui, name: &str, b: u64, c: Option<Color32>, hint: &str, indent: f32, strong: bool| {
             let rr = Rect::from_min_size(pos2(r.left(), y), vec2(r.width(), 16.0));
             if let Some(c) = c {
@@ -942,14 +939,16 @@ impl App {
             ui.interact(rr, ui.id().with(("mem", name)), Sense::hover()).on_hover_text(hint);
             y += 17.0;
         };
-        for i in 0..SEGS {
-            if i == 1 {
-                row(ui, "file cache", cache_total, None, "files kept in RAM — split by kind below; freed on demand", 0.0, true);
+        if self.mem_open {
+            for i in 0..SEGS {
+                if i == 1 {
+                    row(ui, "file cache", cache_total, None, "files kept in RAM — split by kind below; freed on demand", 0.0, true);
+                }
+                let (name, c, hint, sub) = seg_meta(i);
+                row(ui, name, segs[i], Some(c), hint, if sub { 16.0 } else { 0.0 }, !sub);
             }
-            let (name, c, hint, sub) = seg_meta(i);
-            row(ui, name, segs[i], Some(c), hint, if sub { 16.0 } else { 0.0 }, !sub);
+            row(ui, "free", free, Some(theme::surface1()), "not used at all", 0.0, true);
         }
-        row(ui, "free", free, Some(theme::surface1()), "not used at all", 0.0, true);
         let (st, sf) = (kb("SwapTotal"), kb("SwapFree"));
         let swap_f = if st > 0 { (st - sf) as f32 / st as f32 } else { 0.0 };
         text(ui, pos2(r.left(), y + 2.0), Align2::LEFT_TOP, "swap", if swap_f > ALERT { theme::bad() } else { theme::text() });
@@ -963,28 +962,45 @@ impl App {
             meter(ui, Rect::from_min_size(pos2(r.left() + 110.0, y + 4.0), vec2(r.width() - 290.0, 8.0)), u as f32 / t.max(1) as f32);
             text(ui, pos2(r.right(), y), Align2::RIGHT_TOP, &format!("{} / {}{gtt}", size(u), size(t)), theme::subtext0());
         }
-        let mg = Rect::from_min_max(pos2(r.left(), r.bottom() - hs[1]), r.max);
-        stacked_graph(ui, mg, &s.mem_stack);
+        // collapsed tree? the graph grows up into the freed rows (never past
+        // the swap/graphics lines — take whichever top is lower)
+        let gtop = (r.bottom() - hs[1]).max(y + 12.0);
+        let mg = Rect::from_min_max(pos2(r.left(), gtop), r.max);
+        // ram vs swap, mirrored like the network panel: usage climbs up from
+        // the middle line, swap hangs below it
+        let (mtop, mbot) = mg.split_top_bottom_at_fraction(0.5);
+        btop_graph(ui, mtop, &s.mem, heat(), false);
+        btop_graph(ui, mbot, &s.swap, heat(), true);
+        text(ui, mtop.left_top(), Align2::LEFT_TOP, &format!("ram  {} used", size(used)), theme::text());
+        text(ui, mbot.left_bottom(), Align2::LEFT_BOTTOM, &format!("swap  {} / {}", size(st - sf), size(st)), if swap_f > ALERT { theme::bad() } else { theme::text() });
 
         if splitter(ui, "h1", &mut self.edit.heights[1], MIN_H[1]) {
             save_settings(&self.edit);
         }
-        // GPU + temperatures
-        let gb = last(&s.gpu);
-        let r = panel(ui, "graphics + temperatures", &format!("gpu {}{}", pct(gb), sen.gpu.map(|t| format!("  ·  {t:.0} °C")).unwrap_or_default()), hs[2]);
-        let g = Rect::from_min_size(r.min, vec2(r.width() * 0.55, r.height()));
-        btop_graph(ui, g, &s.gpu, heat(), false);
-        let mut y = r.top();
-        for (name, t) in [("cpu", sen.cpu), ("graphics", sen.gpu), ("ssd", sen.nvme)] {
-            if let Some(t) = t {
-                let x = g.right() + 14.0;
-                text(ui, pos2(x, y), Align2::LEFT_TOP, name, theme::subtext0());
-                let f = ((t - 30.0) / 70.0).clamp(0.0, 1.0);
-                meter(ui, Rect::from_min_size(pos2(x + 70.0, y + 4.0), vec2(r.right() - x - 130.0, 8.0)), f);
-                text(ui, pos2(r.right(), y), Align2::RIGHT_TOP, &format!("{t:.0} °C"), grad(heat(), f));
-                y += 20.0;
+        // GPU + temperatures, laid out like the network panel: two columns,
+        // each a mirrored pair — the upper graph climbs from the middle line,
+        // the lower one hangs from it.
+        let temp_n = |t: f32| ((t - 30.0) / 70.0).clamp(0.0, 1.0); // 30–100 °C
+        ui.columns(2, |cols| {
+            let gb = last(&s.gpu);
+            let gt = last(&s.temp_gpu);
+            let r = panel(&mut cols[0], "graphics", &format!("busy {}  ·  {:.0} °C", pct(gb), gt), hs[2]);
+            let (top, bot) = r.split_top_bottom_at_fraction(0.5);
+            btop_graph(&cols[0], top, &s.gpu, [theme::accent3(), theme::accent(), theme::accent2()], false);
+            btop_graph(&cols[0], bot, &s.temp_gpu.iter().map(|t| temp_n(*t)).collect(), heat(), true);
+            text(&cols[0], top.left_top(), Align2::LEFT_TOP, &format!("busy {}", pct(gb)), theme::text());
+            text(&cols[0], bot.left_bottom(), Align2::LEFT_BOTTOM, &format!("{:.0} °C", gt), grad(heat(), temp_n(gt)));
+            let ct = sen.cpu;
+            let nt = last(&s.temp_nvme);
+            let r = panel(&mut cols[1], "temperatures", &format!("cpu {}  ·  ssd {:.0} °C", ct.map(|t| format!("{t:.0} °C")).unwrap_or_default(), nt), hs[2]);
+            let (top, bot) = r.split_top_bottom_at_fraction(0.5);
+            btop_graph(&cols[1], top, &s.temp_cpu.iter().map(|t| temp_n(*t)).collect(), heat(), false);
+            btop_graph(&cols[1], bot, &s.temp_nvme.iter().map(|t| temp_n(*t)).collect(), heat(), true);
+            if let Some(t) = ct {
+                text(&cols[1], top.left_top(), Align2::LEFT_TOP, &format!("{t:.0} °C"), grad(heat(), temp_n(t)));
             }
-        }
+            text(&cols[1], bot.left_bottom(), Align2::LEFT_BOTTOM, &format!("ssd {nt:.0} °C"), grad(heat(), temp_n(nt)));
+        });
 
         if splitter(ui, "h2", &mut self.edit.heights[2], MIN_H[2]) {
             save_settings(&self.edit);

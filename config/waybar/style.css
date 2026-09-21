@@ -51,6 +51,9 @@ window#waybar.left .modules-right { margin-left: 44px; }
 window#waybar.top .tab.focused {
     color: @bg;
     background: @accent;
+    /* the focused tile owns the bar: it stretches wider than its siblings */
+    padding: 0 26px;
+    margin: 0 4px;
 }
 
 window#waybar.top .tab:hover { color: @fg; }

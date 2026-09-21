@@ -142,6 +142,19 @@ uses the same hexes; move it along with the rest.
 
 ## Part 4 — Right pane with a file tree (Aura OS)
 
+**BUILT + DEPLOYED 2026-09-22 (commit bc023ce8).** `aura-os-files pane`
+(single-pane mode), `bin/aura-os-filepane-toggle` (scratchpad toggle,
+floating at 22% width on the focused output so it never reshuffles the
+tiled layout), `config/sway/config.d/82-filepane.conf` — **Super+G**
+(Super+F is fullscreen; G is the nearest free key). 03-sway.sh now also
+deploys 80-journey.conf, which until now was never installed. Verified
+live on the laptop: pane shows ~/Documents over Chrome, toggle round-trips
+to the scratchpad, pty tests for pane and two-pane modes pass. RAM cost
+~2 MB (aura-term client; aura-termd was already running). Not done: open
+in the focused window's directory (opens in $HOME; AURA_FILEPANE_DIR
+overrides). "Reuse aura-files-rs vs separate tree" is settled: separate,
+the bash listing — aura-files-rs stays the full-window file manager.
+
 Decided: runs in **aura-term** (not a plain terminal).
 
 Since the first handoff this repo gained `aura-files-rs` (`0b31a0c3`, the

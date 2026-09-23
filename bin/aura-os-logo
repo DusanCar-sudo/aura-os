@@ -158,8 +158,10 @@ show_mark() { # show_mark <indent> <info array>
     else
         local -n _lines=$2
         local line
-        printf '%*s\e[1maura\e[0m \e[1;38;2;%sm/\e[38;2;%sm/\e[38;2;%sm/\e[38;2;%sm/\e[0m\n' \
-            "$1" '' "${stripe[r]}" "${stripe[y]}" "${stripe[g]}" "${stripe[c]}"
+        # one row of stripes: each ▟ in the next colour on the previous one
+        printf '%*s\e[1maura\e[0m \e[38;2;%sm▟\e[38;2;%s;48;2;%sm▟\e[38;2;%s;48;2;%sm▟\e[38;2;%s;48;2;%sm▟\e[49m▘\e[0m\n' \
+            "$1" '' "${stripe[r]}" "${stripe[y]}" "${stripe[r]}" "${stripe[g]}" "${stripe[y]}" \
+            "${stripe[c]}" "${stripe[g]}"
         for line in "${_lines[@]:1}"; do printf '%*s%s\n' "$1" '' "$line"; done
     fi
 }

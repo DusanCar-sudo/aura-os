@@ -1,4 +1,9 @@
-# Aura OS
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/aura-os-mark.svg">
+    <img alt="Aura OS" src="assets/brand/aura-os-mark-ink.svg" width="360">
+  </picture>
+</h1>
 
 > Finally, your own OS on your own laptop — running what you need,
 > nothing you don't. Aura built it for herself: she installs, themes,

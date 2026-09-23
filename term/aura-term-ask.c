@@ -36,6 +36,15 @@
 #define RED  "\033[31m"
 #define OFF  "\033[0m"
 
+/* The four Sinclair stripes of the aura mark (aura-os-logo), one text row
+ * tall. Each ▟ is drawn in the next stripe's colour on the previous one's,
+ * so the stripes lean half a cell per half row, like the logo. */
+#define STRIPES "\033[38;2;228;49;43m▟"                     \
+                "\033[38;2;248;185;30;48;2;228;49;43m▟"     \
+                "\033[38;2;47;174;78;48;2;248;185;30m▟"     \
+                "\033[38;2;26;166;224;48;2;47;174;78m▟"     \
+                "\033[49m▘" OFF
+
 /* ---- minimal JSON ------------------------------------------------------ */
 
 enum jtype { J_NULL, J_BOOL, J_NUM, J_STR, J_ARR, J_OBJ };
@@ -761,7 +770,7 @@ main(int argc, char **argv)
         cwd = getenv("HOME") != NULL ? getenv("HOME") : "/";
 
     /* Header */
-    printf(BOLD "Ask Aura" OFF "  " DIM "%s" OFF "\n", cwd);
+    printf(BOLD "Ask Aura" OFF " " STRIPES "  " DIM "%s" OFF "\n", cwd);
     if (jstr(req, "selection") != NULL)
         printf(DIM "about the selected text" OFF "\n\n");
     else {

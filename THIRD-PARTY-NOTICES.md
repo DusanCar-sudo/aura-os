@@ -9,7 +9,7 @@ terms. This is the checklist the ISO build (task 007) enforces.
 | Path | Upstream | License | Obligation |
 |---|---|---|---|
 | `term/` (aura-term) | foot, © Daniel Eklöf and contributors | MIT | Keep `term/LICENSE` and foot's copyright notice in the source and in every build (install to `/usr/share/licenses/aura-term/`). Aura changes may stay closed. |
-| `assets/fonts/` | Audiowide (Astigmatic), Michroma (Vernon Adams), Share Tech Mono (Carrois) — Google Fonts | SIL OFL 1.1 | Keep each `OFL-*.txt` next to its font. Fonts may ship inside a commercial product but may not be sold on their own. They are drawn into the boot splash (`assets/splash/`, made by `tools/make-splash.py`); the rendered image carries no license obligation. |
+| `assets/fonts/` | Audiowide (Astigmatic), Michroma (Vernon Adams), Share Tech Mono (Carrois) — Google Fonts | SIL OFL 1.1 | Keep each `OFL-*.txt` next to its font. Fonts may ship inside a commercial product but may not be sold on their own. They were drawn into the earlier boot splash (`tools/make-splash.py`). The current splash (`assets/splash/aura-splash.png`) is the ∞K adOS lockup plus Press Start 2P (CodeMan38, SIL OFL 1.1). Rendered images carry no license obligation. |
 
 ## Bundled in the ISO (Arch Linux packages)
 

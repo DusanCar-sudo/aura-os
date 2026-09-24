@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # aura-os-wallpaper — desktop background: the theme's solid color
-# (default) or an image.
+# (default), an image, or a looping video (live wallpaper).
 #
-#   aura-os-wallpaper pick          choose an image (or "solid") with fuzzel
-#   aura-os-wallpaper set <image>   use an image (fill), all outputs
+#   aura-os-wallpaper pick          choose an image, video (or "solid") with fuzzel
+#   aura-os-wallpaper set <file>    use an image (fill) or a video (live), all outputs
 #   aura-os-wallpaper solid         back to the theme's solid color
 #   aura-os-wallpaper current
 #
@@ -12,9 +12,20 @@
 # ~/.config/sway/config.d/60-wallpaper.conf (after the theme's 50-,
 # so it wins) and applies live. An image costs ~8 MB RAM per 1080p
 # output (swaybg keeps it decoded); solid costs almost nothing.
+#
+# A video plays muted and looped through mpvpaper (AUR, only offered when
+# installed): one process for all outputs, VA-API decoding, paused while
+# a window is fullscreen. ~75 MB RAM and ~7% of one core for a 720p loop.
+# Its conf switches swaybg off (swaybg_command -), because sway respawns
+# swaybg on every reload and a fresh swaybg stacks above the video.
+# swaybg_command is config-only, so switching to or from a video reloads
+# sway. sway then runs `aura-os-wallpaper play` (exec_always), which
+# starts the player only if it isn't already playing.
 set -euo pipefail
 
 conf="${XDG_CONFIG_HOME:-$HOME/.config}/sway/config.d/60-wallpaper.conf"
+pidfile="${XDG_RUNTIME_DIR:-/tmp}/aura-os-wallpaper.pid"
+mpv_opts="no-audio loop hwdec=auto-safe panscan=1.0 profile=fast really-quiet"
 
 sway() {
     export SWAYSOCK="${SWAYSOCK:-$(ls "${XDG_RUNTIME_DIR:-/tmp}"/sway-ipc.*.sock 2>/dev/null | head -n1)}"
@@ -24,24 +35,68 @@ sway() {
 theme_bg() { sed -n 's/^output \* bg \(#[0-9a-fA-F]\{6\}\) solid_color/\1/p' \
     "${XDG_CONFIG_HOME:-$HOME/.config}/sway/config.d/50-theme.conf" 2>/dev/null | head -n1; }
 
+# The video sits on the conf's first line, not in the exec line, so a
+# path with quotes or spaces never reaches sway's command parser.
+live_video() { sed -n '1s/^# aura-os-wallpaper live: //p' "$conf" 2>/dev/null; }
+
+player_pid() {
+    local pid; pid="$(cat "$pidfile" 2>/dev/null)" || return 1
+    [[ $pid =~ ^[0-9]+$ && $(cat "/proc/$pid/comm" 2>/dev/null) == mpvpaper ]] && echo "$pid"
+}
+
+stop_player() { local pid; if pid="$(player_pid)"; then kill "$pid"; fi; rm -f "$pidfile"; }
+
+cmd_play() {
+    local vid pid; vid="$(live_video)"
+    [[ -n $vid ]] || { stop_player; return 0; }
+    if pid="$(player_pid)" && tr '\0' '\n' <"/proc/$pid/cmdline" | grep -qxF -- "$vid"; then
+        return 0
+    fi
+    stop_player
+    [[ -f $vid ]] || { echo "aura-os-wallpaper: no such video: $vid" >&2; exit 2; }
+    command -v mpvpaper >/dev/null || { echo "aura-os-wallpaper: a video wallpaper needs mpvpaper" >&2; exit 2; }
+    # Own session: closing the terminal that ran `set` must not end it.
+    setsid mpvpaper -p -o "$mpv_opts" ALL "$vid" </dev/null >/dev/null 2>&1 &
+    echo $! >"$pidfile"
+}
+
+# A still background after a video: only a reload brings swaybg back
+# (see the header), and it applies the new conf along the way.
+show_still() {
+    if [[ $was_live == yes ]]; then stop_player; sway reload; else sway output '*' bg "$@"; fi
+}
+
 cmd_set() {
-    local img; img="$(readlink -f "$1")"
-    [[ -f $img ]] || { echo "aura-os-wallpaper: no such file: $1" >&2; exit 2; }
-    [[ $(file --mime-type -b -- "$img") == image/* ]] || { echo "aura-os-wallpaper: not an image: $1" >&2; exit 2; }
+    local f mime was_live=no; f="$(readlink -f "$1")"
+    [[ -f $f ]] || { echo "aura-os-wallpaper: no such file: $1" >&2; exit 2; }
+    mime="$(file --mime-type -b -- "$f")"
+    [[ -z $(live_video) ]] || was_live=yes
     mkdir -p "$(dirname "$conf")"
-    printf '# aura-os-wallpaper\noutput * bg "%s" fill\n' "$img" > "$conf"
-    sway output '*' bg "$img" fill
-    echo "wallpaper: $img"
+    case $mime in
+        video/*)
+            command -v mpvpaper >/dev/null || { echo "aura-os-wallpaper: a video wallpaper needs mpvpaper" >&2; exit 2; }
+            printf '# aura-os-wallpaper live: %s\nswaybg_command -\nexec_always aura-os-wallpaper play\n' "$f" >"$conf"
+            cmd_play
+            [[ $was_live == yes ]] || sway reload
+            echo "wallpaper: $f (live)" ;;
+        image/*)
+            printf '# aura-os-wallpaper\noutput * bg "%s" fill\n' "$f" >"$conf"
+            show_still "$f" fill
+            echo "wallpaper: $f" ;;
+        *) echo "aura-os-wallpaper: not an image or video: $1" >&2; exit 2 ;;
+    esac
 }
 
 cmd_solid() {
+    local was_live=no; [[ -z $(live_video) ]] || was_live=yes
     rm -f "$conf"
-    sway output '*' bg "$(theme_bg || echo '#0e0e14')" solid_color
+    show_still "$(theme_bg || echo '#0e0e14')" solid_color
     echo "wallpaper: solid ($(theme_bg || echo '#0e0e14'))"
 }
 
 cmd_pick() {
-    local list choice dir
+    local list choice dir kinds='image/(jpeg|png|webp|bmp|gif|tiff)'
+    command -v mpvpaper >/dev/null && kinds+='|video/(webm|mp4|x-matroska|quicktime)'
     # Only search dirs that exist: find exits 1 on a missing one and
     # set -e would kill the picker before the menu even opens (no
     # ~/Pictures on a fresh install). One unreadable dir must not kill
@@ -53,9 +108,9 @@ cmd_pick() {
     ((${#search[@]})) || { echo "aura-os-wallpaper: no wallpaper directories found" >&2; exit 2; }
     # By content, not by name: browsers happily save a JPEG as "exit".
     list="$(find "${search[@]}" \
-              -maxdepth 2 -type f -size -60M -print0 2>/dev/null \
+              -maxdepth 2 -type f -size -500M -print0 2>/dev/null \
             | xargs -0 -r file --mime-type -F $'\t' -N -- \
-            | awk -F'\t' '$2 ~ /^ *image\/(jpeg|png|webp|bmp|gif|tiff)$/ {print $1}' \
+            | awk -F'\t' -v re="^ *($kinds)\$" '$2 ~ re {print $1}' \
             | sort -u | sed "s|^$HOME|~|")" || true
     choice="$(printf 'solid (theme color)\n%s\n' "$list" | sed '/^$/d' \
               | fuzzel --dmenu --prompt 'wallpaper > ' --width 80 --lines 15)" || exit 0
@@ -68,9 +123,12 @@ cmd_pick() {
 
 case "${1:-}" in
     pick)    cmd_pick ;;
-    set)     cmd_set "${2:?usage: aura-os-wallpaper set <image>}" ;;
+    set)     cmd_set "${2:?usage: aura-os-wallpaper set <file>}" ;;
     solid)   cmd_solid ;;
-    current) sed -n 's/^output \* bg "\(.*\)" fill/\1/p' "$conf" 2>/dev/null || true
-             [[ -f $conf ]] || echo "solid" ;;
+    play)    cmd_play ;;
+    current) [[ -f $conf ]] || { echo "solid"; exit 0; }
+             vid="$(live_video)"
+             if [[ -n $vid ]]; then echo "$vid"
+             else sed -n 's/^output \* bg "\(.*\)" fill/\1/p' "$conf"; fi ;;
     *)       sed -n '3,9p' "$0" >&2; exit 2 ;;
 esac

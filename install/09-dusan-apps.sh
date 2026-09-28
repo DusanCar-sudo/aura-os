@@ -99,10 +99,9 @@ fi
 # talks to its socket. Arch ships it as a user unit, started in the
 # user's own systemd instance (lingering not required: the desktop
 # session keeps it alive while logged in).
-for u in "${AURA_USER:?AURA_USER is not set — run this through install.sh}"; do
-    if systemctl --machine="$u@" --user enable --now ydotool.service 2>/dev/null; then
-        echo "09-dusan-apps: enabled ydotool.service for $u"
-    else
-        echo "09-dusan-apps: ydotool.service left off — it starts at next login" >&2
-    fi
-done
+u="${AURA_USER:?AURA_USER is not set — run this through install.sh}"
+if systemctl --machine="$u@" --user enable --now ydotool.service 2>/dev/null; then
+    echo "09-dusan-apps: enabled ydotool.service for $u"
+else
+    echo "09-dusan-apps: ydotool.service left off — it starts at next login" >&2
+fi

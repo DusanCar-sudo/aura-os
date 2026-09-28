@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Hardware Locality lstopo
+Comment=Show hardware topology
+Exec=lstopo
+Terminal=false
+NoDisplay=true

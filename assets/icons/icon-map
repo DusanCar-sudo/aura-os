@@ -4,11 +4,11 @@
 # back to breeze-dark (index.theme Inherits).
 terminal       utilities-terminal foot footclient org.codeberg.dnkl.foot aura-term
 files          system-file-manager org.kde.dolphin folder aura-files aura-os-files
-code           accessories-text-editor gvim zed text-editor aura-edit
-settings       preferences-desktop preferences-system applications-system-symbolic aura-os-settings
-system         utilities-system-monitor btop htop aura-sysmon
+code           accessories-text-editor gvim zed dev.zed.Zed text-editor aura-edit
+settings       preferences-desktop preferences-system applications-system-symbolic aura-os-settings aura-settings
+system         utilities-system-monitor btop htop aura-sysmon powerboard
 network        network-wired preferences-system-network nm-applet
-audio          preferences-desktop-sound pavucontrol aura-audio
+audio          preferences-desktop-sound pavucontrol aura-audio wiremix
 bluetooth      preferences-system-bluetooth bluetooth blueman
 keyboard       preferences-desktop-keyboard input-keyboard
 lock           dialog-password kwalletmanager pinentry system-lock-screen
@@ -35,3 +35,8 @@ app-github     github-desktop
 app-slack      slack
 app-unity      unityhub
 app-figma      figma-linux
+app-blender    blender
+app-krita      krita org.kde.krita
+app-cmake      CMakeSetup
+app-protonmail proton-mail
+app-zathura    org.pwmt.zathura

@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Desktop Preferences
+Comment=Change desktop wallpapers and desktop manager behavior
+Exec=pcmanfm --desktop-pref
+Terminal=false
+NoDisplay=true

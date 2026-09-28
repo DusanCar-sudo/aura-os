@@ -1,6 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=Aura Pulse
+Icon=aura-pulse
 GenericName=System Cockpit
 Comment=System telemetry, AI clipboard vault and hardware benchmarks
 Exec=aura-pulse

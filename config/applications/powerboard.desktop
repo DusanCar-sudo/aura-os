@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Powerboard
+Icon=powerboard
+Exec=foot -e /usr/local/bin/powerboard
+Terminal=false
+Type=Application
+Comment=btop-style hardware and power cost monitor
+Categories=System;Utility;

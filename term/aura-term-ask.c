@@ -416,6 +416,8 @@ build_prompt(const struct jv *in)
 {
     const char *cwd = jstr(in, "cwd");
     const char *sel = jstr(in, "selection");
+    const char *q = jstr(in, "question");
+    const char *ctx = jstr(in, "context");
     const char *cmd = jstr(in, "command");
     const char *out = jstr(in, "output");
     const struct jv *exit_v = jget(in, "exit");
@@ -429,7 +431,17 @@ build_prompt(const struct jv *in)
           "you say is run automatically. Answer from what is given, briefly "
           "(a few sentences).\n\n", f);
 
-    if (sel != NULL) {
+    if (q != NULL) {
+        fprintf(f, "The user typed a question at the shell prompt (cwd: %s). "
+                   "They may know nothing about Linux: answer in plain words, "
+                   "as short numbered steps if there are steps. This is Aura OS "
+                   "(Arch Linux + sway). Prefer Aura OS's own commands; install "
+                   "software only with aura-os-install <pkg>.\n",
+                cwd != NULL ? cwd : "unknown");
+        if (ctx != NULL)
+            fprintf(f, "\nAura OS commands on this machine, with their help:\n%s\n", ctx);
+        fprintf(f, "\nQuestion: %s\n", q);
+    } else if (sel != NULL) {
         fprintf(f, "The user selected this terminal text (cwd: %s):\n```\n%s\n```\n"
                    "Explain it, and if something is wrong, how to fix it.\n",
                 cwd != NULL ? cwd : "unknown", sel);
@@ -727,7 +739,7 @@ int
 main(int argc, char **argv)
 {
     const char *input = NULL;
-    bool delete_input = false, prompt_user = true;
+    bool delete_input = false, prompt_user = true, inline_mode = false;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--input") == 0 && i + 1 < argc)
@@ -736,6 +748,8 @@ main(int argc, char **argv)
             delete_input = true;
         else if (strcmp(argv[i], "--no-prompt") == 0)
             prompt_user = false;
+        else if (strcmp(argv[i], "--inline") == 0)
+            inline_mode = true;   /* `a` at the shell: no "Press Enter to close" */
         else {
             fprintf(stderr, "usage: %s [--input FILE [--delete-input]] [--no-prompt] < request.json\n", argv[0]);
             return 2;
@@ -757,9 +771,10 @@ main(int argc, char **argv)
     struct jv *req = json_parse(raw);
     free(raw);
     if (req == NULL || req->type != J_OBJ ||
-        (jstr(req, "selection") == NULL && jstr(req, "command") == NULL))
+        (jstr(req, "selection") == NULL && jstr(req, "command") == NULL &&
+         jstr(req, "question") == NULL))
     {
-        fprintf(stderr, "aura-term-ask: expected {\"selection\"} or {\"command\",\"output\",\"exit\",\"cwd\"} JSON\n");
+        fprintf(stderr, "aura-term-ask: expected {\"question\"}, {\"selection\"} or {\"command\",\"output\",\"exit\",\"cwd\"} JSON\n");
         jv_free(req);
         return 1;
     }
@@ -771,7 +786,9 @@ main(int argc, char **argv)
 
     /* Header */
     printf(BOLD "Ask Aura" OFF " " STRIPES "  " DIM "%s" OFF "\n", cwd);
-    if (jstr(req, "selection") != NULL)
+    if (jstr(req, "question") != NULL)
+        printf("\n");
+    else if (jstr(req, "selection") != NULL)
         printf(DIM "about the selected text" OFF "\n\n");
     else {
         const struct jv *ev = jget(req, "exit");
@@ -791,8 +808,12 @@ main(int argc, char **argv)
         ret = 3;
     } else {
         answer = ask_aura(cwd, prompt);
-        if (answer == NULL)
+        if (answer == NULL || answer[0] == '\0') {
+            const char *xdg = getenv("XDG_RUNTIME_DIR");
+            printf(RED "Aura gave no answer." OFF DIM " Why: %s/aura-os/ask/sidecar.log" OFF "\n",
+                   xdg != NULL ? xdg : "$XDG_RUNTIME_DIR");
             ret = 1;
+        }
         printf("\n");
     }
 
@@ -814,22 +835,31 @@ main(int argc, char **argv)
             if (pid == 0) {
                 if (chdir(cwd) < 0)
                     _exit(126);
+                /* the request came on stdin; give the command the keyboard */
+                int tty = open("/dev/tty", O_RDWR | O_CLOEXEC);
+                if (tty >= 0) {
+                    dup2(tty, STDIN_FILENO);
+                    close(tty);
+                }
                 execl("/bin/sh", "sh", "-c", suggestion, (char *)NULL);
                 _exit(127);
             }
             int status = 0;
             waitpid(pid, &status, 0);
+            if (inline_mode)
+                goto done;
             printf("\n" DIM "[exit %d] Press Enter to close." OFF, WIFEXITED(status) ? WEXITSTATUS(status) : -1);
             fflush(stdout);
             free(read_tty_line());
         }
         free(line);
-    } else {
+    } else if (!inline_mode) {
         printf(DIM "Press Enter to close." OFF);
         fflush(stdout);
         free(read_tty_line());
     }
 
+done:
     free(suggestion);
     free(answer);
     free(prompt);

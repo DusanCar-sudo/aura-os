@@ -40,3 +40,18 @@ __aura_term_preexec() {
 # First in line, so precmd sees the command's exit status
 precmd_functions=(__aura_term_precmd ${precmd_functions[@]})
 preexec_functions+=(__aura_term_preexec)
+
+# :a — one-off Aura Code request. It may use normal Aura tools, but the
+# explicit --no-session flag keeps this terminal helper out of chat history.
+:a() {
+    if (( $# == 0 )); then
+        print -u2 'usage: :a <topic>     e.g.  :a install ripgrep'
+        return 2
+    fi
+    if ! (( $+commands[aura] )); then
+        print -u2 ':a: aura-code is not installed (install it with install/06-aura-code.sh)'
+        return 127
+    fi
+    print -P '\n%F{cyan}Aura Code%f  %F{242}one-off request · no session%f\n'
+    command aura --no-session --cwd "$PWD" "$*"
+}

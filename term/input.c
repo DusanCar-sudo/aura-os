@@ -3282,7 +3282,18 @@ wl_pointer_button(void *data, struct wl_pointer *wl_pointer,
         case WL_POINTER_BUTTON_STATE_PRESSED: {
             bool consumed = false;
 
-            if (cursor_is_on_grid && term_mouse_grabbed(term, seat)) {
+            /* Aura OS: a plain middle-click is Enter everywhere, also
+             * in apps that track the mouse (TUIs, the Aura chat) */
+            if (cursor_is_on_grid && button == BTN_MIDDLE &&
+                !seat->kbd.shift && !seat->kbd.alt && !seat->kbd.ctrl &&
+                !seat->kbd.super)
+            {
+                term_to_slave(term, "\r", 1);
+                term_reset_view(term);
+                consumed = true;
+            }
+
+            if (!consumed && cursor_is_on_grid && term_mouse_grabbed(term, seat)) {
                 const struct key_binding *match =
                     match_mouse_binding(seat, term, button);
 

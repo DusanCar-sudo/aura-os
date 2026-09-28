@@ -72,6 +72,33 @@ def human(n):
         n /= 1024
 
 
+def mime_of(path):
+    try:
+        out = subprocess.run(["xdg-mime", "query", "filetype", path],
+                             capture_output=True, text=True, timeout=3).stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    return out.split(";")[0]
+
+
+def default_app(path):
+    """The .desktop id that opens this file by default, if it exists."""
+    mime = mime_of(path)
+    if not mime:
+        return None
+    try:
+        app = subprocess.run(["xdg-mime", "query", "default", mime],
+                             capture_output=True, text=True, timeout=3).stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if not app:
+        return None
+    dirs = [os.path.expanduser("~/.local/share/applications"), "/usr/local/share/applications",
+            "/usr/share/applications", "/var/lib/flatpak/exports/share/applications",
+            os.path.expanduser("~/.local/share/flatpak/exports/share/applications")]
+    return app if any(os.path.exists(os.path.join(d, app)) for d in dirs) else None
+
+
 def is_text(path):
     try:
         with open(path, "rb") as f:
@@ -329,14 +356,22 @@ class Files:
         full = os.path.join(self.path, e.name)
         if e.is_dir:
             return self.go(full)
-        if is_text(full):
+        # The file's own default app first (a PDF in the PDF viewer, a web
+        # page in the browser); aura-edit only for text nobody else claims.
+        app = default_app(full)
+        if app and app != "aura-edit.desktop":
+            try:
+                argv = (["gtk-launch", app[:-len(".desktop")], full]
+                        if shutil.which("gtk-launch") else ["xdg-open", full])
+                subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                 start_new_session=True)
+                self.status = f"Opening {e.name} with {app[:-len('.desktop')]}…"
+            except OSError as err:
+                self.status = f"Could not open {e.name}: {err.strerror}"
+        elif is_text(full):
             self.run_outside([EDITOR, full])
-        elif shutil.which("xdg-open"):
-            subprocess.Popen(["xdg-open", full], stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL, start_new_session=True)
-            self.status = f"Opening {e.name}…"
         else:
-            self.status = "No app to open this file"
+            self.status = f"No app opens {mime_of(full) or 'this file'} yet — install one with aura-os-install"
 
     def paste(self):
         paths, mode = self.clipboard

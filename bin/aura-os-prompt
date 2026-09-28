@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# aura-os-prompt — the Aura prompt surface.
+# aura-os-prompt — the Aura prompt surface (Super+A).
 #
-# Super+A in sway opens this in a foot window. Skeleton: it is a shell
-# for now (task 002 wires the real thing in). System changes go only
-# through aura-os-* commands, snapshot first.
-set -euo pipefail
+# One window, two doors:
+#   Enter (or "a")  -> talk to Aura (aura --interactive, her real engine)
+#   sh               -> a plain shell
+#   anything else    -> run it as a command, then come back to the menu
+#
+# System changes still go only through aura-os-* commands, snapshot first.
+set -uo pipefail
 
 self="$(readlink -f "$0")"
 
@@ -12,23 +15,44 @@ self="$(readlink -f "$0")"
 # foot window and run ourselves inside it. AURA_PROMPT_WINDOW is set
 # on the inner run, so only one window ever opens.
 if [[ -z ${AURA_PROMPT_WINDOW:-} ]]; then
-    exec foot --app-id=aura-prompt --title="Aura prompt" env AURA_PROMPT_WINDOW=1 "$self"
+    exec aura-term --app-id=aura-prompt --title="Aura prompt" env AURA_PROMPT_WINDOW=1 "$self"
 fi
 
-cat <<'BANNER'
+banner() {
+    clear
+    cat <<'BANNER'
     Aura OS — prompt
     ------------------------------------------------
-    This is where Aura will listen. Not wired up yet —
-    for now it is a shell where system changes go through
-    aura-os-* commands:
+    Talk to Aura:   press Enter   (or type: a)
+    Plain shell:    type sh
+    Anything else:  runs as a command, then returns here
 
+    System changes go only through aura-os-* commands:
       aura-os-install <pkg>   install a package (snapshot first)
       aura-os-remove <pkg>    uninstall a package (snapshot first)
       aura-os-snapshot        take a snapper snapshot now
       aura-os-reset [n]       reset to a snapper snapshot (default 1)
       aura-os-bench           idle RAM vs the 350 MB budget
 
-    Close with Super+Q, or type 'exit'.
+    Close the window with Super+Q.
 BANNER
+}
 
-exec "${SHELL:-/bin/bash}" -i
+while :; do
+    banner
+    printf '  prompt> '
+    IFS= read -r line || exit 0
+    case "$line" in
+        ""|a|aura|Aura)
+            if command -v aura >/dev/null 2>&1; then
+                aura --interactive || true
+            else
+                printf '\n  aura (the engine CLI) is not installed on this machine.\n' >&2
+                sleep 2
+            fi
+            ;;
+        sh|shell|bash) exec "${SHELL:-/bin/bash}" -i ;;
+        exit|quit|q) exit 0 ;;
+        *) bash -ic "$line" || true; printf '\n[Enter to continue]'; read -rsn1 ;;
+    esac
+done

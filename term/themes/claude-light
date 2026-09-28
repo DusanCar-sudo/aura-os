@@ -1,0 +1,23 @@
+# -*- conf -*-
+# Claude (light): paper cream, ink text, Claude's clay orange accent
+[colors-light]
+foreground=141413
+background=faf9f5
+selection-foreground=141413
+selection-background=f2d3c4
+regular0=141413 # black
+regular1=b3412f # red
+regular2=4f7a3a # green
+regular3=8a6412 # yellow
+regular4=2f5f9e # blue
+regular5=c15f3c # magenta (clay)
+regular6=2d7a73 # cyan
+regular7=e8e6dc # white
+bright0=6b6860 # bright black
+bright1=c9543f # bright red
+bright2=5f8f48 # bright green
+bright3=a37a1c # bright yellow
+bright4=3f74b8 # bright blue
+bright5=d97757 # bright magenta
+bright6=38918a # bright cyan
+bright7=f0eee6 # bright white

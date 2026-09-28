@@ -1,0 +1,23 @@
+# -*- conf -*-
+# Claude (dark): warm near-black, cream text, Claude's clay orange accent
+[colors-dark]
+foreground=e8e6dc
+background=1f1e1d
+selection-foreground=faf9f5
+selection-background=5a3a2e
+regular0=2b2a27 # black
+regular1=e06c5f # red
+regular2=8fbf7f # green
+regular3=e5b567 # yellow
+regular4=7fa6d9 # blue
+regular5=d97757 # magenta (clay)
+regular6=6fb8b0 # cyan
+regular7=d6d3c7 # white
+bright0=6b6860 # bright black
+bright1=f08a7e # bright red
+bright2=a9d69a # bright green
+bright3=f0cb8a # bright yellow
+bright4=9cbdea # bright blue
+bright5=eb9474 # bright magenta
+bright6=8fd0c8 # bright cyan
+bright7=faf9f5 # bright white

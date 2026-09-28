@@ -22,7 +22,7 @@ set -euo pipefail
 cfg="${XDG_CONFIG_HOME:-$HOME/.config}"
 state="$cfg/aura-os/theme"
 dirs=("$cfg/aura-os/themes" /usr/share/aura-os/themes "${AURA_OS_REPO:-$HOME/aura-os}/themes")
-icon_src=(/usr/share/aura-os/icons "${AURA_OS_REPO:-$HOME/aura-os}/assets/icons")
+icon_src=("${XDG_DATA_HOME:-$HOME/.local/share}/aura-os/icon-source" /usr/share/aura-os/icons "${AURA_OS_REPO:-$HOME/aura-os}/assets/icons")
 icon_out="${XDG_DATA_HOME:-$HOME/.local/share}/aura-os/icons"
 
 theme_dir() { local d; for d in "${dirs[@]}"; do [[ -f $d/$1/palette ]] && { echo "$d/$1"; return; }; done; return 1; }

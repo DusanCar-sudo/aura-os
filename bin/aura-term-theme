@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+# aura-term-theme — a theme for the terminal only, apart from the system.
+#
+#   aura-term-theme list          terminal themes (* = current)
+#   aura-term-theme pick          choose one from a menu
+#   aura-term-theme set <name>    use <name> in this and every new window
+#   aura-term-theme off           follow the system theme again
+#
+# The choice lives in ~/.config/aura-term/term-theme and is applied as
+# colors when each aura-term window's shell starts, so it survives
+# `aura-os-theme apply` (which only rewrites theme.ini) and needs no
+# restart.
+set -uo pipefail
+
+state=${XDG_CONFIG_HOME:-$HOME/.config}/aura-term/term-theme
+system=${XDG_CONFIG_HOME:-$HOME/.config}/aura-term/theme.ini   # written by aura-os-theme
+dirs=("${XDG_DATA_HOME:-$HOME/.local/share}/aura-term/themes" /usr/local/share/aura-term/themes)
+
+names() {
+    local d
+    for d in "${dirs[@]}"; do [[ -d $d ]] && ls "$d"; done | sort -u
+}
+
+find_theme() {
+    local d
+    for d in "${dirs[@]}"; do [[ -f $d/$1 ]] && { echo "$d/$1"; return 0; }; done
+    return 1
+}
+
+current() { [[ -f $state ]] && cat "$state"; }
+
+# Theme file -> OSC color escapes. Takes the first [colors*] section.
+escapes() {
+    awk '
+        /^\[colors/ { if (seen) exit; seen = 1; on = 1; next }
+        /^\[/       { on = 0; next }
+        !on || !/=/ { next }
+        {
+            sub(/[ \t]*#.*/, ""); split($0, kv, "="); k = kv[1]; v = kv[2]
+            gsub(/[ \t]/, "", k); gsub(/[ \t]/, "", v)
+            if (v !~ /^[0-9a-fA-F]{6}$/) next
+            v = "#" v
+            if (k ~ /^regular[0-7]$/) printf "\033]4;%d;%s\033\\", substr(k, 8), v
+            else if (k ~ /^bright[0-7]$/) printf "\033]4;%d;%s\033\\", substr(k, 7) + 8, v
+            else if (k == "foreground") printf "\033]10;%s\033\\\033]12;%s\033\\", v, v
+            else if (k == "background") printf "\033]11;%s\033\\", v
+            else if (k == "selection-background") printf "\033]17;%s\033\\", v
+            else if (k == "selection-foreground") printf "\033]19;%s\033\\", v
+        }' "$1"
+}
+
+to_tty() { [[ -w /dev/tty ]] && printf '%s' "$1" > /dev/tty 2>/dev/null; }
+
+apply() {
+    local f
+    f=$(find_theme "$1") || { echo "aura-term-theme: no theme '$1' (see: aura-term-theme list)" >&2; return 1; }
+    to_tty "$(escapes "$f")"
+}
+
+case ${1:-list} in
+list)
+    cur=$(current)
+    names | while read -r n; do [[ $n == "$cur" ]] && echo "* $n" || echo "  $n"; done
+    [[ -z $cur ]] && echo "(none set: the terminal follows the system theme)"
+    ;;
+pick)
+    # In a terminal: arrow keys, each theme previewed live; elsewhere: fuzzel
+    if [[ -t 0 && -t 1 ]] && command -v aura-term-choose >/dev/null; then
+        if n=$(names | aura-term-choose --title 'Terminal theme' --current "$(current)" --preview "$0 --preview"); then
+            exec "$0" set "$n"
+        fi
+        "$0" --apply-saved   # cancelled: undo the preview
+        exit 0
+    fi
+    n=$(names | fuzzel --dmenu --prompt 'terminal theme: ' 2>/dev/null) || exit 0
+    [[ -n $n ]] && exec "$0" set "$n"
+    ;;
+--preview)
+    apply "${2:?}"
+    ;;
+set)
+    [[ -n ${2:-} ]] || { echo "usage: aura-term-theme set <name>" >&2; exit 2; }
+    apply "$2" || exit 1
+    mkdir -p "$(dirname "$state")" && echo "$2" > "$state"
+    echo "terminal theme: $2 (this window now, every new window from now on)"
+    ;;
+off)
+    rm -f "$state"
+    [[ -f $system ]] && to_tty "$(escapes "$system")" ||
+    to_tty $'\e]104\e\\\e]110\e\\\e]111\e\\\e]112\e\\\e]117\e\\\e]119\e\\'
+    echo "terminal theme: off (following the system theme)"
+    ;;
+--apply-saved)
+    cur=$(current)
+    if [[ -n $cur ]]; then apply "$cur" 2>/dev/null
+    elif [[ -f $system ]]; then to_tty "$(escapes "$system")"   # follow the system theme
+    fi
+    exit 0
+    ;;
+--push-system)
+    # aura-os-theme apply: recolor every open aura-term window now,
+    # except when a terminal-only theme is set (that one wins)
+    [[ -n $(current) || ! -f $system ]] && exit 0
+    esc=$(escapes "$system")
+    for pid in $(pgrep -x aura-termd); do
+        for kid in $(pgrep -P "$pid"); do
+            t=$(readlink "/proc/$kid/fd/0" 2>/dev/null)
+            [[ $t == /dev/pts/* && -w $t ]] && printf '%s' "$esc" > "$t"
+        done
+    done
+    exit 0
+    ;;
+*)
+    sed -n '3,7s/^# \{0,1\}//p' "$0" >&2; exit 2 ;;
+esac

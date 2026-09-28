@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Application launcher: Fuzzel's launch-count cache or alphabetical desktop list.
+# One short-lived process, no indexer or background service.
+set -euo pipefail
+
+case ${1:-usage} in
+    usage)    exec fuzzel --launch-prefix='aura-os-recent launch' ;;
+    alphabet) exec fuzzel --no-sort --launch-prefix='aura-os-recent launch' ;;
+    *) echo 'usage: aura-os-apps [usage|alphabet]' >&2; exit 2 ;;
+esac

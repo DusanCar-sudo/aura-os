@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# Rebuild the small Aura launcher icon theme without changing desktop colors.
+set -euo pipefail
+
+repo="${AURA_OS_REPO:-}"
+data="${XDG_DATA_HOME:-$HOME/.local/share}"
+source_cache="$data/aura-os/icon-source"
+src=""
+for dir in "${repo:+$repo/assets/icons}" "$source_cache" /usr/share/aura-os/icons "$HOME/aura-os/assets/icons"; do
+    [[ -f $dir/icon-map ]] && { src=$dir; break; }
+done
+[[ -n $src ]] || { echo 'aura-os-icons: icon-map not found' >&2; exit 1; }
+
+theme="$(cat "${XDG_CONFIG_HOME:-$HOME/.config}/aura-os/theme" 2>/dev/null || echo purplerain)"
+palette=""
+for file in "${repo:+$repo/themes/$theme/palette}" /usr/share/aura-os/themes/"$theme"/palette "$HOME/aura-os/themes/$theme/palette"; do
+    [[ -f $file ]] && { palette=$file; break; }
+done
+[[ -n $palette ]] || { echo "aura-os-icons: palette $theme not found" >&2; exit 1; }
+fg="$(sed -n 's/^fg=//p' "$palette" | head -1)"
+bg="$(sed -n 's/^bg=//p' "$palette" | head -1)"
+accent="$(sed -n 's/^accent=//p' "$palette" | head -1)"
+[[ $fg =~ ^#[0-9a-fA-F]{6}$ && $bg =~ ^#[0-9a-fA-F]{6}$ && $accent =~ ^#[0-9a-fA-F]{6}$ ]] || {
+    echo "aura-os-icons: invalid colors in $palette" >&2; exit 1;
+}
+
+if [[ $src != "$source_cache" ]]; then
+    mkdir -p "$source_cache"
+    cp "$src"/*.svg "$src/icon-map" "$source_cache/"
+    src=$source_cache
+fi
+out="$data/aura-os/icons"
+icons="$data/icons/Aura"
+mkdir -p "$out" "$data/icons"
+stage="$(mktemp -d "$data/icons/.Aura.XXXXXX")"
+trap 'rm -rf -- "$stage"' EXIT
+mkdir -p "$stage/scalable/apps"
+cat > "$stage/index.theme" <<EOF
+[Icon Theme]
+Name=Aura
+Comment=Aura OS monochrome icons ($theme)
+Inherits=breeze-dark,hicolor
+Directories=scalable/apps
+
+[scalable/apps]
+Size=48
+MinSize=8
+MaxSize=512
+Type=Scalable
+Context=Applications
+EOF
+
+for file in "$src"/*.svg; do
+    color=$fg
+    [[ ${file##*/} == aura.svg ]] && color=$accent
+    sed -E -e "0,/color=\"#[0-9a-fA-F]{6}\"/s//color=\"$color\"/" \
+        -e "s/currentColor/$color/g" -e "s/\"white\"/\"$bg\"/g" \
+        "$file" > "$out/${file##*/}"
+done
+while read -r file names; do
+    [[ -z $file || $file == \#* || ! -f $out/$file.svg ]] && continue
+    for name in $names; do cp "$out/$file.svg" "$stage/scalable/apps/$name.svg"; done
+done < "$src/icon-map"
+
+backup="$data/icons/.Aura.previous.$$"
+if [[ -d $icons ]]; then mv "$icons" "$backup"; fi
+if mv "$stage" "$icons"; then
+    trap - EXIT
+    rm -rf -- "$backup"
+    echo "aura-os-icons: installed $(find "$icons/scalable/apps" -type f | wc -l) names ($theme)"
+else
+    [[ ! -d $backup ]] || mv "$backup" "$icons"
+    exit 1
+fi

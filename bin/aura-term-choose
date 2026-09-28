@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# aura-term-choose — pick one line with the arrow keys, right in the terminal.
+#
+#   printf '%s\n' a b c | aura-term-choose [--title T] [--current X] [--preview CMD]
+#
+# Up/Down (or k/j), PgUp/PgDn, Home/End move; Enter picks (printed to
+# stdout); Esc or q cancels (exit 1). --preview runs CMD <item> on every
+# move (aura-term-theme uses it to recolor live).
+set -uo pipefail
+
+title=choose current= preview=
+while (($#)); do
+    case $1 in
+    --title) title=$2; shift 2 ;;
+    --current) current=$2; shift 2 ;;
+    --preview) preview=$2; shift 2 ;;
+    *) echo "aura-term-choose: unknown option $1" >&2; exit 2 ;;
+    esac
+done
+
+mapfile -t items
+((${#items[@]})) || exit 1
+exec 3<>/dev/tty || exit 1
+
+sel=0
+for i in "${!items[@]}"; do [[ ${items[i]} == "$current" ]] && sel=$i; done
+rows=$(( $(tput lines <&3 2>/dev/null || echo 24) - 4 ))
+((rows < 3)) && rows=3
+((rows > ${#items[@]})) && rows=${#items[@]}
+top=0
+old=$(stty -g <&3)
+
+cleanup() {
+    printf '\e[?25h' >&3
+    stty "$old" <&3
+}
+trap cleanup EXIT
+stty -echo -icanon min 1 time 0 <&3
+printf '\e[?25l' >&3
+
+drawn=0
+draw() {
+    ((sel < top)) && top=$sel
+    ((sel >= top + rows)) && top=$((sel - rows + 1))
+    ((drawn)) && printf '\e[%dA' $((rows + 2)) >&3
+    printf '\r\e[K\e[1m%s\e[0m  \e[2m(%d/%d)  ↑↓ move · Enter choose · Esc cancel\e[0m\n' \
+        "$title" $((sel + 1)) ${#items[@]} >&3
+    local i mark
+    for ((i = top; i < top + rows; i++)); do
+        mark=' '; [[ ${items[i]} == "$current" ]] && mark='*'
+        if ((i == sel)); then
+            printf '\r\e[K\e[7m ▸ %s %s \e[0m\n' "$mark" "${items[i]}" >&3
+        else
+            printf '\r\e[K   %s %s\n' "$mark" "${items[i]}" >&3
+        fi
+    done
+    local more=
+    ((top > 0)) && more+='↑ more  '
+    ((top + rows < ${#items[@]})) && more+='↓ more'
+    printf '\r\e[K\e[2m%s\e[0m\n' "$more" >&3
+    drawn=1
+    [[ -n $preview ]] && $preview "${items[sel]}" >/dev/null 2>&1
+}
+
+draw
+n=${#items[@]}
+while IFS= read -rsn1 k <&3; do
+    if [[ $k == $'\e' ]]; then
+        IFS= read -rsn2 -t 0.05 k2 <&3 || k2=
+        case $k2 in
+        '[A') ((sel > 0)) && ((sel--)) ;;
+        '[B') ((sel < n - 1)) && ((sel++)) ;;
+        '[5') read -rsn1 -t 0.05 <&3; sel=$((sel - rows)); ((sel < 0)) && sel=0 ;;
+        '[6') read -rsn1 -t 0.05 <&3; sel=$((sel + rows)); ((sel >= n)) && sel=$((n - 1)) ;;
+        '[H') sel=0 ;;
+        '[F') sel=$((n - 1)) ;;
+        '') exit 1 ;;
+        esac
+    else
+        case $k in
+        k) ((sel > 0)) && ((sel--)) ;;
+        j) ((sel < n - 1)) && ((sel++)) ;;
+        q) exit 1 ;;
+        '') printf '%s\n' "${items[sel]}"; exit 0 ;;
+        esac
+    fi
+    draw
+done
+exit 1

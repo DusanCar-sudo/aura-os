@@ -8,7 +8,7 @@
 
 set $mod Mod4
 set $term aura-term
-set $menu fuzzel --launch-prefix='aura-os-recent launch'
+set $menu $HOME/.local/bin/aura-os-apps usage
 
 # Super+left-drag moves any window: drop a tiled one on another
 # pane's edge to re-tile it there. Super+right-drag resizes.
@@ -71,7 +71,7 @@ exec test -f ~/.config/aura-os/setup-done || aura-os-setup
 # Floating TUIs opened from the top bar (bt, wifi, vol, calendar).
 for_window [app_id="aura-float"] floating enable, resize set 960 600, move position center
 # Aura native tools (rust/apps): float centered like popups, never shove the layout
-for_window [app_id="^aura-(optanomai|settings|bluetooth|wifi|audio|look|appearance)$"] floating enable, move position center
+for_window [app_id="^aura-(optanomai|settings|bluetooth|wifi|audio|keyboard|look|appearance|calc)$"] floating enable, move position center
 
 # Keyboard: US QWERTY only, no layout switching.
 # aura-os-setup writes config.d/60-keyboard.conf, included below, so its

@@ -40,7 +40,7 @@ Same bar, laptop panel (1920px, centre pinned to true centre):
    sway dotfiles, `aura-os-*` commands, and Aura as the operator.
 2. **Aura herself** — Aura builds most of this from instructions. Where she
    stumbles (wrong tool, wrong surface, runaway commands), the fix goes into
-   aura-code, not just this repo. Log those in `NOTES-aura-behaviour.md`.
+   aura-code, not just this repo. Log them in the task notes.
 
 ## Layout
 

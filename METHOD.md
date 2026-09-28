@@ -13,7 +13,7 @@ the gap between the brief and the result is Aura's gap, not ours.
 4. **Verify** — Claude checks the result in the VM independently
    (ssh, `aura-os-bench`, screenshots via `vm/vm-keys.py shot`), never
    from Aura's report alone.
-5. **Score** — append to NOTES-aura-behaviour.md: Good / Stumbles,
+5. **Score** — score the run: Good / Stumbles,
    each stumble tagged with its root cause:
    - `brief`  the brief was unclear or changed → fix the brief
    - `rules`  AURA.md missing a rule → fix AURA.md (2000-char cap)

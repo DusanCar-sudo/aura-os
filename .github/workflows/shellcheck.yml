@@ -1,0 +1,19 @@
+name: shellcheck
+on:
+  push:
+    paths: ['**/*.sh', 'bin/aura-*', '.github/workflows/shellcheck.yml']
+  pull_request:
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shellcheck install steps and aura commands
+        run: |
+          set +e
+          fail=0
+          for f in $(find install tools vm -name '*.sh') install.sh $(find bin -maxdepth 1 -name 'aura-*' -type f); do
+            out=$(shellcheck -S warning "$f" 2>&1) || { echo "=== $f"; echo "$out"; fail=1; }
+          done
+          exit $fail

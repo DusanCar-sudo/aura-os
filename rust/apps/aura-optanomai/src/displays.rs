@@ -6,7 +6,51 @@
 //! documented interface and keeps the build dependency-free.
 
 use serde::Deserialize;
+use std::env;
+use std::fs;
 use std::process::Command;
+
+
+// ────────────────────────────────────────────────────────────────────────────
+// Socket auto-detection
+// ────────────────────────────────────────────────────────────────────────────
+
+/// If `SWAYSOCK` points at a dead socket (sway crashed/restarted), find the
+/// newest live `sway-ipc.*.sock` for this user and point `SWAYSOCK` at it.
+/// Called before every `swaymsg` invocation so the app always talks to the
+/// current compositor, not a stale one.
+fn fix_socket() {
+    // If SWAYSOCK is set and still exists, trust it.
+    if let Ok(sock) = env::var("SWAYSOCK") {
+        if fs::metadata(&sock).is_ok() {
+            return;
+        }
+    }
+    // Find the newest sway IPC socket in XDG_RUNTIME_DIR (/run/user/<uid>).
+    let dir = match env::var("XDG_RUNTIME_DIR") {
+        Ok(d) => d,
+        Err(_) => return,
+    };
+    if let Ok(entries) = fs::read_dir(&dir) {
+        let mut best: Option<(std::time::SystemTime, String)> = None;
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if name.starts_with("sway-ipc.") && name.ends_with(".sock") {
+                if let Ok(meta) = entry.metadata() {
+                    if let Ok(mtime) = meta.modified() {
+                        if best.as_ref().map_or(true, |(t, _)| mtime > *t) {
+                            best = Some((mtime, entry.path().to_string_lossy().into_owned()));
+                        }
+                    }
+                }
+            }
+        }
+        if let Some((_, path)) = best {
+            env::set_var("SWAYSOCK", &path);
+        }
+    }
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Modes
@@ -281,6 +325,7 @@ pub enum Backend {
 
 /// Is there a compositor here we can actually talk to?
 pub fn detect() -> (Backend, Option<String>) {
+    fix_socket();
     match Command::new("swaymsg")
         .args(["-t", "get_version"])
         .output()
@@ -299,6 +344,7 @@ pub fn detect() -> (Backend, Option<String>) {
 
 /// The running compositor's version string, for the little badge in the header.
 pub fn compositor_version() -> Option<String> {
+    fix_socket();
     let out = Command::new("swaymsg").args(["-t", "get_version"]).output().ok()?;
     #[derive(Deserialize)]
     struct V {
@@ -311,6 +357,7 @@ pub fn compositor_version() -> Option<String> {
 
 /// Ask sway for the current output topology.
 pub fn query() -> Result<Vec<Display>, String> {
+    fix_socket();
     let out = Command::new("swaymsg")
         .args(["-t", "get_outputs", "-r"])
         .output()
@@ -419,6 +466,7 @@ fn reply_error(r: &RawReply) -> String {
 
 /// Run one sway command and turn swaymsg's JSON verdict into a Rust `Result`.
 fn run_sway(cmd: &str) -> Result<(), String> {
+    fix_socket();
     let out = Command::new("swaymsg")
         .arg(cmd)
         .output()

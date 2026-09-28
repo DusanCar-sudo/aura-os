@@ -5,7 +5,35 @@
 //! ~/.config/sway/config.d/60-keyboard.conf and tells sway right away, so
 //! it also survives the next login.
 
+use std::env;
+use std::fs;
 use std::process::{Command, Stdio};
+
+/// If SWAYSOCK points at a dead socket (sway crashed/restarted), find the
+/// newest live sway-ipc.*.sock in XDG_RUNTIME_DIR and point SWAYSOCK at it.
+fn fix_socket() {
+    if let Ok(sock) = env::var("SWAYSOCK") {
+        if fs::metadata(&sock).is_ok() { return; }
+    }
+    let dir = match env::var("XDG_RUNTIME_DIR") { Ok(d) => d, Err(_) => return };
+    if let Ok(entries) = fs::read_dir(&dir) {
+        let mut best: Option<(std::time::SystemTime, String)> = None;
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if name.starts_with("sway-ipc.") && name.ends_with(".sock") {
+                if let Ok(meta) = entry.metadata() {
+                    if let Ok(mtime) = meta.modified() {
+                        if best.as_ref().map_or(true, |(t, _)| mtime > *t) {
+                            best = Some((mtime, entry.path().to_string_lossy().into_owned()));
+                        }
+                    }
+                }
+            }
+        }
+        if let Some((_, path)) = best { env::set_var("SWAYSOCK", &path); }
+    }
+}
 
 use aura_ui::{theme, widgets};
 use egui::{Frame, Key, Margin, RichText, ScrollArea, TextEdit};
@@ -122,6 +150,7 @@ fn write_config(picked: &[Layout], option: &str) -> std::io::Result<()> {
         std::fs::create_dir_all(d)?;
     }
     std::fs::write(&path, body)?;
+    fix_socket();
     let _ = Command::new("swaymsg")
         .arg("reload")
         .stdin(Stdio::null())

@@ -1,7 +1,7 @@
 <h1>
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/brand/aura-os-mark.svg">
-    <img alt="Aura OS" src="assets/brand/aura-os-mark-ink.svg" width="360">
+    <img alt="Aura adOS" src="assets/brand/aura-os-mark-ink.svg" width="360">
   </picture>
 </h1>
 
@@ -9,15 +9,17 @@
 > nothing you don't. Aura built it for herself: she installs, themes,
 > fixes and backs it up. You ask; Aura does it, snapshots first.
 
-![license](https://img.shields.io/badge/license-proprietary-red)
+![license](https://img.shields.io/badge/license-MIT-blue)
 ![CI](https://github.com/DusanCar-sudo/aura-os/actions/workflows/rust.yml/badge.svg)
 ![Arch](https://img.shields.io/badge/base-Arch%20%2B%20sway-1793D1)
 
-![Aura OS desktop](docs/img/hero.png)
+**Website:** <https://aurawebsite-eta.vercel.app/>
+
+![Aura adOS desktop](docs/img/hero.png)
 
 ## Direction: a dev OS, not a polished one
 
-Aura OS is a working desk for developers and their agents: text over
+Aura adOS is a working desk for developers and their agents: text over
 icons, square panes, every agent's last step in the sidebar, the
 numbers that matter (RAM, the last 500 copies) one glance away. It runs
 everything you run today — browsers, dev tools, media, games — on a
@@ -43,7 +45,7 @@ aura-term and AURA CODE, the agent's own terminal and coding session:
 
 ## Install
 
-Aura OS is a layer on a fresh Arch Linux install.
+Aura adOS is a layer on a fresh Arch Linux install.
 
 ```sh
 git clone https://github.com/DusanCar-sudo/aura-os.git
@@ -54,9 +56,9 @@ cd aura-os
 
 Every step is idempotent and snapshots first (snapper). `01` installs
 packages, `03` sets up sway + greetd, `05` builds aura-term, `08` writes
-the boot splash. The proprietary license ships the OS to users only as
-a downloadable ISO — see LICENSE and THIRD-PARTY-NOTICES.md for the
-GPL / foot-MIT obligations that make that work.
+the boot splash. Aura adOS is MIT licensed (see LICENSE). The software
+it installs keeps its own licence; THIRD-PARTY-NOTICES.md lists the GPL
+and foot-MIT obligations for anyone shipping an image.
 
 For development, test changes in the QEMU VM instead of on metal:
 

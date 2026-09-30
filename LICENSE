@@ -1,18 +1,31 @@
-Aura OS
-Copyright (c) 2026 Dusan Milosavljevic. All rights reserved.
+MIT License
 
-This repository and the Aura OS software in it — install scripts,
-aura-os-* commands, configuration, themes, the installer, and the
-Aura-specific parts of aura-term — are proprietary. No license is
-granted to use, copy, modify or distribute them, except as expressly
-agreed in writing with the copyright holder.
+Copyright (c) 2026 Dusan Milosavljevic
 
-Aura OS is distributed to users only as a downloadable ISO image.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-Third-party software is NOT covered by this notice and remains under
-its own license; see THIRD-PARTY-NOTICES.md. In particular:
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+Third-party software is NOT covered by this licence and remains under its
+own; see THIRD-PARTY-NOTICES.md. In particular:
   - term/ is a fork of foot (https://codeberg.org/dnkl/foot), MIT
-    licensed; its original copyright and license are kept in
+    licensed; its original copyright and licence are kept in
     term/LICENSE and must ship with every aura-term build.
-  - The ISO bundles Arch Linux packages under their own licenses
+  - An ISO bundles Arch Linux packages under their own licences
     (GPL, LGPL, MIT, MPL, ...).

@@ -168,14 +168,14 @@ show_mark() { # show_mark <indent> <info array>
 
 # The header aura-term prints when a window opens: the mark on the left and,
 # beside it, what any program shows in its about box. The copyright line
-# matches LICENSE — Aura OS is proprietary, so it says so rather than MIT.
+# matches LICENSE.
 header() {
     local R=$'\e[0m' T=$'\e[1;39m' D; D="$(ansi "$dim")"
     local -a info=(
         "${T}aura ad$(ansi "$accent")OS$R  ${D}Agent-Driven OS$R"
         "$(ansi "$muted")Intelligence is in simplicity.$R"
         ""
-        "${D}© 2026 Dusan Milosavljevic · All rights reserved$R"
+        "${D}© 2026 Dusan Milosavljevic · MIT licence$R"
         "${D}github.com/DusanCar-sudo/aura-os$R"
         "${D}minimal install · ask Aura to add only what you need$R"
         "${D}built by Dusan Milosavljevic · LeanPro IQ · Novi Sad / Da Nang$R"

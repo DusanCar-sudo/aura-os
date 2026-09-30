@@ -1,6 +1,6 @@
 # Third-party software in Aura OS
 
-Aura OS's own code is proprietary (see LICENSE). The ISO also contains
+Aura adOS's own code is MIT licensed (see LICENSE). The ISO also contains
 open-source software owned by others. Each ISO release must meet their
 terms. This is the checklist the ISO build (task 007) enforces.
 

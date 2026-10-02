@@ -1,0 +1,9 @@
+[package]
+name = "aura-desk-catch"
+version = "0.1.0"
+edition = "2021"
+description = "Right-click on the bare desktop opens the Aura menu: an invisible layer between the wallpaper and the windows."
+
+[dependencies]
+smithay-client-toolkit = { version = "0.19.2", default-features = false }
+libc = "0.2"

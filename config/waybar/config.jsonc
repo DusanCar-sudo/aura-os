@@ -170,7 +170,7 @@
       "on-click": "aura-os-tab new"
     },
     "sway/mode": { "format": " {} ", "tooltip": false },
-    "sway/window": { "max-length": 60, "tooltip": false },
+    "sway/window": { "max-length": 60, "tooltip": false, "on-click-right": "$HOME/.local/bin/aura-rclick window" },
     // Classic system items, plain text. Click → a floating
     // TUI in aura-term (app_id aura-float, see sway config).
     "bluetooth": {
@@ -390,7 +390,7 @@
       "on-click": "aura-os-tab new"
     },
     "sway/mode": { "format": " {} ", "tooltip": false },
-    "sway/window": { "max-length": 60, "tooltip": false },
+    "sway/window": { "max-length": 60, "tooltip": false, "on-click-right": "$HOME/.local/bin/aura-rclick window" },
     // Classic system items, plain text. Click → a floating
     // TUI in aura-term (app_id aura-float, see sway config).
     "bluetooth": {

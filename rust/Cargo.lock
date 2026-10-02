@@ -161,6 +161,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "aura-desk-catch"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "smithay-client-toolkit 0.19.2",
+]
+
+[[package]]
 name = "aura-files-rs"
 version = "0.1.0"
 dependencies = [
@@ -186,6 +194,18 @@ dependencies = [
  "eframe",
  "egui",
  "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "aura-rclick"
+version = "0.1.0"
+dependencies = [
+ "aura-ui",
+ "eframe",
+ "egui",
+ "image",
+ "libc",
  "serde_json",
 ]
 

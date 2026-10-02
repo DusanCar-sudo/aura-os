@@ -1,0 +1,13 @@
+[package]
+name = "aura-rclick"
+version = "0.1.0"
+edition = "2021"
+description = "The Aura right-click menu: your pinned apps, the desktop, the window under the cursor."
+
+[dependencies]
+aura-ui = { path = "../../crates/aura-ui" }
+eframe = { workspace = true }
+egui = { workspace = true }
+serde_json = { workspace = true }
+image = { version = "0.25", default-features = false, features = ["png"] }
+libc = "0.2"

@@ -1,0 +1,6 @@
+[Unit]
+Description=Ask whether new apps belong in the right-click menu
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/aura-rclick scan

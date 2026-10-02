@@ -44,6 +44,14 @@ put "$REPO/config/sway/config.d/20-mouse.conf" "$cfg/sway/config.d/20-mouse.conf
 put "$REPO/config/sway/config.d/30-idle.conf" "$cfg/sway/config.d/30-idle.conf"
 put "$REPO/config/sway/config.d/80-journey.conf" "$cfg/sway/config.d/80-journey.conf"
 put "$REPO/config/sway/config.d/82-filepane.conf" "$cfg/sway/config.d/82-filepane.conf"
+# right-click menu (aura-rclick): the sway rules, and the watcher that asks
+# whether a newly installed app belongs in it
+put "$REPO/config/sway/config.d/85-rightclick.conf" "$cfg/sway/config.d/85-rightclick.conf"
+install -d -o "$user" -g "$user" "$cfg/systemd" "$cfg/systemd/user" "$cfg/systemd/user/default.target.wants"
+put "$REPO/config/systemd/aura-rclick-scan.path" "$cfg/systemd/user/aura-rclick-scan.path"
+put "$REPO/config/systemd/aura-rclick-scan.service" "$cfg/systemd/user/aura-rclick-scan.service"
+ln -sfn ../aura-rclick-scan.path "$cfg/systemd/user/default.target.wants/aura-rclick-scan.path"
+chown -h "$user:$user" "$cfg/systemd/user/default.target.wants/aura-rclick-scan.path"
 put "$REPO/config/waybar/config.jsonc" "$cfg/waybar/config.jsonc"
 put "$REPO/config/waybar/style.css" "$cfg/waybar/style.css"
 put "$REPO/config/mako/config" "$cfg/mako/config"

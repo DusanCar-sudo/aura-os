@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Right-click menu
+GenericName=Desktop menu
+Comment=Choose the apps your desktop right-click opens
+Exec=aura-rclick edit
+Icon=preferences-desktop
+Terminal=false
+Categories=Settings;DesktopSettings;
+Keywords=right click;context menu;launcher;pin;shortcut;
+StartupNotify=false

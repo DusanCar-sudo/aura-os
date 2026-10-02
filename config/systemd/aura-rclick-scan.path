@@ -1,0 +1,11 @@
+[Unit]
+Description=Watch for newly installed apps (asks to add them to the right-click menu)
+
+[Path]
+PathChanged=/usr/share/applications
+PathChanged=%h/.local/share/applications
+PathChanged=/var/lib/flatpak/exports/share/applications
+PathChanged=%h/.local/share/flatpak/exports/share/applications
+
+[Install]
+WantedBy=default.target

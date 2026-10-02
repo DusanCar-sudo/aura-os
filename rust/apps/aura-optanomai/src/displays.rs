@@ -623,6 +623,86 @@ pub fn apply(displays: &[Display]) -> Report {
     report
 }
 
+/// Where sway reads the layout back at login. Shared with `aura-os-display`.
+fn saved_layout_path() -> Option<std::path::PathBuf> {
+    let base = env::var_os("XDG_CONFIG_HOME")
+        .filter(|v| !v.is_empty())
+        .map(std::path::PathBuf::from)
+        .or_else(|| env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".config")))?;
+    Some(base.join("sway/config.d/70-displays.conf"))
+}
+
+/// Write what sway is doing right now to `70-displays.conf`, so the next login
+/// comes up the same. Lines are keyed by the monitor (make, model, serial),
+/// not the port, so a screen gets its place back whichever socket it's in.
+/// Monitors that aren't plugged in right now keep their saved line.
+pub fn save() -> Result<String, String> {
+    fix_socket();
+    let path = saved_layout_path().ok_or("no home folder to save in")?;
+    let out = Command::new("swaymsg")
+        .args(["-t", "get_outputs", "-r"])
+        .output()
+        .map_err(|e| format!("couldn't run swaymsg: {e}"))?;
+    let outs: Vec<serde_json::Value> =
+        serde_json::from_slice(&out.stdout).map_err(|e| format!("couldn't read sway's reply: {e}"))?;
+
+    let mut here = Vec::new();
+    let mut lines = Vec::new();
+    for o in &outs {
+        let s = |k: &str| o[k].as_str().unwrap_or("").to_string();
+        let id = format!("{} {} {}", s("make"), s("model"), s("serial"));
+        if s("name").is_empty() || s("name") == "__i3" {
+            continue;
+        }
+        let what = if o["active"].as_bool().unwrap_or(false) {
+            let m = &o["current_mode"];
+            let hz = m["refresh"].as_i64().unwrap_or(0);
+            let hz = if hz > 0 {
+                let t = format!("{}.{:03}", hz / 1000, hz % 1000);
+                format!("@{}Hz", t.trim_end_matches('0').trim_end_matches('.'))
+            } else {
+                String::new()
+            };
+            format!(
+                "enable mode {}x{}{hz} position {} {} scale {} transform {}",
+                m["width"].as_i64().unwrap_or(0),
+                m["height"].as_i64().unwrap_or(0),
+                o["rect"]["x"].as_i64().unwrap_or(0),
+                o["rect"]["y"].as_i64().unwrap_or(0),
+                trim_scale(o["scale"].as_f64().unwrap_or(1.0) as f32),
+                o["transform"].as_str().unwrap_or("normal"),
+            )
+        } else {
+            "disable".to_string()
+        };
+        lines.push(format!("output \"{id}\" {what}"));
+        here.push(format!("output \"{id}\" "));
+    }
+    if lines.is_empty() {
+        return Err("sway reported no screens".into());
+    }
+
+    let kept: Vec<String> = fs::read_to_string(&path)
+        .unwrap_or_default()
+        .lines()
+        .filter(|l| l.starts_with("output \"") && !here.iter().any(|h| l.starts_with(h.as_str())))
+        .map(str::to_string)
+        .collect();
+
+    let mut text = String::from("# aura-optanomai — the screen layout sway sets up at login; keyed by monitor\n");
+    for l in lines.iter().chain(kept.iter()) {
+        text.push_str(l);
+        text.push('\n');
+    }
+    if let Some(dir) = path.parent() {
+        fs::create_dir_all(dir).map_err(|e| format!("couldn't make {}: {e}", dir.display()))?;
+    }
+    let tmp = path.with_extension("conf.tmp");
+    fs::write(&tmp, text).map_err(|e| format!("couldn't write {}: {e}", tmp.display()))?;
+    fs::rename(&tmp, &path).map_err(|e| format!("couldn't save {}: {e}", path.display()))?;
+    Ok(path.display().to_string())
+}
+
 fn trim_scale(s: f32) -> String {
     let t = format!("{s:.2}");
     let t = t.trim_end_matches('0').trim_end_matches('.');

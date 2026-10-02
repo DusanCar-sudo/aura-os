@@ -387,8 +387,11 @@ impl AuraOptanomai {
         if apply {
             let report = displays::apply(&self.displays);
             if report.ok() {
-                let n = report.commands.len();
-                self.say(now, format!("applied {n} command(s)"), true);
+                // without this the layout only lasts until the next login
+                match displays::save() {
+                    Ok(_) => self.say(now, "applied and saved — it comes back after login".into(), true),
+                    Err(e) => self.say(now, format!("applied, but not saved: {e}"), false),
+                }
             } else {
                 self.say(
                     now,

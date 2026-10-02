@@ -7,8 +7,10 @@
 # hidden. Shown, it's floating + sticky, full height under the top bar,
 # pinned to the right edge of the focused screen. First use starts it.
 set -uo pipefail
+# waybar and sway start us with a PATH that has no ~/.local/bin, where
+# aura-tree lives — without this the click silently did nothing
+PATH="$HOME/.local/bin:$PATH"
 W=${AURA_TREE_WIDTH:-340}
-BAR=26
 sel='[app_id="aura-tree"]'
 
 # "hidden" | "shown" | "none"
@@ -23,12 +25,14 @@ def walk(n, ws=None):
 walk(json.load(sys.stdin)); print("none")'
 }
 
+# the focused workspace's rect is the screen minus the bars, whatever
+# their size (the top bar's height and the sidebar's width both change)
 place() {
-    read -r x y w h < <(swaymsg -t get_outputs | python3 -c '
+    read -r x y w h < <(swaymsg -t get_workspaces | python3 -c '
 import json, sys
-o = next(o for o in json.load(sys.stdin) if o.get("focused"))
-r = o["rect"]; print(r["x"], r["y"], r["width"], r["height"])')
-    swaymsg "$sel floating enable, sticky enable, border pixel 1, resize set $W $((h - BAR)), move absolute position $((x + w - W)) $((y + BAR))" >/dev/null
+r = next(w for w in json.load(sys.stdin) if w.get("focused"))["rect"]
+print(r["x"], r["y"], r["width"], r["height"])')
+    swaymsg "$sel floating enable, sticky enable, border pixel 1, resize set $W $h, move absolute position $((x + w - W)) $y" >/dev/null
 }
 
 show() {

@@ -52,6 +52,16 @@ put "$REPO/config/systemd/aura-rclick-scan.path" "$cfg/systemd/user/aura-rclick-
 put "$REPO/config/systemd/aura-rclick-scan.service" "$cfg/systemd/user/aura-rclick-scan.service"
 ln -sfn ../aura-rclick-scan.path "$cfg/systemd/user/default.target.wants/aura-rclick-scan.path"
 chown -h "$user:$user" "$cfg/systemd/user/default.target.wants/aura-rclick-scan.path"
+# sidebar resize (aura-sidebar-grip): the left bar takes its width from
+# ~/.config/aura/sidebar.json; a fresh user starts at 270, a dragged width
+# survives reinstalls
+put "$REPO/config/sway/config.d/86-sidebar-grip.conf" "$cfg/sway/config.d/86-sidebar-grip.conf"
+install -d -o "$user" -g "$user" "$cfg/aura"
+if [[ ! -f $cfg/aura/sidebar.json ]]; then
+    printf '{ "width": 270 }\n' > "$cfg/aura/sidebar.json"
+    chown "$user:$user" "$cfg/aura/sidebar.json"
+    echo "03-sway: wrote $cfg/aura/sidebar.json"
+fi
 put "$REPO/config/waybar/config.jsonc" "$cfg/waybar/config.jsonc"
 put "$REPO/config/waybar/style.css" "$cfg/waybar/style.css"
 put "$REPO/config/mako/config" "$cfg/mako/config"

@@ -447,7 +447,9 @@
     "name": "left",
     "layer": "top",
     "position": "left",
-    "width": 270,
+    // The width lives in its own file, written by aura-sidebar-grip when you
+    // drag the sidebar's edge; a reinstall of this config keeps it.
+    "include": ["~/.config/aura/sidebar.json"],
     "spacing": 0,
     "on-sigusr1": "toggle",
     "modules-left": ["custom/spaces", "custom/sysgraph", "custom/procs", "custom/minimized"],

@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# aura-os-first-chat — the takeover moment. Runs once at the first desktop
+# login (sway autostart 84-aura-first-chat.conf): opens Aura in a terminal,
+# introduces her, and hands the machine over. From here the user just talks:
+# "install gimp", "make my battery last", "remove the games" — Aura does it
+# through her tools. Re-runnable with --again.
+set -euo pipefail
+marker="${XDG_CONFIG_HOME:-$HOME/.config}/aura-os/first-chat-done"
+
+if [[ ${1:-} != --again && -e $marker ]]; then
+    exit 0   # already met — this is a once-only welcome
+fi
+
+mkdir -p "$(dirname "$marker")"; touch "$marker"
+exec aura-term --app-id=aura-first-chat \
+    env AURA_FIRST_CHAT=1 aura "Say hello and introduce yourself as Aura, the core of Aura adOS.
+Ask what the user wants to do first — install programs, change how the
+system looks, tune speed or battery — and take it from there. You run
+this machine; the user only has to ask."

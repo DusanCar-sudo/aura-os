@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# aura-os-brain — the 3-question Aura wizard: endpoint, model, API key.
+# This is the only thing a new user must type into Aura adOS. The answer is
+# stored in /etc/aura/model.env (0600); firstboot and aura-code read it, and
+# from the first login Aura runs the whole machine. Works on the console
+# (firstboot) and in a terminal (re-run any time to change the brain).
+# Idempotent: current values are offered as defaults; Enter keeps them.
+set -uo pipefail
+
+A=$'\e[95m'; D=$'\e[90m'; F=$'\e[97m'; OK=$'\e[92m'; BAD=$'\e[91m'; R=$'\e[0m'; B=$'\e[1m'
+envfile=/etc/aura/model.env
+
+# current values, so Enter keeps them
+cur_url=''; cur_model=''; cur_key=''
+if [[ -r $envfile ]]; then
+    # shellcheck disable=SC1090
+    source "$envfile"
+    cur_url=${AURA_BASE_URL:-}; cur_model=${AURA_MODEL:-}; cur_key=${AURA_API_KEY:-}
+fi
+
+printf '\n  %sAURA%s %s— bring your own brain%s\n' "$B$F" "$R" "$D$R"
+printf '  %sThree answers, and Aura runs the whole machine.%s\n\n' "$D" "$R"
+
+# ── 1. endpoint ────────────────────────────────────────────────────────────
+printf '  %s1. API endpoint URL%s %s[Enter = OpenRouter]%s\n' "$B$F" "$R" "$D"
+while true; do
+    read -r -e -p '     > ' -i "${cur_url:-https://openrouter.ai/api/v1}" url
+    url=${url%/}
+    [[ $url =~ ^https?:// ]] && break
+    printf '  %s!%s needs to start with http:// or https://\n' "$BAD" "$R"
+done
+
+# ── 2. model ───────────────────────────────────────────────────────────────
+printf '\n  %s2. Model id%s %s(anthropic/claude-sonnet-4.5, deepseek/deepseek-chat, a local LM Studio name…)%s\n' "$B$F" "$R" "$D"
+read -r -e -p '     > ' -i "${cur_model:-anthropic/claude-sonnet-4.5}" model
+
+# ── 3. API key ─────────────────────────────────────────────────────────────
+printf '\n  %s3. API key%s %s(hidden; yours, stored only on this machine)%s\n' "$B$F" "$R" "$D"
+if [[ -n $cur_key ]]; then printf '     %s(one is saved — Enter keeps it)%s\n' "$D" "$R"; fi
+read -r -s -p '     > ' key; printf '\n'
+[[ -z $key ]] && key=$cur_key
+
+# ── does the endpoint answer? ──────────────────────────────────────────────
+printf '\n  %s>%s talking to the endpoint… ' "$A" "$R"
+code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 \
+    "$url/models" -H "Authorization: Bearer $key" 2>/dev/null)
+case $code in
+    200)     printf '%s+ answers%s\n' "$OK" "$R" ;;
+    401|403) printf '%s! key rejected (HTTP %s) — saved anyway; re-run aura-os-brain to fix%s\n' "$BAD" "$code" "$R" ;;
+    000)     printf '%s! no answer — saved anyway; check network or URL later%s\n' "$BAD" "$R" ;;
+    *)       printf '%s! HTTP %s — saved anyway%s\n' "$BAD" "$code" "$R" ;;
+esac
+
+install -d -m 700 /etc/aura
+umask 077
+cat > "$envfile" <<EOF
+# aura-os-brain $(date +%F) — read by firstboot, aura-code and aura-term.
+AURA_BASE_URL=$url
+AURA_MODEL=$model
+AURA_API_KEY=$key
+EOF
+chmod 600 "$envfile"
+
+printf '\n  %s+ Saved.%s %sAura knows her brain now — she takes it from here.%s\n' "$B$OK" "$R" "$D" "$R"

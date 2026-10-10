@@ -26,6 +26,15 @@ for _ in $(seq 90); do getent hosts geo.mirror.pkgbuild.com >/dev/null && break;
 getent hosts geo.mirror.pkgbuild.com >/dev/null && printf '\r\e[2K  %s+%s network\n' "$OK" "$R" \
     || printf '\r\e[2K  %sx%s no network — steps that download will fail\n' "$BAD" "$R"
 
+# Aura asks for her brain before anything else: endpoint, model, API key.
+# With it, 09-aura-core pre-configures aura-code and Aura takes over at the
+# first login. Skipped when /etc/aura/model.env already exists (re-runs,
+# restores) or on the non-interactive path.
+if [[ -r /dev/tty && ! -r /etc/aura/model.env ]] && command -v aura-os-brain >/dev/null; then
+    printf '  %s>%s Aura needs three answers to run the machine\n' "$A" "$R"
+    aura-os-brain </dev/tty || printf '  %s!%s skipped — Aura will ask on first chat\n' "$BAD" "$R"
+fi
+
 declare -A what=(
     [01-packages]="desktop packages (sway, bar, sound, fonts)"
     [02-snapper]="snapshots, so every change can be undone"
@@ -35,6 +44,7 @@ declare -A what=(
     [06-aura-code]="Aura, your agent (aura-code)"
     [07-computer-use]="screen + input for agents"
     [08-boot]="boot menu name and splash"
+    [09-aura-core]="Aura as the core: brain wired in, first-chat takeover"
 )
 failed=0
 # AURA_FIRSTBOOT_STEPS (e.g. "02 05") limits the run to the steps an

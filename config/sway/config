@@ -8,7 +8,7 @@
 
 set $mod Mod4
 set $term aura-term
-set $menu $HOME/.local/bin/aura-os-apps usage
+set $menu $HOME/.local/bin/aura-os-apps
 
 # Super+left-drag moves any window: drop a tiled one on another
 # pane's edge to re-tile it there. Super+right-drag resizes.

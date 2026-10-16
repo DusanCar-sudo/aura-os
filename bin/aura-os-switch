@@ -38,8 +38,8 @@ cmd_log() {
 all_windows() {
     swaymsg -t get_tree | jq -r '
         .nodes[].nodes[]
-        | select(.type == "workspace" and (.num // 0) > 0)
-        | .num as $ws
+        | select(.type == "workspace" and .name != "__i3_scratch")
+        | .name as $ws
         | [.. | objects | select(
               (.type == "con" or .type == "floating_con")
               and (.pid // 0) > 0
@@ -134,7 +134,7 @@ cmd_switch() {
     [[ -n ${con_id:-} ]] || exit 1
 
     # Focus: switch workspace first, then focus the container.
-    swaymsg "workspace number $ws" >/dev/null 2>&1 || true
+    swaymsg "workspace \"$ws\"" >/dev/null 2>&1 || true
     swaymsg "[con_id=$con_id]" focus >/dev/null 2>&1 || true
 
     # Update MRU so this window tops the list next time.
@@ -158,15 +158,70 @@ cmd_last() {
 
     [[ -n ${con_id:-} ]] || exit 0
 
-    swaymsg "workspace number $ws" >/dev/null 2>&1 || true
+    swaymsg "workspace \"$ws\"" >/dev/null 2>&1 || true
     swaymsg "[con_id=$con_id]" focus >/dev/null 2>&1 || true
     cmd_log "$con_id"
+}
+
+# ── cycle: hold Alt, tap Tab — each tap focuses the next window ──
+# The real window is the preview; a notification strip shows the list.
+# Releasing Alt confirms, Escape cancels back to the start window.
+
+state="${XDG_RUNTIME_DIR:-/tmp}/aura-os-switch.state"
+
+show_strip() {
+    local idx="$1" nid="$2" body="" i=0 app title
+    while IFS=$'\t' read -r _ _ app title; do
+        (( ${#title} > 40 )) && title="${title:0:37}…"
+        if (( i == idx )); then body+="<b>▶ $app — $title</b>"$'\n'
+        else body+="   $app — $title"$'\n'; fi
+        i=$((i + 1))
+    done < "$state.list"
+    body="${body//&/&amp;}"; body="${body//<b>/\x01}"; body="${body//<\/b>/\x02}"
+    body="${body//</&lt;}"; body="${body//\x01/<b>}"; body="${body//\x02/</b>}"
+    notify-send -p -t 0 -a aura-os-switch ${nid:+-r "$nid"} "Switch" "${body%$'\n'}" 2>/dev/null || true
+}
+
+cmd_cycle() {
+    local dir="${1:-1}" idx n nid="" line
+    if [[ ! -f $state ]]; then
+        local wins focused_id
+        wins="$(all_windows)"; [[ -n ${wins:-} ]] || exit 0
+        focused_id="$(focused_con_id)"
+        sort_mru "$wins" "$focused_id" > "$state.list"
+        printf '%s\n' "${focused_id:-}" > "$state.orig"
+        idx=-1
+    else
+        read -r idx nid < "$state"
+    fi
+    n=$(wc -l < "$state.list"); (( n > 0 )) || exit 0
+    idx=$(( ((idx + dir) % n + n) % n ))
+    line="$(sed -n "$((idx + 1))p" "$state.list")"
+    swaymsg "[con_id=$(cut -f1 <<<"$line")]" focus >/dev/null 2>&1 || true
+    nid="$(show_strip "$idx" "$nid")"
+    printf '%s %s\n' "$idx" "$nid" > "$state"
+}
+
+cmd_end() {
+    [[ -f $state ]] || exit 0
+    local idx nid orig
+    read -r idx nid < "$state"
+    [[ -n ${nid:-} ]] && makoctl dismiss -n "$nid" 2>/dev/null || true
+    if [[ $1 == cancel ]]; then
+        orig="$(cat "$state.orig")"
+        [[ -n $orig ]] && swaymsg "[con_id=$orig]" focus >/dev/null 2>&1 || true
+    else
+        cmd_log "$(sed -n "$((idx + 1))p" "$state.list" | cut -f1)"
+    fi
+    rm -f "$state" "$state.list" "$state.orig"
 }
 
 usage() {
     cat >&2 <<'USAGE'
 usage: aura-os-switch [command]
   (no args)  fuzzel list of all windows → focus the picked one
+  cycle|back  step to next/previous window (Alt held)
+  confirm|cancel  end a cycle
   last       instant switch to the most-recent window (no UI)
   log <id>   (internal) log a focus event for MRU tracking
 USAGE
@@ -176,6 +231,10 @@ USAGE
 case "${1:-}" in
     "")     cmd_switch ;;
     last)   cmd_last ;;
+    cycle)  cmd_cycle 1 ;;
+    back)   cmd_cycle -1 ;;
+    confirm) cmd_end confirm ;;
+    cancel) cmd_end cancel ;;
     log)    cmd_log "${2:-}" ;;
     *)      usage ;;
 esac

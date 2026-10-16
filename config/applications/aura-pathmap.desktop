@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Path Converter
+GenericName=Linux / Windows path converter
+Comment=Paste a Linux or Windows path, get the same place on the other OS
+Exec=aura-term --app-id=aura-pathmap -e /home/dusan/.local/bin/pathmap
+Icon=folder-remote
+Terminal=false
+Categories=Utility;

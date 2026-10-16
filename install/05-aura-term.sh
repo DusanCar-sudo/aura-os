@@ -71,3 +71,17 @@ if ! cmp -s "$REPO/config/aura-term/aura-term.ini" "$cfg/aura-term.ini"; then
     install -m 644 -o "$user" -g "$user" "$REPO/config/aura-term/aura-term.ini" "$cfg/aura-term.ini"
     echo "05-aura-term: wrote $cfg/aura-term.ini (purplerain theme)"
 fi
+
+# Aura Term's own colour themes (aura-term-theme reads them from here), its
+# icon and its launcher entry. Outside the build block so a re-run updates
+# them without a rebuild.
+put() {   # put <src> <dest>: install 644, say so only when it changed
+    cmp -s "$1" "$2" && return 0
+    install -D -m 644 "$1" "$2"
+    echo "05-aura-term: installed $2"
+}
+for f in "$REPO"/config/aura-term/themes/*; do
+    put "$f" "/usr/local/share/aura-term/themes/${f##*/}"
+done
+put "$REPO/term/aura-term.svg" /usr/local/share/icons/hicolor/scalable/apps/aura-term.svg
+put "$REPO/term/aura-term.desktop" /usr/local/share/applications/aura-term.desktop

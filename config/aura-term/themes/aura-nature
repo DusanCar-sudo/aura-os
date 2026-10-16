@@ -1,0 +1,41 @@
+# -*- conf -*-
+# theme: Aura Nature
+# author: Aura
+# description: forest ground, cream text; the four stripes are the ANSI colours
+#
+# The Nature brand (forest #070907, cream #F2EBC9, gold #E7CF85) with the
+# stripes on their dark-ground tints as red, green, yellow and blue. Teal
+# and orange are the mix of the two stripes either side of them. Gold is the
+# accent, in the magenta slot. Every colour reads at 5.9:1 or better on
+# the ground.
+#
+# Same slots as aura-os-theme fills in theme.ini, so a system theme built
+# from these colours would look the same. Pick it with `aura-term-theme
+# set aura-nature`; `aura-term-theme off` goes back to the system theme.
+# The cursor stays the foreground colour: aura-term-theme applies colours
+# only, not the cursor line.
+
+[colors-dark]
+foreground = f2ebc9
+background = 070907
+
+selection-foreground = fbf7e4
+selection-background = 2a3120
+
+regular0 = 0c100c
+regular1 = f0584f
+regular2 = 3cc45e
+regular3 = f8b91e
+regular4 = 1aa6e0
+regular5 = e7cf85
+regular6 = 2bb59f
+regular7 = f2ebc9
+
+bright0 = 8b8e7a
+bright1 = f0584f
+bright2 = 3cc45e
+bright3 = f8b91e
+bright4 = 1aa6e0
+bright5 = f3e2a8
+bright6 = 2bb59f
+bright7 = fbf7e4

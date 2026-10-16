@@ -21,6 +21,8 @@ struct State {
     bluetooth: bool,
     flight: bool,
     sink: String,
+    /// "usage" or "alphabet": how the app menu (Super+D) orders its list.
+    app_sort: String,
     loaded: bool,
 }
 
@@ -56,7 +58,12 @@ fn read_state() -> State {
                 .map(|v| v.trim_matches('"').to_string())
         })
         .unwrap_or_default();
-    State { wifi, ssid, bluetooth, flight, sink, loaded: true }
+    let app_sort = probe(&[&format!("{}/.local/bin/aura-os-apps", home()), "sort"]);
+    State { wifi, ssid, bluetooth, flight, sink, app_sort, loaded: true }
+}
+
+fn app_sort_label(sort: &str) -> &'static str {
+    if sort == "alphabet" { "A to Z" } else { "most used first" }
 }
 
 /// Start a program detached from us, so closing the hub never closes it.
@@ -168,6 +175,24 @@ impl Hub {
     }
 }
 
+impl Hub {
+    /// Swap the app menu order now, then re-read the real state.
+    fn flip_app_sort(&self, ctx: &egui::Context) {
+        {
+            let mut s = self.state.lock().unwrap();
+            s.app_sort = if s.app_sort == "alphabet" { "usage" } else { "alphabet" }.into();
+        }
+        let (s, ctx) = (self.state.clone(), ctx.clone());
+        std::thread::spawn(move || {
+            let _ = Command::new(format!("{}/.local/bin/aura-os-apps", home()))
+                .args(["sort", "toggle"]).stdin(Stdio::null())
+                .stdout(Stdio::null()).stderr(Stdio::null()).status();
+            *s.lock().unwrap() = read_state();
+            ctx.request_repaint();
+        });
+    }
+}
+
 impl eframe::App for Hub {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // follow a theme switch while open
@@ -227,6 +252,11 @@ impl eframe::App for Hub {
                     for (section, rows) in items() {
                         widgets::hairline(ui);
                         widgets::caption(ui, section);
+                        if section == "apps"
+                            && widgets::row(ui, "≡", "App menu order", app_sort_label(&st.app_sort)).clicked()
+                        {
+                            self.flip_app_sort(ctx);
+                        }
                         for it in rows {
                             if widgets::row(ui, it.icon, it.label, "").clicked() {
                                 spawn(&it.cmd);

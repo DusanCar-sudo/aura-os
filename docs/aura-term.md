@@ -1,6 +1,6 @@
 # aura-term
 
-Aura OS's terminal (task 005): a fork of [foot](https://codeberg.org/dnkl/foot)
+Aura adOS's terminal (task 005): a fork of [foot](https://codeberg.org/dnkl/foot)
 1.28.0 in `term/`, running in server mode — one `aura-termd` process for
 all windows, `aura-term` is the ~2 MB per-window client. Everything foot
 does (VT, fonts, IME, Unicode, sixel, URL mode, search) works unchanged;
@@ -69,6 +69,32 @@ It emits OSC 133 (A/B/C/D;exit) and OSC 7; other terminals ignore them.
 | `$XDG_RUNTIME_DIR/aura-os/panes/<pid>.json` | pane status (read by the sidebar) |
 | `$XDG_RUNTIME_DIR/aura-os/ask/` | Ask Aura requests (0600, deleted after use), sidecar log |
 
+## Look
+
+The colours come from the system theme (`aura-os-theme apply <name>` writes
+`~/.config/aura-term/theme.ini`), so the terminal follows the desktop.
+Terminal-only palettes live in `config/aura-term/themes/`, in foot's theme
+format, and `aura-term-theme` picks one without touching the desktop:
+
+    aura-term-theme list
+    aura-term-theme set aura-nature     # forest ground, cream text, gold accent
+    aura-term-theme off                 # back to the system theme
+
+`aura-nature` is the Nature brand: the four stripes are the ANSI red, green,
+yellow and blue (on their dark-ground tints), gold is the accent in the
+magenta slot, and every colour reads at 5.9:1 or better on the ground. Slot 0
+(black) is the raised ground, as in the system themes, so text printed in
+colour 0 is close to invisible on the ground. It is a terminal theme, not a
+system theme, so the theme count on the site stays as it is. The cursor stays
+the foreground colour: the tool sets colours only.
+
+The app icon is `term/aura-term.svg` (the mark's "a" and stripes over a prompt
+on the forest ground), installed by meson as `hicolor/scalable/apps/aura-term.svg`
+and referenced by `aura-term.desktop`. Aura's own icon theme still maps
+`aura-term` to its monochrome terminal glyph, so the launcher stays one style;
+the coloured icon is what any other icon theme falls back to. The startup
+banner is `aura-os-logo banner` (set `AURA_TERM_BANNER=0` to turn it off).
+
 ## Install (Aura OS, inside the system — never on the host)
 
 Per AURA.md these belong in an `install/` step / `aura-os-*` command
@@ -81,6 +107,9 @@ Per AURA.md these belong in an `install/` step / `aura-os-*` command
     # release build, the same recipe as Arch's foot (PGO + LTO, makepkg flags)
     tools/aura-term-build.sh pgo term term/build-pgo
     sudo ninja -C term/build-pgo install          # everything under /usr/local
+
+    # colour themes, icon and launcher entry (install/05-aura-term.sh does this too)
+    sudo install -Dm644 -t /usr/local/share/aura-term/themes config/aura-term/themes/*
 
     # shell integration
     sudo install -Dm644 -t /usr/local/share/aura-term/shell config/shell/aura-term.bash config/shell/aura-term.zsh

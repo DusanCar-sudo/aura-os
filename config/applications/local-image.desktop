@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Local Image Generator
+Comment=Generate images locally with SDXS-512
+Exec=/home/dusan/.local/bin/local-image
+Icon=image-x-generic
+Terminal=false
+Categories=Graphics;
+Keywords=AI;Imagen;Stable Diffusion;

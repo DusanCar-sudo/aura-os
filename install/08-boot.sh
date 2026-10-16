@@ -21,8 +21,8 @@ if ! cmp -s "$REPO/config/boot/os-release" "$osrel"; then
     echo "08-boot: installed $osrel"
 fi
 
-# Boot splash (the retro adOS lockup, rendered by brand/make_splash.py in
-# aura-retro-design): the UKI shows it while the kernel loads. systemd-stub
+# Boot splash (the gold AURA adOS wordmark, tools/make-splash.py h-gold):
+# the UKI shows it while the kernel loads. systemd-stub
 # centres it unscaled on black, so it is 1280x720 with pure-black edges and
 # fits any screen from 720p up. UEFI wants a 24-bit BMP; the repo keeps the
 # small PNG and converts it here.

@@ -1,0 +1,55 @@
+# Aura OS — the boot menu.
+#
+# Rendered by GRUB over background.png (tools/make-splash.py, variant j-grub-boot),
+# which leaves the left third dark and empty for exactly this box. Installed by
+# install/10-grub-theme.sh, which also makes the .pf2 fonts this file names:
+#   grub-mkfont -s 28 -n "Aura 28" -o fonts/aura-28.pf2 fonts/Geist-SemiBold.ttf
+#   grub-mkfont -s 17 -n "Aura 17" -o fonts/aura-17.pf2 fonts/Geist-Regular.ttf
+#
+# There is no title here on purpose: the lockup is drawn into the art, so the
+# type survives whatever GRUB does to its own strings.
+
+title-text: ""
+desktop-image: "background.png"
+desktop-color: "#070907"
+
++ boot_menu {
+	left = 5%
+	top = 30%
+	width = 42%
+	height = 44%
+	item_font = "Aura 28"
+	item_color = "#c9c3a6"
+	selected_item_color = "#fff7d6"
+	item_height = 48
+	item_padding = 8
+	item_spacing = 8
+	selected_item_pixmap_style = "select_*.png"
+	icon_width = 30
+	icon_height = 30
+	scrollbar = false
+}
+
++ progress_bar {
+	id = "__timeout__"
+	left = 76%
+	top = 8%
+	width = 19%
+	height = 10
+	bg_color = "#1b1d12"
+	fg_color = "#e7cf85"
+	border_color = "#3c3e28"
+	text = ""
+	font = "Aura 17"
+	text_color = "#8b8e7a"
+}
+
++ label {
+	left = 5%
+	top = 86%
+	width = 42%
+	align = left
+	color = "#6f7a55"
+	font = "Aura 17"
+	text = "Up/Down to choose, Enter to boot"
+}

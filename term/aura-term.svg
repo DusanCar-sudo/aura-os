@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>Aura Term</title>
+  <!-- The master mark's "a" and four stripes (assets/brand/aura-os-mark.svg, same geometry) on the Nature
+       forest ground, with a prompt under it: a cream chevron and a gold cursor, the one accent. Stripes on
+       their dark-ground tints, in order, leaning right; flat, never themed. -->
+  <rect x="8" y="8" width="496" height="496" rx="112" fill="#070907"/>
+  <rect x="8" y="8" width="496" height="496" rx="112" fill="none" stroke="#1a211a" stroke-width="4"/>
+  <g transform="translate(-523.2 45.5) scale(1.45)">
+    <path fill="#f2ebc9" d="M501.402 110A50 50 0 1 0 401.402 110A50 50 0 1 0 501.402 110ZM471.402 110A20 20 0 1 1 431.402 110A20 20 0 1 1 471.402 110ZM471.402 160H501.402V60H471.402Z"/>
+    <path fill="#f0584f" d="M527.402 160L551.402 160L601.402 60L577.402 60Z"/>
+    <path fill="#f8b91e" d="M551.402 160L575.402 160L625.402 60L601.402 60Z"/>
+    <path fill="#3cc45e" d="M575.402 160L599.402 160L649.402 60L625.402 60Z"/>
+    <path fill="#1aa6e0" d="M599.402 160L623.402 160L673.402 60L649.402 60Z"/>
+  </g>
+  <path d="M178 328L226 362L178 396" fill="none" stroke="#f2ebc9" stroke-width="22" stroke-linecap="square" stroke-linejoin="miter"/>
+  <rect x="254" y="386" width="86" height="22" fill="#e7cf85"/>
+</svg>

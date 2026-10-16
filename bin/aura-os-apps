@@ -1,10 +1,73 @@
 #!/usr/bin/env bash
-# Application launcher: Fuzzel's launch-count cache or alphabetical desktop list.
-# One short-lived process, no indexer or background service.
+# aura-os-apps — the application menu (Super+D). Fuzzel, one short-lived
+# process, no indexer or background service.
+#
+#   aura-os-apps                    open in the saved order
+#   aura-os-apps usage|alphabet     open in that order, once
+#   aura-os-apps other              open in the order the setting is not
+#                                   (Super+Shift+D)
+#   aura-os-apps sort               print the saved order
+#   aura-os-apps sort usage|alphabet|toggle|pick    change it
+#
+# The saved order is one word in ~/.config/aura-os/app-sort. Missing or
+# unreadable means "usage".
+#   usage     most launched first — Fuzzel's launch-count cache
+#             (~/.cache/fuzzel), which keeps counting in either order
+#   alphabet  A to Z
+# Typing to search is fuzzy in both.
 set -euo pipefail
 
-case ${1:-usage} in
-    usage)    exec fuzzel --launch-prefix='aura-os-recent launch' ;;
-    alphabet) exec fuzzel --no-sort --launch-prefix='aura-os-recent launch' ;;
-    *) echo 'usage: aura-os-apps [usage|alphabet]' >&2; exit 2 ;;
+conf="${XDG_CONFIG_HOME:-$HOME/.config}/aura-os/app-sort"
+
+saved() {
+    local v=usage
+    [[ -r $conf ]] && read -r v <"$conf" || true
+    [[ $v == alphabet ]] && echo alphabet || echo usage
+}
+
+other() { [[ $(saved) == usage ]] && echo alphabet || echo usage; }
+
+label() { [[ $1 == alphabet ]] && echo 'A to Z' || echo 'most used first'; }
+
+save() {
+    mkdir -p "$(dirname "$conf")"
+    printf '%s\n' "$1" >"$conf"
+}
+
+# --layer overlay: sway draws tiled and fullscreen windows above the default
+# 'top' layer, so a menu there can open, take the keys and sit unseen under
+# the window (bin/aura-os-menu found this first).
+open_menu() {
+    local args=(--layer=overlay --launch-prefix='aura-os-recent launch')
+    [[ $1 == alphabet ]] && args+=(--no-sort)
+    exec fuzzel "${args[@]}"
+}
+
+pick_order() {
+    local cur choice
+    cur="$(saved)"
+    choice="$(printf '%s\n' 'most used first' 'A to Z' \
+        | fuzzel --dmenu --layer=overlay --prompt "app menu order ($(label "$cur")) > " \
+                 --lines 2 --width 44)" || exit 0
+    case $choice in
+        'most used first') save usage ;;
+        'A to Z')          save alphabet ;;
+        *) exit 0 ;;
+    esac
+    echo "app menu order: $(label "$(saved)")"
+}
+
+case ${1:-} in
+    '')             open_menu "$(saved)" ;;
+    usage|alphabet) open_menu "$1" ;;
+    other)          open_menu "$(other)" ;;
+    sort)
+        case ${2:-show} in
+            show)           saved ;;
+            usage|alphabet) save "$2"; echo "app menu order: $(label "$2")" ;;
+            toggle)         save "$(other)"; echo "app menu order: $(label "$(saved)")" ;;
+            pick)           pick_order ;;
+            *) echo 'usage: aura-os-apps sort [usage|alphabet|toggle|pick]' >&2; exit 2 ;;
+        esac ;;
+    *) echo 'usage: aura-os-apps [usage|alphabet|other|sort ...]' >&2; exit 2 ;;
 esac

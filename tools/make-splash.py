@@ -3,6 +3,7 @@
 
     tools/make-splash.py VARIANT [--out FILE] [--size 1920x1200]
     tools/make-splash.py all --out-dir DIR      render every variant + a contact sheet
+    tools/make-splash.py grub-theme --out-dir D  the GRUB boot menu's art (install/10-grub-theme.sh)
 
 Static image: the UKI shows it while the kernel loads (install/08-boot.sh,
 mkinitcpio --splash), so it must be a 24-bit BMP. PNG is written too for
@@ -408,6 +409,242 @@ def v_signal(W, H, theme='aura'):
     return img.resize((W, H), Image.LANCZOS)
 
 
+def v_gold(W, H, title='AURA adOS', tag='AGENT DRIVEN OPERATING SYSTEM'):
+    """The website footer wordmark as the boot splash: one line of huge Geist 600
+    letters in the footer gold gradient, bleeding off the bottom edge; the four
+    adOS stripes above; a thin gold rule + tag low in the frame. 1280x720."""
+    S = min(W, H * 16 / 9) / 1280
+    u = lambda v: int(v * S)
+    img = Image.new('RGB', (W, H), hexc('#070907'))
+    cx = W // 2
+    base = int(H * 0.985)          # baseline below the frame -> letters are cut
+
+    # one text mask for the whole lockup, letters spaced like the site (-.07em)
+    ft = font('Geist', u(190))
+    try:
+        ft.set_variation_by_axes([600])
+    except Exception:
+        pass
+    tracking = -0.07 * ft.size
+    m = Image.new('L', (W, H), 0)
+    md = ImageDraw.Draw(m)
+    widths = [md.textlength(ch, font=ft) for ch in title]
+    total = sum(widths) + tracking * (len(title) - 1)
+    x = cx - total / 2
+    for ch, w in zip(title, widths):
+        md.text((x, base), ch, font=ft, anchor='ls', fill=255)
+        x += w + tracking
+
+    # the footer gradient poured through the mask
+    grad = Image.new('RGB', (W, H))
+    gd = ImageDraw.Draw(grad)
+    g = [hexc(c) for c in ('#fff7d6', '#d9cf9f', '#8d8a62')]
+    top, bot = base - u(150), base + u(6)
+    for y in range(H):
+        t = min(max((y - top) / (bot - top), 0), 1)
+        if t < .38: col = lerp(g[0], g[1], t / .38)
+        elif t < .72: col = lerp(g[1], g[2], (t - .38) / .34)
+        else: col = lerp(g[2], hexc('#3c3e28'), (t - .72) / .28)
+        gd.line([(0, y), (W, y)], fill=col)
+    img.paste(grad, (0, 0), m)
+
+    # faint warm halo behind the letters, like the site's late-light glow
+    halo = Image.new('L', (W, H), 0)
+    hx = cx - total / 2
+    hd = ImageDraw.Draw(halo)
+    for ch, w in zip(title, widths):
+        hd.text((hx, base), ch, font=ft, anchor='ls', fill=60)
+        hx += w + tracking
+    halo = halo.filter(ImageFilter.GaussianBlur(u(30)))
+    img = add(img, Image.merge('RGB', [halo.point(lambda v: v * 40 // 255)] * 3), 0)
+
+    # fresh draw target after add(); stripes + tag sit above and below the cut
+    d = ImageDraw.Draw(img)
+    sw, sh, gap, skew = u(26), u(66), u(10), u(16)
+    total_s = 4 * sw + 3 * gap
+    x0 = cx - total_s // 2 - skew // 2
+    y0 = u(64)
+    cols = ('#e4312b', '#f8b91e', '#2fae4e', '#1aa6e0')
+    for i, c in enumerate(cols):
+        xx = x0 + i * (sw + gap)
+        d.polygon([(xx + skew, y0), (xx + skew + sw, y0), (xx + sw, y0 + sh), (xx, y0 + sh)], fill=hexc(c))
+
+    tagft = font('ShareTech', u(24))
+    d.text((cx, y0 + sh + u(56)), tag, font=tagft, fill=hexc('#8b8e7a'), anchor='mm')
+    return img
+
+# ------------------------------------------------- the boot menu (GRUB theme)
+# GRUB is the only boot layer that can carry real art (systemd-boot draws text
+# only), so the menu is where Aura gets to look like Aura before anything has
+# started. Same palette as v_gold / the site footer, so menu -> splash is one
+# continuous frame. theme.txt draws the menu over the left third: that band is
+# deliberately left dark and empty here.
+FOREST, CREAM_N, GOLD, OLIVE, TAG_DIM = (hexc(c) for c in
+                                         ('#070907', '#f2ebc9', '#e7cf85', '#535c37', '#8b8e7a'))
+GOLD_GRAD = [hexc(c) for c in ('#fff7d6', '#d9cf9f', '#8d8a62', '#3c3e28')]
+STRIPES = [hexc(c) for c in ('#e4312b', '#f8b91e', '#2fae4e', '#1aa6e0')]
+SEL_FILL = hexc('#161a10')
+
+
+def peak(d, ox, oy, s, fill, cut, sw=1.6):
+    """assets/icons/aura-mark.svg at scale s (24-unit grid): the kite peak with the
+    two lines cut out of it."""
+    P = lambda x, y: (ox + x * s, oy + y * s)
+    d.polygon([P(12, 2), P(19, 9), P(12, 22), P(5, 9)], fill=fill)
+    w = max(1, int(round(sw * s)))
+    d.line([P(8.5, 10), P(15.5, 10)], fill=cut, width=w)
+    d.line([P(10, 14), P(14, 14)], fill=cut, width=w)
+
+
+def letter_mask(W, H, text, ft, tracking, base):
+    """one mask for a letterspaced line, so a gradient can be poured through it."""
+    m = Image.new('L', (W, H), 0)
+    md = ImageDraw.Draw(m)
+    widths = [md.textlength(ch, font=ft) for ch in text]
+    total = sum(widths) + tracking * (len(text) - 1)
+    x = W / 2 - total / 2
+    for ch, w in zip(text, widths):
+        md.text((x, base), ch, font=ft, anchor='ls', fill=255)
+        x += w + tracking
+    return m, total
+
+
+def pour(img, mask, stops, top, bot):
+    """the footer's gold gradient, poured through a text mask."""
+    W, H = img.size
+    grad = Image.new('RGB', (W, H))
+    gd = ImageDraw.Draw(grad)
+    n, span = len(stops) - 1, max(1, bot - top)
+    for y in range(H):
+        t = min(max((y - top) / span, 0), 1) * n
+        i = min(int(t), n - 1)
+        gd.line([(0, y), (W, y)], fill=lerp(stops[i], stops[i + 1], t - i))
+    out = img.copy()
+    out.paste(grad, (0, 0), mask)
+    return out
+
+
+def v_grub_boot(W, H):
+    """The GRUB boot menu, 1920x1080: Aura adOS lockup upper-left, a gold summit
+    with topographic contours under it, and the footer wordmark bleeding off the
+    bottom. Everything the menu covers (left third, 30-74%) stays sky-dark."""
+    img = Image.new('RGB', (W, H), FOREST)
+    d = ImageDraw.Draw(img)
+
+    # sky: lifts toward the summit, then falls away under it
+    for y in range(H):
+        t = y / H
+        c = (lerp(hexc('#040604'), hexc('#0e120a'), t / .42) if t < .42
+             else lerp(hexc('#0e120a'), hexc('#050704'), (t - .42) / .58))
+        d.line([(0, y), (W, y)], fill=c)
+
+    # the summit; every contour under it is the same curve pushed down by depth
+    sx, sy, drop = W * .70, H * .30, H * .30
+    crest = lambda x: sy + ((x - sx) / (W * .62)) ** 2 * drop
+    top = [min(H - 1, int(crest(x))) for x in range(W)]
+
+    # ground: the light falls away from the crest, so depth reads as slope
+    gm = Image.new('L', (W, H), 0)
+    gmd = ImageDraw.Draw(gm)
+    for x in range(W):
+        gmd.line([(x, top[x]), (x, H - 1)], fill=255)
+    ground = Image.new('RGB', (W, H))
+    gd2 = ImageDraw.Draw(ground)
+    for y in range(H):
+        gd2.line([(0, y), (W, y)], fill=lerp(hexc('#0c1109'), hexc('#040604'), (y / H) ** .7))
+    img.paste(ground, (0, 0), gm)
+
+    # contours, evenly spaced by depth (clustering them at the crest blows out)
+    for i in range(1, 18):
+        v, k = i / 18, .30 + .45 * (1 - i / 18)
+        col = tuple(int(c * k) for c in lerp(OLIVE, GOLD, .30))
+        for x in range(W):
+            y = int(crest(x) + v * (H - crest(x)))
+            if y < H:
+                d.point((x, y), fill=col)
+
+    ridge = Image.new('RGB', (W, H))
+    ImageDraw.Draw(ridge).line([(x, top[x]) for x in range(W)], fill=GOLD, width=3)
+    glow = Image.new('RGB', (W, H))
+    ImageDraw.Draw(glow).line([(x, top[x]) for x in range(W)],
+                              fill=tuple(int(c * .45) for c in GOLD), width=6)
+    img = add(img, glow.filter(ImageFilter.GaussianBlur(H * .06)), 0)
+    img = add(img, ridge, 0)
+
+    # settle the bottom back to forest so the wordmark reads over the contours
+    # (it has to be fully forest behind the letters, or the olive ground bleeds through)
+    vig = Image.new('L', (W, H), 0)
+    vd = ImageDraw.Draw(vig)
+    for y in range(int(H * .56), H):
+        t = min(1.0, max(0.0, (y - H * .56) / (H * .22)))
+        vd.line([(0, y), (W, y)], fill=int(255 * t ** .9))
+    img.paste(FOREST, (0, 0), vig)
+
+    # the wordmark: big, and cut by the bottom edge like the splash that follows it
+    ft = font('Geist', int(H * .34))
+    try:
+        ft.set_variation_by_axes([600])
+    except Exception:
+        pass
+    base = int(H * 1.06)
+    mask, _ = letter_mask(W, H, 'AURA', ft, -.07 * ft.size, base)
+    # the gradient has to START at the top of the letters, or the visible band
+    # lands in the middle of it and the wordmark comes out muddy, not cream
+    img = pour(img, mask, GOLD_GRAD, base - int(H * .27), base)
+
+    # lockup: the peak, the name, the line, the four stripes
+    d = ImageDraw.Draw(img)
+    ms = H * .085 / 24
+    peak(d, W * .045, H * .052, ms, GOLD, FOREST, sw=1.5)
+    name = font('Geist', int(H * .052))
+    try:
+        name.set_variation_by_axes([600])
+    except Exception:
+        pass
+    nx = W * .045 + 24 * ms + H * .022
+    wl = spaced(d, (nx, H * .082), 'AURA', name, CREAM_N, .02, anchor='lm')
+    spaced(d, (nx + wl + H * .014, H * .082), 'OS', name, GOLD, .02, anchor='lm')
+    spaced(d, (W * .045, H * .142), 'AGENT-DRIVEN OPERATING SYSTEM',
+           font('ShareTech', int(H * .019)), lerp(OLIVE, CREAM_N, .45), .30, anchor='lm')
+    sw, sh, gp, sk = int(H * .020), int(H * .028), int(H * .008), int(H * .012)
+    for i, c in enumerate(STRIPES):
+        x = W * .045 + i * (sw + gp)
+        d.polygon([(x + sk, H * .176), (x + sk + sw, H * .176),
+                   (x + sw, H * .176 + sh), (x, H * .176 + sh)], fill=c)
+    return img
+
+
+def grub_extras(out):
+    """the menu's icons and the row used for the selected entry."""
+    os.makedirs(os.path.join(out, 'icons'), exist_ok=True)
+
+    def icon(name, fn):
+        im = Image.new('RGBA', (64, 64), (0, 0, 0, 0))
+        fn(ImageDraw.Draw(im))
+        im.save(os.path.join(out, 'icons', name))
+
+    def mk(fill):
+        return lambda d: peak(d, 2, 8, .92, fill + (255,), FOREST + (255,), sw=1.5)
+
+    icon('aura.png', mk(GOLD))
+    icon('os.png', mk(tuple(int(c * .8) for c in OLIVE)))
+
+    def efi(d):
+        d.rectangle([18, 18, 46, 46], outline=CREAM_N + (255,), width=4)
+        for y in (24, 32, 40):
+            d.line([(10, y), (18, y)], fill=GOLD + (255,), width=3)
+            d.line([(46, y), (54, y)], fill=GOLD + (255,), width=3)
+    icon('efi.png', efi)
+
+    # 9-slice: flat row, square corners, the gold stripe on the left edge
+    for name, size, col in (('select_c', (4, 4), SEL_FILL), ('select_n', (4, 8), SEL_FILL),
+                            ('select_s', (4, 8), SEL_FILL), ('select_e', (8, 4), SEL_FILL),
+                            ('select_w', (8, 4), GOLD), ('select_nw', (8, 8), GOLD),
+                            ('select_sw', (8, 8), GOLD), ('select_ne', (8, 8), SEL_FILL),
+                            ('select_se', (8, 8), SEL_FILL)):
+        Image.new('RGB', size, col).save(os.path.join(out, name + '.png'))
+
+
 VARIANTS = {
     'g-signal':       lambda W, H: v_signal(W, H),
     'a-horizon':      lambda W, H: v_horizon(W, H),
@@ -418,6 +655,8 @@ VARIANTS = {
                                              side=('YOUR LAPTOP', 'YOUR AGENTS'), bar=True),
     'f-horizon-ados': lambda W, H: v_horizon(W, H, title='AURA  adOS  1', tag='AGENT DRIVEN OPERATING SYSTEM',
                                              boot=True, corner='Code · Run · Build · Freedom'),
+    'h-gold':         lambda W, H: v_gold(W, H),
+    'j-grub-boot':    lambda W, H: v_grub_boot(W, H),
 }
 
 
@@ -433,6 +672,15 @@ def main():
         return
     size = next((a[i + 1] for i, x in enumerate(a) if x == '--size'), '1920x1200')
     W, H = map(int, size.split('x'))
+    if a[0] == 'grub-theme':
+        # the GRUB theme's rendered half (theme.txt and the .pf2 fonts are checked in).
+        # Fonts: grub-mkfont -s N -n "Aura N" -o fonts/aura-N.pf2 fonts/Geist-*.ttf
+        out = next((a[i + 1] for i, x in enumerate(a) if x == '--out-dir'), 'grub-theme')
+        os.makedirs(out, exist_ok=True)
+        v_grub_boot(1920, 1080).save(os.path.join(out, 'background.png'))
+        grub_extras(out)
+        print('grub-theme:', out)
+        return
     if a[0] == 'all':
         out = next((a[i + 1] for i, x in enumerate(a) if x == '--out-dir'), 'splash-out')
         os.makedirs(out, exist_ok=True)

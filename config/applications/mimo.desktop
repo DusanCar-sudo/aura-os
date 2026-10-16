@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=MiMo Code
+GenericName=AI Coding Agent
+Comment=MiMo Code — AI coding agent by Xiaomi
+Exec=aura-term --app-id=mimocode -e /home/dusan/.local/bin/mimo
+Icon=utilities-terminal
+Terminal=false
+Categories=Development;
+StartupWMClass=mimocode

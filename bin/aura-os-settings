@@ -26,6 +26,7 @@ keys        every key binding              (read)
 snapshots   system snapshots, roll back    (snapper)
 updates     update all packages            (snapshot, then pacman -Syu)
 sidebar     recent list: recent or frequent
+apps        app menu order: most used first, or A to Z
 ram         what uses memory now           (aura-os-bench)
 llm         local model: is it up, how fast (test)
 power       reboot, shut down, log out
@@ -56,6 +57,7 @@ case $pick in
     updates)   hold "aura-os-snapshot 'before system update' && sudo pacman -Syu" ;;
     sidebar)   m="$(printf 'recent\nfrequent\n' | fuzzel --dmenu --prompt "list mode ($(aura-os-recent mode)) > " --lines 2)" || exit 0
                aura-os-recent mode "$m" >/dev/null ;;
+    apps)      exec aura-os-apps sort pick ;;
     ram)       hold "aura-os-bench" ;;
     llm)       hold "aura-os-llmtest" ;;
     power)     exec aura-os-power ;;

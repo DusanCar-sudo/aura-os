@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Memory Keeper
+Comment=Status of the shared agent memory: 5 workers, 3 auditors, proposals waiting for you
+Exec=/home/dusan/.local/bin/aura-term --app-id=mnemai-keeper -e /home/dusan/.local/bin/mnemai --store /mnt/agentmem/shared keeper board
+Icon=drive-harddisk
+Terminal=false
+Categories=Utility;System;

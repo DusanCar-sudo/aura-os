@@ -378,6 +378,13 @@ install_data(
   'aura-term.desktop',
   install_dir: join_paths(get_option('datadir'), 'applications'))
 
+# Aura: the app icon under its own name (foot's icons are not installed, see
+# utils/). Icon themes that map the name, like aura-os-theme's Aura theme,
+# still win over this one.
+install_data(
+  'aura-term.svg',
+  install_dir: join_paths(get_option('datadir'), 'icons', 'hicolor', 'scalable', 'apps'))
+
 systemd = dependency('systemd', required: false)
 custom_systemd_units_dir = get_option('systemd-units-dir')
 

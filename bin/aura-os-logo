@@ -194,8 +194,8 @@ banner() {
     local R=$'\e[0m' T=$'\e[1;39m' G M
     G="$(ansi "$accent")"; M="$(ansi "$muted")"
     local -a info=(
-        "${T}aura ${G}OS$R"
-        "${M}system: Aura OS · Arch · sway$R"
+        "${T}aura ad${G}OS$R"
+        "${M}system: Aura adOS · Arch · sway$R"
         "${M}user: ${USER:-$LOGNAME}  ·  aura code: ready$R"
         "${M}:a install <part>  or ask Aura what you need$R"
         "${M}built by Dusan Milosavljevic · LeanPro IQ · Novi Sad / Da Nang$R"

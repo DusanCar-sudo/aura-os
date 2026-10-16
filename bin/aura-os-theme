@@ -151,15 +151,21 @@ EOF
         dir="${XDG_DATA_HOME:-$HOME/.local/share}/color-schemes"
         mkdir -p "$dir"
         rgb() { local h="${1#\#}"; echo "$((16#${h:0:2})),$((16#${h:2:2})),$((16#${h:4:2}))"; }
+        blend_rgb() {
+            local h1="${1#\#}" h2="${2#\#}"
+            local r1=$((16#${h1:0:2})) g1=$((16#${h1:2:2})) b1=$((16#${h1:4:2}))
+            local r2=$((16#${h2:0:2})) g2=$((16#${h2:2:2})) b2=$((16#${h2:4:2}))
+            echo "$(( (r1 * 80 + r2 * 20) / 100 )),$(( (g1 * 80 + g2 * 20) / 100 )),$(( (b1 * 80 + b2 * 20) / 100 ))"
+        }
         awk -v bg="$(rgb "$c_bg")" -v bgalt="$(rgb "$c_bg_alt")" \
             -v fg="$(rgb "$c_fg")" -v fgb="$(rgb "$c_fg_bright")" \
-            -v dim="$(rgb "$c_dim")" -v acc="$(rgb "$c_accent")" \
+            -v fgi="$(blend_rgb "$c_fg" "$c_bg")" -v acc="$(rgb "$c_accent")" \
             -v accb="$(rgb "$c_accent_bright")" '
             /^\[/ { sec=$0 }
             /^BackgroundNormal=/   { $0="BackgroundNormal="   (sec=="[Colors:Selection]" ? acc : bg) }
             /^BackgroundAlternate=/{ $0="BackgroundAlternate=" bgalt }
             /^ForegroundNormal=/   { $0="ForegroundNormal="   (sec=="[Colors:Selection]" ? fgb : fg) }
-            /^ForegroundInactive=/ { $0="ForegroundInactive=" dim }
+            /^ForegroundInactive=/ { $0="ForegroundInactive=" (sec=="[Colors:Selection]" ? fgb : fgi) }
             /^ForegroundActive=/   { $0="ForegroundActive="   acc }
             /^ForegroundLink=/     { $0="ForegroundLink="     accb }
             /^Name=Breeze Dark$/   { $0="Name=Aura" }
@@ -169,6 +175,8 @@ EOF
         if command -v kwriteconfig6 >/dev/null; then
             kwriteconfig6 --file kdeglobals --group General --key ColorScheme Aura
             kwriteconfig6 --file kdeglobals --group KDE --key widgetStyle Breeze
+            kwriteconfig6 --file dolphinrc --group General --key GlobalViewProps true
+            kwriteconfig6 --file dolphinrc --group UiSettings --key ColorScheme Aura
         else
             touch "$cfg/kdeglobals"
             grep -q '^\[General\]' "$cfg/kdeglobals" 2>/dev/null || echo '[General]' >> "$cfg/kdeglobals"
@@ -178,6 +186,20 @@ EOF
             sed -i '/^\[KDE\]/,/^\[/{s/^widgetStyle=.*/widgetStyle=Breeze/;}' "$cfg/kdeglobals"
             grep -q '^widgetStyle=' "$cfg/kdeglobals" || sed -i '/^\[KDE\]/a widgetStyle=Breeze' "$cfg/kdeglobals"
         fi
+        python3 -c "
+import configparser
+class CPC(configparser.ConfigParser):
+    def optionxform(self, s): return s
+k = CPC(interpolation=None, strict=False)
+k.read('$cfg/kdeglobals')
+a = CPC(interpolation=None, strict=False)
+a.read('$dir/Aura.colors')
+for s in a.sections():
+    if s == 'General': continue
+    if not k.has_section(s): k.add_section(s)
+    for key, val in a.items(s): k.set(s, key, val)
+with open('$cfg/kdeglobals', 'w') as f: k.write(f, space_around_delimiters=False)
+" 2>/dev/null || true
     fi
 
     # GTK apps: Breeze-Dark follows the same visual language; libadwaita
